@@ -1,0 +1,15 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [{
+      "appIDs": ["TEAM_ID.com.reskindevdotcom.reskindev"],
+      "components": [{
+        "/": "/gig/*",
+        "comment": "Matches any gig URL"
+      }]
+    }]
+  },
+  "webcredentials": {
+    "apps": ["TEAM_ID.com.reskindevdotcom.reskindev"]
+  }
+}

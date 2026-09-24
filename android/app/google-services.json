@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "652374646493",
+    "project_id": "reskindev-769d3",
+    "storage_bucket": "reskindev-769d3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:652374646493:android:32470425381f17d4c9c534",
+        "android_client_info": {
+          "package_name": "com.reskindevdotcom.reskindev"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "652374646493-sipc1uluufr98a8sobfpnul1ga027ce6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.reskindevdotcom.reskindev",
+            "certificate_hash": "08a53b5d8f00f01898021d7320777b31f1c4ca42"
+          }
+        },
+        {
+          "client_id": "652374646493-9lu1tt5u5ssmtmeedqralfpa0ulttcjh.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCUnsddGBcU-_ncIPcht3KfHPuvgl8cPEo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "652374646493-9lu1tt5u5ssmtmeedqralfpa0ulttcjh.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "652374646493-u54ebo4rj9j6hmhvb331atrvl75918cb.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.eliteservices.desktop"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

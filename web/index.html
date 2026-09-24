@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base href="/">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Reskindev offers premium app development, web development, and digital services. Hire expert developers to bring your ideas to life.">
+  <meta name="keywords" content="app development, flutter developer, web development, hire developers, reskindev">
+  <title>Reskindev - Premium App Development Services</title>
+  <!-- Open Graph / Social Sharing Meta Tags -->
+  <meta property="og:title" content="Reskindev - Premium Services">
+  <meta property="og:description" content="Professional app development services tailored to your digital needs. Get started with our expert team.">
+  <meta property="og:image" content="https://img.youtube.com/vi/FdmW6ZaYWyU/maxresdefault.jpg">
+  <meta property="og:url" content="https://reskindev.com/">
+  <meta property="og:type" content="website">
+  
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Reskindev - Premium Services">
+  <meta name="twitter:description" content="Professional app development services tailored to your digital needs.">
+  <meta name="twitter:image" content="https://img.youtube.com/vi/FdmW6ZaYWyU/maxresdefault.jpg">
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="App Developer">
+  <meta name="google-signin-client_id" content="652374646493-9lu1tt5u5ssmtmeedqralfpa0ulttcjh.apps.googleusercontent.com">
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="icon" type="image/png" href="favicon.png"/>
+  <title>Reskindev - Services</title>
+  <link rel="manifest" href="manifest.json">
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-MQN9XM0SZB"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-MQN9XM0SZB');
+  </script>
+  
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    
+    body {
+      background: #F9FAFB;
+      font-family: -apple-system, 'Segoe UI', sans-serif;
+      overflow-x: hidden;
+    }
+    
+    /* ===== SKELETON SCREEN ===== */
+    #skeleton-screen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: #F9FAFB;
+      z-index: 9998;
+      transition: opacity 0.35s ease;
+      overflow-y: auto;
+    }
+    
+    /* Navbar */
+    .sk-navbar {
+      height: 64px;
+      background: #fff;
+      border-bottom: 1px solid #E5E7EB;
+      display: flex;
+      align-items: center;
+      padding: 0 32px;
+      gap: 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    .sk-logo {
+      font-size: 18px;
+      font-weight: 800;
+      color: #111827;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .sk-logo-dot {
+      width: 8px; height: 8px;
+      background: #00C6A2;
+      border-radius: 50%;
+    }
+    .sk-nav-spacer { flex: 1; }
+    .sk-nav-btn {
+      height: 36px;
+      width: 90px;
+      background: #F3F4F6;
+      border-radius: 8px;
+      animation: shimmer 1.5s infinite;
+    }
+    .sk-nav-avatar {
+      width: 36px; height: 36px;
+      background: #E5E7EB;
+      border-radius: 50%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    /* Hero Banner */
+    .sk-hero {
+      background: #1E392A;
+      padding: 80px 60px;
+      display: flex;
+      justify-content: center;
+    }
+    .sk-hero-content {
+      max-width: 1200px;
+      width: 100%;
+      text-align: left;
+    }
+    .sk-hero-title {
+      font-size: 56px;
+      font-weight: 900;
+      color: #ffffff;
+      line-height: 1.1;
+      margin-bottom: 24px;
+      font-family: 'Outfit', sans-serif;
+    }
+    .sk-hero-sub {
+      font-size: 18px;
+      color: rgba(255,255,255,0.9);
+      line-height: 1.6;
+      max-width: 600px;
+      font-family: 'Inter', sans-serif;
+    }
+    @media (max-width: 900px) {
+      .sk-hero { padding: 40px 24px; }
+      .sk-hero-title { font-size: 40px; }
+      .sk-hero-sub { font-size: 16px; }
+    }
+
+    /* Cards Grid */
+    .sk-body {
+      padding: 32px 24px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    .sk-section-title {
+      width: 180px;
+      height: 24px;
+      background: #E5E7EB;
+      border-radius: 6px;
+      margin-bottom: 24px;
+      animation: shimmer 1.5s infinite;
+    }
+    .sk-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 20px;
+    }
+    @media (max-width: 600px) {
+      .sk-grid {
+        grid-template-columns: 1fr;
+      }
+      .sk-hero { padding: 32px 20px; }
+      .sk-body { padding: 20px 16px; }
+    }
+    .sk-card {
+      background: #fff;
+      border-radius: 16px;
+      border: 1px solid #E5E7EB;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .sk-card-img {
+      width: 100%;
+      height: 180px;
+      background: #F3F4F6;
+      animation: shimmer 1.5s infinite;
+    }
+    .sk-card-body {
+      padding: 16px;
+    }
+    .sk-line {
+      height: 14px;
+      background: #F3F4F6;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      animation: shimmer 1.5s infinite;
+    }
+    .sk-line.short { width: 60%; }
+    .sk-line.shorter { width: 40%; }
+    .sk-badge {
+      display: inline-block;
+      height: 22px;
+      width: 70px;
+      background: #B2F5EA;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      animation: shimmer 1.5s infinite;
+    }
+    .sk-price {
+      height: 28px;
+      width: 80px;
+      background: #E5E7EB;
+      border-radius: 6px;
+      margin-top: 12px;
+      animation: shimmer 1.5s infinite;
+    }
+
+    /* Shimmer animations */
+    @keyframes shimmer {
+      0% { background-color: #F3F4F6; }
+      50% { background-color: #E5E7EB; }
+      100% { background-color: #F3F4F6; }
+    }
+    @keyframes shimmer-dark {
+      0% { background-color: rgba(255,255,255,0.12); }
+      50% { background-color: rgba(255,255,255,0.22); }
+      100% { background-color: rgba(255,255,255,0.12); }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SKELETON: shows immediately while Flutter loads -->
+  <div id="loading-container" style="transition: opacity 0.35s ease;">
+    <!-- Navbar -->
+    <nav class="sk-navbar">
+      <div class="sk-logo">
+        <img src="favicon.png" style="height: 24px; margin-right: 8px;">
+        reskindev
+      </div>
+      <div class="sk-nav-spacer"></div>
+      <div style="font-size: 14px; font-weight: 600; color: #111827;">Sign In</div>
+      <div class="sk-nav-avatar"></div>
+    </nav>
+
+    <!-- Hero -->
+    <div class="sk-hero">
+      <div class="sk-hero-content">
+        <div class="sk-hero-title">Reskindev.</div>
+        <div class="sk-hero-sub">Premium Application Development Services. Hire expert developers to bring your ideas to life with our rocket-fast delivery.</div>
+      </div>
+    </div>
+
+    <!-- Cards -->
+    <div class="sk-body">
+      <div style="font-size: 36px; font-weight: 800; color: #111827; font-family: 'Outfit', sans-serif; margin-bottom: 8px;">Explore Services</div>
+      <div style="font-size: 16px; color: #6B7280; font-family: 'Inter', sans-serif; margin-bottom: 48px;">Find the best services for your next project</div>
+      <div class="sk-grid">
+        <!-- Card 1 -->
+        <div class="sk-card">
+          <div class="sk-card-img"></div>
+          <div class="sk-card-body">
+            <div class="sk-badge"></div>
+            <div class="sk-line"></div>
+            <div class="sk-line short"></div>
+            <div class="sk-price"></div>
+          </div>
+        </div>
+        <!-- Card 2 -->
+        <div class="sk-card">
+          <div class="sk-card-img" style="animation-delay:0.1s"></div>
+          <div class="sk-card-body">
+            <div class="sk-badge" style="animation-delay:0.1s"></div>
+            <div class="sk-line" style="animation-delay:0.1s"></div>
+            <div class="sk-line short" style="animation-delay:0.1s"></div>
+            <div class="sk-price" style="animation-delay:0.1s"></div>
+          </div>
+        </div>
+        <!-- Card 3 -->
+        <div class="sk-card">
+          <div class="sk-card-img" style="animation-delay:0.2s"></div>
+          <div class="sk-card-body">
+            <div class="sk-badge" style="animation-delay:0.2s"></div>
+            <div class="sk-line" style="animation-delay:0.2s"></div>
+            <div class="sk-line short" style="animation-delay:0.2s"></div>
+            <div class="sk-price" style="animation-delay:0.2s"></div>
+          </div>
+        </div>
+        <!-- Card 4 -->
+        <div class="sk-card">
+          <div class="sk-card-img" style="animation-delay:0.3s"></div>
+          <div class="sk-card-body">
+            <div class="sk-badge" style="animation-delay:0.3s"></div>
+            <div class="sk-line" style="animation-delay:0.3s"></div>
+            <div class="sk-line short" style="animation-delay:0.3s"></div>
+            <div class="sk-price" style="animation-delay:0.3s"></div>
+          </div>
+        </div>
+        <!-- Card 5 -->
+        <div class="sk-card">
+          <div class="sk-card-img" style="animation-delay:0.15s"></div>
+          <div class="sk-card-body">
+            <div class="sk-badge" style="animation-delay:0.15s"></div>
+            <div class="sk-line" style="animation-delay:0.15s"></div>
+            <div class="sk-line short" style="animation-delay:0.15s"></div>
+            <div class="sk-price" style="animation-delay:0.15s"></div>
+          </div>
+        </div>
+        <!-- Card 6 -->
+        <div class="sk-card">
+          <div class="sk-card-img" style="animation-delay:0.25s"></div>
+          <div class="sk-card-body">
+            <div class="sk-badge" style="animation-delay:0.25s"></div>
+            <div class="sk-line" style="animation-delay:0.25s"></div>
+            <div class="sk-line short" style="animation-delay:0.25s"></div>
+            <div class="sk-price" style="animation-delay:0.25s"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // MutationObserver to hide loading container when Flutter loads
+    const observer = new MutationObserver(function(mutations) {
+      for (const mutation of mutations) {
+        if (mutation.addedNodes.length > 0) {
+          for (let i = 0; i < mutation.addedNodes.length; i++) {
+            const node = mutation.addedNodes[i];
+            if (node.tagName === 'FLUTTER-VIEW' || node.tagName === 'FLT-GLASS-PANE') {
+              const skeleton = document.getElementById('loading-container');
+              if (skeleton) {
+                skeleton.style.opacity = '0';
+                setTimeout(() => skeleton.remove(), 250);
+              }
+              observer.disconnect();
+              return;
+            }
+          }
+        }
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    window._onFlutterAppLoaded = function() {
+      const skeleton = document.getElementById('loading-container');
+      if (skeleton) {
+        skeleton.style.opacity = '0';
+        setTimeout(() => skeleton.remove(), 250);
+      }
+    };
+  </script>
+
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

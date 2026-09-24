@@ -1,0 +1,55 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Allow users to read and write their own data
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Allow anyone to read gigs (services), but only authenticated users can write
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    
+    // Orders rules
+    match /orders/{orderId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Reports rules (New UGC Feature)
+    match /reports/{reportId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Support tickets
+    match /support_tickets/{ticketId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Withdrawals
+    match /withdrawals/{withdrawalId} {
+      allow read, write: if request.auth != null;
+    }
+    
+    // Allow reading public pages (Privacy Policy, Terms, etc.)
+    match /pages/{pageId} {
+      allow read: if true;
+    }
+    
+    // Messages/Chats
+    match /conversations/{chatId} {
+      allow read, write: if request.auth != null;
+      match /messages/{messageId} {
+        allow read, write: if request.auth != null;
+      }
+    }
+    
+    // Global settings and default fallback
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}

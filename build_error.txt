@@ -1,0 +1,36 @@
+Building com.reskindevdotcom.reskindev for simulator (ios)...
+Running Xcode build...                                          
+Xcode build done.                                           22.8s
+Failed to build iOS app
+Error output from Xcode build:
+↳
+    ** BUILD FAILED **
+
+
+Xcode's output:
+↳
+    Writing result bundle at path:
+    	/var/folders/yf/cy_07y5x4bz8z6c7ykrmncyr0000gn/T/flutter_tools.PEWK2S/flutter_ios_build_temp_dirACSLhL/temporary_xcresult_bundle
+
+    lib/screens/order_form_screen.dart:140:43: Error: 'ChatProvider' isn't a type.
+            final chatProvider = context.read<ChatProvider>();
+                                              ^^^^^^^^^^^^
+    lib/screens/my_orders_screen.dart:1327:49: Error: The argument type 'String?' can't be assigned to the parameter type 'String'.
+                              orderId: widget.order.id,
+                                                    ^
+    lib/screens/seller_dashboard_screen.dart:783:30: Error: The argument type 'String?' can't be assigned to the parameter type 'String'.
+                  orderId: order.id,
+                                 ^
+    Target kernel_snapshot_program failed: Exception
+    Failed to package /Users/robiussani/Documents/online_platform.
+    Command PhaseScriptExecution failed with a nonzero exit code
+    warning: Run script build phase 'Create Symlinks to Header Folders' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'abseil' from project 'Pods')
+    warning: Run script build phase 'Create Symlinks to Header Folders' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'BoringSSL-GRPC' from project 'Pods')
+    warning: no rule to process file '/Users/robiussani/.pub-cache/hosted/pub.dev/in_app_review-2.0.12/ios/in_app_review/Sources/in_app_review/PrivacyInfo.xcprivacy' of type 'text.xml' for architecture 'arm64' (in target 'in_app_review' from project 'Pods')
+    warning: no rule to process file '/Users/robiussani/.pub-cache/hosted/pub.dev/in_app_review-2.0.12/ios/in_app_review/Sources/in_app_review/PrivacyInfo.xcprivacy' of type 'text.xml' for architecture 'x86_64' (in target 'in_app_review' from project 'Pods')
+    warning: Run script build phase 'Create Symlinks to Header Folders' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'gRPC-Core' from project 'Pods')
+    warning: Run script build phase 'Create Symlinks to Header Folders' will be run during every build because it does not specify any outputs. To address this issue, either add output dependencies to the script phase, or configure it to run in every build by unchecking "Based on dependency analysis" in the script phase. (in target 'gRPC-C++' from project 'Pods')
+    note: Run script build phase 'Thin Binary' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'Runner' from project 'Runner')
+    note: Run script build phase 'Run Script' will be run during every build because the option to run the script phase "Based on dependency analysis" is unchecked. (in target 'Runner' from project 'Runner')
+
+Encountered error while building for simulator.

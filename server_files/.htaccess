@@ -1,0 +1,9 @@
+RewriteEngine On
+
+# Route /gig/{id} to gig.php
+RewriteRule ^gig/([a-zA-Z0-9_-]+)/?$ /gig.php?id=$1 [L,QSA]
+
+# Serve .well-known files without extension check
+<Files "apple-app-site-association">
+    Header set Content-Type "application/json"
+</Files>

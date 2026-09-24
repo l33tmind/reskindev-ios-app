@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.reskindevdotcom.reskindev",
+    "sha256_cert_fingerprints": ["6F:62:30:6C:2F:6C:9B:75:09:82:0A:55:AA:44:60:33:62:C9:E9:C9:DD:B1:CC:86:3F:24:7E:32:A4:C3:70:C6"]
+  }
+}]
