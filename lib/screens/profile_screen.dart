@@ -27,30 +27,100 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late TextEditingController _phoneCtrl;
   late TextEditingController _companyCtrl;
   late TextEditingController _addressCtrl;
+  late TextEditingController _usernameCtrl;
+  
   bool _saving = false;
   bool _saved = false;
+  
+  bool _isCheckingUsername = false;
+  String? _usernameError;
+  String _usernameStatus = 'idle'; // idle, checking, taken, available
+  bool _canChangeUsername = true;
+  DateTime? _lastUsernameChange;
 
   @override
-  void initState() {
+void initState() {
     super.initState();
     final auth = context.read<ap.AuthProvider>();
     _nameCtrl = TextEditingController(text: auth.user?.displayName ?? '');
     _phoneCtrl = TextEditingController(text: auth.phone ?? '');
     _companyCtrl = TextEditingController(text: auth.company ?? '');
     _addressCtrl = TextEditingController(text: auth.address ?? '');
+    _usernameCtrl = TextEditingController(text: auth.username ?? '');
+    _checkUsernameLimit();
+  }
+  
+  Future<void> _checkUsernameLimit() async {
+    final uid = context.read<ap.AuthProvider>().user?.uid;
+    if (uid == null) return;
+    
+    final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+    if (doc.exists) {
+      final changes = doc.data()?['usernameChanges'] as List<dynamic>? ?? [];
+      if (changes.isNotEmpty) {
+        final lastChangeRaw = changes.last;
+        DateTime? lastChange;
+        if (lastChangeRaw is Timestamp) lastChange = lastChangeRaw.toDate();
+        else if (lastChangeRaw is int) lastChange = DateTime.fromMillisecondsSinceEpoch(lastChangeRaw);
+        
+        if (lastChange != null) {
+          final now = DateTime.now();
+          if (now.difference(lastChange).inDays < 30) {
+            if (mounted) {
+              setState(() {
+                _canChangeUsername = false;
+                _lastUsernameChange = lastChange;
+              });
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  void _onUsernameChanged(String value) async {
+    if (value == context.read<ap.AuthProvider>().username) {
+      setState(() {
+        _usernameError = null;
+        _usernameStatus = 'idle';
+      });
+      return;
+    }
+    
+    if (!_canChangeUsername) return;
+    
+    setState(() {
+      _isCheckingUsername = true;
+      _usernameError = null;
+    });
+    
+    final query = await FirebaseFirestore.instance.collection('users').where('username', isEqualTo: value.toLowerCase()).get();
+    if (mounted) {
+      setState(() {
+        _isCheckingUsername = false;
+        if (query.docs.isNotEmpty) {
+          _usernameError = 'Username is already taken';
+          _usernameStatus = 'taken';
+        } else {
+          _usernameError = 'Username is available';
+          _usernameStatus = 'available';
+        }
+      });
+    }
   }
 
   @override
-  void dispose() {
+void dispose() {
     _nameCtrl.dispose();
     _phoneCtrl.dispose();
     _companyCtrl.dispose();
     _addressCtrl.dispose();
+    _usernameCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    if (_usernameStatus == 'taken' && _usernameCtrl.text != widget.auth.username) {
+    if (_usernameStatus == 'taken' && _usernameCtrl.text != context.read<ap.AuthProvider>().username) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please choose an available username.')));
       return;
     }
@@ -58,8 +128,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _saving = true);
     
     final newUsername = _usernameCtrl.text.toLowerCase().trim();
-    if (newUsername != widget.auth.username && _canChangeUsername && newUsername.isNotEmpty) {
-      final uid = widget.auth.user?.uid;
+    if (newUsername != context.read<ap.AuthProvider>().username && _canChangeUsername && newUsername.isNotEmpty) {
+      final uid = context.read<ap.AuthProvider>().user?.uid;
       if (uid != null) {
         await FirebaseFirestore.instance.collection('users').doc(uid).update({
           'usernameChanges': FieldValue.arrayUnion([FieldValue.serverTimestamp()])
@@ -67,7 +137,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       }
     }
 
-    await widget.auth.updateProfile(
+    await context.read<ap.AuthProvider>().updateProfile(
       name: _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
       username: newUsername.isEmpty ? null : newUsername,
       phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
@@ -141,7 +211,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   label: 'Username', 
                   icon: Icons.alternate_email,
                   onChanged: _onUsernameChanged,
-                  readOnly: !_canChangeUsername && _usernameCtrl.text != widget.auth.username,
+                  readOnly: !_canChangeUsername && _usernameCtrl.text != context.read<ap.AuthProvider>().username,
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[a-z0-9_]')),
                   ],
