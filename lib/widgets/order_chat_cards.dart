@@ -41,15 +41,12 @@ class OrderChatCardBuilder extends StatelessWidget {
         return _OrderPlacedCard(message: message, isFreelancer: isFreelancer);
       case 'requirements_submitted':
       case 'requirements':
-        return _RequirementsSubmittedCard(message: message);
+        return _RequirementsSubmittedCard(message: message, isFreelancer: isFreelancer);
       case 'order_delivered':
       case 'delivery':
-        return _OrderDeliveredCard(
-          message: message,
-          isCurrentUser: isCurrentUser,
-        );
+        return _OrderDeliveredCard(message: message, isCurrentUser: isCurrentUser, isFreelancer: isFreelancer);
       case 'revision_requested':
-        return _RevisionRequestedCard(message: message);
+        return _RevisionRequestedCard(message: message, isFreelancer: isFreelancer);
       case 'order_completed':
       case 'review':
         return _OrderCompletedCard(message: message, isFreelancer: isFreelancer);
@@ -618,10 +615,12 @@ class _RequirementsSubmittedCard extends StatelessWidget {
 class _OrderDeliveredCard extends StatelessWidget {
   final MessageModel message;
   final bool isCurrentUser;
+  final bool isFreelancer;
 
   const _OrderDeliveredCard({
     required this.message,
     required this.isCurrentUser,
+    this.isFreelancer = false,
   });
 
   @override
@@ -634,7 +633,7 @@ class _OrderDeliveredCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Final Work Delivered',
+            isFreelancer ? 'You Delivered the Final Work' : 'Seller Delivered the Final Work',
             style: GoogleFonts.inter(
               fontSize: 15,
               fontWeight: FontWeight.bold,
@@ -718,7 +717,9 @@ class _OrderDeliveredCard extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                "What's next: Buyer has 3 days to review and accept the delivery.",
+                isFreelancer 
+                  ? "What's next: The buyer has 3 days to review your delivery and accept it."
+                  : "What's next: You have 3 days to review the work and accept the delivery or request a revision.",
                 style: GoogleFonts.inter(
                   fontSize: 12,
                   color: context.themeTextDark,
@@ -735,7 +736,8 @@ class _OrderDeliveredCard extends StatelessWidget {
 // 4. Revision Requested
 class _RevisionRequestedCard extends StatelessWidget {
   final MessageModel message;
-  const _RevisionRequestedCard({required this.message});
+  final bool isFreelancer;
+  const _RevisionRequestedCard({required this.message, this.isFreelancer = false});
 
   @override
   Widget build(BuildContext context) {
@@ -745,7 +747,7 @@ class _RevisionRequestedCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Revision Requested',
+            isFreelancer ? 'Buyer Requested a Revision' : 'You Requested a Revision',
             style: GoogleFonts.inter(
               fontSize: 15,
               fontWeight: FontWeight.bold,
@@ -770,6 +772,38 @@ class _RevisionRequestedCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+      footer: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.orange.withValues(alpha: 0.05),
+          borderRadius: const BorderRadius.only(
+            bottomLeft: Radius.circular(12),
+            bottomRight: Radius.circular(12),
+          ),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              size: 16,
+              color: Colors.orange,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                isFreelancer 
+                  ? "What's next: Please review the buyer's notes and deliver the updated work."
+                  : "What's next: The seller will review your notes and deliver the updated work.",
+                style: GoogleFonts.inter(
+                  fontSize: 12,
+                  color: context.themeTextDark,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
