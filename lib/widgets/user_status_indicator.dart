@@ -23,18 +23,28 @@ class UserStatusIndicator extends StatelessWidget {
         }
         
         final data = snapshot.data!.data() as Map<String, dynamic>;
-        final lastSeenTimestamp = data['lastSeen'] as Timestamp?;
+        final lastSeenRaw = data['lastSeen'];
         final isOnlineOverride = data['isOnline'] as bool? ?? false;
         
         bool isOnline = isOnlineOverride;
         String text = 'Offline';
         
-        if (lastSeenTimestamp != null) {
-          final lastSeen = lastSeenTimestamp.toDate();
+        DateTime? lastSeen;
+        if (lastSeenRaw is Timestamp) {
+          lastSeen = lastSeenRaw.toDate();
+        } else if (lastSeenRaw is int) {
+          lastSeen = DateTime.fromMillisecondsSinceEpoch(lastSeenRaw);
+        }
+        
+        if (lastSeen != null) {
           if (DateTime.now().difference(lastSeen).inMinutes < 3) {
             isOnline = true;
             text = 'Online';
           } else {
+            isOnline = false;
+            text = 'Active ${timeago.format(lastSeen)}';
+          }
+        } else {
             isOnline = false;
             text = 'Active ${timeago.format(lastSeen)}';
           }

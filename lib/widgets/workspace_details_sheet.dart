@@ -2,23 +2,35 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme.dart';
 import '../models/order_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'workspace_timeline_modals.dart';
 
 class WorkspaceDetailsSheet extends StatelessWidget {
-  final OrderModel order;
+  final String orderId;
   final bool isSeller;
   final String chatId;
 
   const WorkspaceDetailsSheet({
     super.key,
-    required this.order,
+    required this.orderId,
     required this.isSeller,
     required this.chatId,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance.collection('orders').doc(orderId).snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return Container(
+            color: context.themeBackground,
+            height: 200,
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        final order = OrderModel.fromFirestore(snapshot.data!);
+        return Container(
       decoration: BoxDecoration(
         color: context.themeBackground,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
@@ -85,8 +97,9 @@ class WorkspaceDetailsSheet extends StatelessWidget {
         ],
       ),
     );
+      },
+    );
   }
-
   Widget _buildPlaceholder() {
     return Container(
       width: 80,

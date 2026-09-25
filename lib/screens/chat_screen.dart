@@ -412,10 +412,15 @@ class _ChatScreenState extends State<ChatScreen> {
                               );
                             }
 
-                            final lastSeenTs =
-                                userData['lastSeen'] as Timestamp?;
-                            if (lastSeenTs != null) {
-                              final lastSeen = lastSeenTs.toDate();
+                            final lastSeenRaw = userData['lastSeen'];
+                            DateTime? lastSeen;
+                            if (lastSeenRaw is Timestamp) {
+                              lastSeen = lastSeenRaw.toDate();
+                            } else if (lastSeenRaw is int) {
+                              lastSeen = DateTime.fromMillisecondsSinceEpoch(lastSeenRaw);
+                            }
+                            
+                            if (lastSeen != null) {
                               final now = DateTime.now();
                               String timeStr;
                               if (now.difference(lastSeen).inDays > 1) {
@@ -887,8 +892,8 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Future<void> _showWorkspaceDetails() async {
-    if (_currentOrderId == null) {
+  void _showWorkspaceDetails() {
+    if (_currentOrderId == null || _currentOrderId!.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('This chat is not connected to a specific order.')),
@@ -897,54 +902,28 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
 
-    try {
-      // Show loading indicator
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator(color: AppTheme.primary)),
-      );
-
-      final doc = await FirebaseFirestore.instance.collection('orders').doc(_currentOrderId).get();
-      
-      if (mounted) {
-        Navigator.pop(context); // Dismiss loading dialog
-      }
-
-      if (!doc.exists) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Order not found.')),
-          );
-        }
-        return;
-      }
-
-      final realOrder = OrderModel.fromFirestore(doc);
-
-      if (mounted) {
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) {
-            return WorkspaceDetailsSheet(
-              order: realOrder,
-              isSeller: _isFreelancer,
-              chatId: _chatId,
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.8,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          builder: (_, scrollController) {
+            return SingleChildScrollView(
+              controller: scrollController,
+              child: WorkspaceDetailsSheet(
+                orderId: _currentOrderId!,
+                isSeller: widget.auth.isFreelancer,
+                chatId: _chatId,
+              ),
             );
           },
         );
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context); // Dismiss loading dialog
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading workspace: $e')),
-        );
-      }
-    }
-  }
+      },
+    );
 
   Widget _buildDateChip(DateTime date) {
     final now = DateTime.now();
