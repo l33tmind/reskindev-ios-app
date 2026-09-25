@@ -1179,7 +1179,7 @@ void _showWithdrawalModal(BuildContext context, double availableBalance, String 
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a valid Payoneer email')));
                           return;
                         }
-                        if (amount < 20) {
+                        if (amount < 50) {
                           ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Minimum withdrawal amount is \$50')));
                           return;
                         }
@@ -1194,25 +1194,29 @@ void _showWithdrawalModal(BuildContext context, double availableBalance, String 
                           await FirebaseFirestore.instance.collection('withdrawals').add({
                             'freelancerId': uid,
                             'freelancerName': displayName,
-                            'email': payoneerEmail, // Next.js admin uses this field
+                            'email': payoneerEmail,
                             'amount': amount,
                             'charge': 3.0,
                             'netAmount': amount - 3.0,
                             'status': 'pending',
                             'createdAt': FieldValue.serverTimestamp(),
-                          });
+                          }).timeout(const Duration(seconds: 10));
                           
-                          await FirebaseFirestore.instance.collection('users').doc(uid).update({
+                          // Use set with merge instead of update, in case user doc is missing
+                          await FirebaseFirestore.instance.collection('users').doc(uid).set({
                             'payoneerEmail': payoneerEmail
-                          });
+                          }, SetOptions(merge: true)).timeout(const Duration(seconds: 10));
 
                           if (context.mounted) {
                             Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Withdrawal request submitted successfully!')));
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Withdrawal request submitted successfully!'), backgroundColor: Colors.green));
                           }
                         } catch (e) {
                           if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error submitting request. Please try again.'), backgroundColor: Colors.red));
+                          }
+                        } finally {
+                          if (context.mounted) {
                             setState(() => submitting = false);
                           }
                         }

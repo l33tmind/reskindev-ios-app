@@ -182,18 +182,32 @@ class EarningsScreen extends StatelessWidget {
                 return;
               }
               
-              Navigator.pop(c);
-              await FirebaseFirestore.instance.collection('withdrawals').add({
-                'freelancerId': uid,
-                'freelancerName': name,
-                'email': email,
-                'payoneerEmail': payEmail,
-                'amount': amount,
-                'status': 'pending',
-                'createdAt': FieldValue.serverTimestamp(),
-              });
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Withdrawal request submitted successfully!')));
+              setState(() {}); // trigger rebuild if needed, though earnings screen isn't stateful builder here, it's a dialog.
+              
+              try {
+                await FirebaseFirestore.instance.collection('withdrawals').add({
+                  'freelancerId': uid,
+                  'freelancerName': name,
+                  'email': email,
+                  'payoneerEmail': payEmail,
+                  'amount': amount,
+                  'status': 'pending',
+                  'createdAt': FieldValue.serverTimestamp(),
+                }).timeout(const Duration(seconds: 10));
+                
+                await FirebaseFirestore.instance.collection('users').doc(uid).set({
+                  'payoneerEmail': payEmail
+                }, SetOptions(merge: true)).timeout(const Duration(seconds: 10));
+
+                if (context.mounted) {
+                  Navigator.pop(c);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Withdrawal request submitted successfully!'), backgroundColor: Colors.green));
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  Navigator.pop(c);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Error submitting request. Please try again.'), backgroundColor: Colors.red));
+                }
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
