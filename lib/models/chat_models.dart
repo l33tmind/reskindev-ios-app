@@ -74,7 +74,9 @@ class MessageModel {
   final String? actionType;
   final String? orderId;
   final num? rating;
+  final num? sellerRating;
   final String? comment;
+  final String? sellerComment;
   final num? price;
 
   final num? offerPrice;
@@ -98,7 +100,9 @@ class MessageModel {
     this.actionType,
     this.orderId,
     this.rating,
+    this.sellerRating,
     this.comment,
+    this.sellerComment,
     this.price,
     this.offerPrice,
     this.offerDays,
@@ -136,7 +140,9 @@ class MessageModel {
       actionType: data['actionType']?.toString(),
       orderId: data['orderId']?.toString(),
       rating: data['rating'] != null ? num.tryParse(data['rating'].toString()) : null,
+      sellerRating: data['sellerRating'] != null ? num.tryParse(data['sellerRating'].toString()) : null,
       comment: data['comment']?.toString(),
+      sellerComment: data['sellerComment']?.toString(),
       price: data['price'] != null ? num.tryParse(data['price'].toString()) : null,
       offerPrice: data['offerPrice'] != null ? num.tryParse(data['offerPrice'].toString()) : null,
       offerDays: data['offerDays'] != null ? int.tryParse(data['offerDays'].toString()) : null,
@@ -162,7 +168,9 @@ class MessageModel {
     if (actionType != null) map['actionType'] = actionType!;
     if (orderId != null) map['orderId'] = orderId!;
     if (rating != null) map['rating'] = rating!;
+    if (sellerRating != null) map['sellerRating'] = sellerRating!;
     if (comment != null) map['comment'] = comment!;
+    if (sellerComment != null) map['sellerComment'] = sellerComment!;
     if (price != null) map['price'] = price!;
     if (type == 'custom_offer' || type == 'offer') {
       if (offerPrice != null) map['offerPrice'] = offerPrice!;

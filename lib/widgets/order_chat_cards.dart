@@ -52,7 +52,7 @@ class OrderChatCardBuilder extends StatelessWidget {
         return _RevisionRequestedCard(message: message);
       case 'order_completed':
       case 'review':
-        return _OrderCompletedCard(message: message);
+        return _OrderCompletedCard(message: message, isFreelancer: isFreelancer);
       case 'custom_offer':
       case 'offer':
         return _CustomOfferCard(message: message, isCurrentUser: isCurrentUser);
