@@ -246,7 +246,7 @@ class _WebStyleCard extends StatelessWidget {
                               isScrollControlled: true,
                               backgroundColor: Colors.transparent,
                               builder: (ctx) => WorkspaceDetailsSheet(
-                                order: order,
+                                orderId: order.id!,
                                 isSeller: isSeller,
                                 chatId: 'unknown', // We don't have chatId easily here, but that's okay for display
                               ),

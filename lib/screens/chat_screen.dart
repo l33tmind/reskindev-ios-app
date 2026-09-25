@@ -916,7 +916,7 @@ class _ChatScreenState extends State<ChatScreen> {
               controller: scrollController,
               child: WorkspaceDetailsSheet(
                 orderId: _currentOrderId!,
-                isSeller: widget.auth.isFreelancer,
+                isSeller: context.read<AuthProvider>().isFreelancer,
                 chatId: _chatId,
               ),
             );
@@ -924,6 +924,8 @@ class _ChatScreenState extends State<ChatScreen> {
         );
       },
     );
+  }
+
 
   Widget _buildDateChip(DateTime date) {
     final now = DateTime.now();
