@@ -167,6 +167,46 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
+  Future<String> getOrCreateOrderConversation({
+    required String currentUserId,
+    required String targetUserId,
+    required String currentUserName,
+    required String currentUserAvatar,
+    required String targetUserName,
+    required String targetUserAvatar,
+    required String orderId,
+  }) async {
+    final query = await _db
+        .collection('conversations')
+        .where('orderId', isEqualTo: orderId)
+        .limit(1)
+        .get();
+
+    if (query.docs.isNotEmpty) {
+      return query.docs.first.id;
+    }
+
+    final chatRef = _db.collection('conversations').doc();
+    final newChat = ConversationModel(
+      id: chatRef.id,
+      participants: [currentUserId, targetUserId],
+      participantDetails: {
+        currentUserId: {'name': currentUserName, 'avatar': currentUserAvatar},
+        targetUserId: {'name': targetUserName, 'avatar': targetUserAvatar},
+      },
+      lastMessage: '',
+      updatedAt: null,
+      unreadCount: {currentUserId: 0, targetUserId: 0},
+      typing: {currentUserId: false, targetUserId: false},
+      freelancerId: targetUserId,
+      clientId: currentUserId,
+      orderId: orderId,
+    );
+
+    await chatRef.set(newChat.toMap());
+    return chatRef.id;
+  }
+
   // Create a new conversation if it doesn't exist, or return existing
   Future<String> getOrCreateConversation({
     required String currentUserId,

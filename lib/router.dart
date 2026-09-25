@@ -126,6 +126,7 @@ final GoRouter appRouter = GoRouter(
           targetUserId: extra['targetUserId'] ?? '',
           targetUserName: extra['targetUserName'] ?? 'Unknown',
           targetUserAvatar: extra['targetUserAvatar'] ?? '',
+          orderId: extra['orderId'],
         );
       },
     ),

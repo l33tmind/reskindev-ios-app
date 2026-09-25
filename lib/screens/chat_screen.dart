@@ -20,6 +20,7 @@ class ChatScreen extends StatefulWidget {
   final String targetUserId;
   final String targetUserName;
   final String targetUserAvatar;
+  final String? orderId;
 
   const ChatScreen({
     Key? key,
@@ -27,6 +28,7 @@ class ChatScreen extends StatefulWidget {
     required this.targetUserId,
     required this.targetUserName,
     required this.targetUserAvatar,
+    this.orderId,
   }) : super(key: key);
 
   @override
@@ -128,14 +130,26 @@ class _ChatScreenState extends State<ChatScreen> {
     if (currentUser == null) return;
 
     if (_chatId.isEmpty || _chatId == 'new') {
-      _chatId = await chatProvider.getOrCreateConversation(
-        currentUserId: currentUser.uid,
-        currentUserName: auth.displayName,
-        currentUserAvatar: auth.photoUrl,
-        targetUserId: widget.targetUserId,
-        targetUserName: widget.targetUserName,
-        targetUserAvatar: widget.targetUserAvatar,
-      );
+      if (widget.orderId != null && widget.orderId!.isNotEmpty) {
+        _chatId = await chatProvider.getOrCreateOrderConversation(
+          currentUserId: currentUser.uid,
+          currentUserName: auth.displayName,
+          currentUserAvatar: auth.photoUrl,
+          targetUserId: widget.targetUserId,
+          targetUserName: widget.targetUserName,
+          targetUserAvatar: widget.targetUserAvatar,
+          orderId: widget.orderId!,
+        );
+      } else {
+        _chatId = await chatProvider.getOrCreateConversation(
+          currentUserId: currentUser.uid,
+          currentUserName: auth.displayName,
+          currentUserAvatar: auth.photoUrl,
+          targetUserId: widget.targetUserId,
+          targetUserName: widget.targetUserName,
+          targetUserAvatar: widget.targetUserAvatar,
+        );
+      }
     }
 
     if (mounted) {

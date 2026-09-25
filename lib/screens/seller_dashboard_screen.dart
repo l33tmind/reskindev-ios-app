@@ -756,6 +756,7 @@ class _SellerOrdersView extends StatelessWidget {
                       'targetUserId': order.clientUid,
                       'targetUserName': order.userName,
                       'targetUserAvatar': '',
+                      'orderId': order.id,
                     });
                   },
                   icon: const Icon(Icons.chat_bubble_rounded),

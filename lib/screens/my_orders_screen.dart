@@ -1059,6 +1059,7 @@ class _OrderDetailsSheet extends StatelessWidget {
                           'targetUserId': order.authorId,
                           'targetUserName': 'Freelancer',
                           'targetUserAvatar': '',
+                          'orderId': order.id,
                         });
                       },
                       icon: const Icon(Icons.chat_bubble_outline, size: 18),
