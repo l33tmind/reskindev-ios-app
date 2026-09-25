@@ -157,7 +157,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     final unread = (chat.unreadCount[currentUserId] ?? 0);
                     final String avatarUrl = otherUser['avatar']?.toString() ?? '';
                     final String otherName = otherUser['name']?.toString() ?? 'Unknown';
-                    final String name = chat.orderId != null ? '$otherName (Order #${chat.orderId!.length > 6 ? chat.orderId!.substring(0, 6).toUpperCase() : chat.orderId!.toUpperCase()})' : otherName;
+                    final String name = otherName;
 
                     return Dismissible(
                       key: Key(chat.id),
@@ -234,15 +234,35 @@ class _InboxScreenState extends State<InboxScreen> {
                       ),
                       subtitle: Padding(
                         padding: const EdgeInsets.only(top: 4.0),
-                        child: Text(
-                          chat.lastMessage.isEmpty ? 'Say hi!' : chat.lastMessage,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: GoogleFonts.inter(
-                            fontSize: 14,
-                            fontWeight: unread > 0 ? FontWeight.w600 : FontWeight.normal,
-                            color: unread > 0 ? context.themeTextDark : context.themeTextLight,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (chat.orderId != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 2.0),
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.work_outline, size: 12, color: AppTheme.primary),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'ORDER #${chat.orderId!.length > 6 ? chat.orderId!.substring(0, 6).toUpperCase() : chat.orderId!.toUpperCase()}',
+                                      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            Text(
+                              chat.lastMessage.isEmpty ? 'Say hi!' : chat.lastMessage,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(
+                                fontSize: 13,
+                                fontWeight: unread > 0 ? FontWeight.w600 : FontWeight.normal,
+                                color: unread > 0 ? context.themeTextDark : context.themeTextLight,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                       trailing: Column(

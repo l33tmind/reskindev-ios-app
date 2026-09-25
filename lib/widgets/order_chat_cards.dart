@@ -37,6 +37,8 @@ class OrderChatCardBuilder extends StatelessWidget {
       case 'payment_verified':
       case 'offer_accepted':
         return _PaymentVerifiedCard(message: message, isFreelancer: isFreelancer);
+      case 'order_placed':
+        return _OrderPlacedCard(message: message, isFreelancer: isFreelancer);
       case 'requirements_submitted':
       case 'requirements':
         return _RequirementsSubmittedCard(message: message);
@@ -85,6 +87,10 @@ class _TimelineWrapper extends StatelessWidget {
     Color iconColor;
 
     switch (actionType) {
+      case 'order_placed':
+        iconData = Icons.schedule_rounded;
+        iconColor = Colors.amber;
+        break;
       case 'payment_verified':
       case 'offer_accepted':
         iconData = Icons.account_balance_wallet_rounded;
@@ -299,7 +305,81 @@ class _WebStyleCard extends StatelessWidget {
   }
 }
 
+
+class _OrderPlacedCard extends StatelessWidget {
+  final MessageModel message;
+  final bool isFreelancer;
+  const _OrderPlacedCard({required this.message, this.isFreelancer = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return _WebStyleCard(
+      message: message,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isFreelancer ? 'New Order! ⏳' : 'Order Placed! ⏳',
+            style: GoogleFonts.inter(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: Colors.amber.shade800,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.amber.shade50,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: Colors.amber.shade200,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      color: Colors.amber.shade800,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isFreelancer ? 'Waiting for Admin Verification' : 'Pending Verification',
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.amber.shade800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  isFreelancer 
+                      ? 'The buyer has placed a new order for "${message.gigTitle ?? 'your gig'}". The payment is currently pending verification by the Admin. Please wait for the payment to be secured before starting work.'
+                      : 'Your order for "${message.gigTitle ?? 'the gig'}" has been created. Please wait while the Admin verifies your payment. Once verified, the funds will be secured in escrow.',
+                  style: GoogleFonts.inter(
+                    fontSize: 13,
+                    color: context.themeTextDark,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // 1. Payment Verified
+
 class _PaymentVerifiedCard extends StatelessWidget {
   final MessageModel message;
   final bool isFreelancer;
