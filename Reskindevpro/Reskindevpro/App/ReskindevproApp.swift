@@ -72,6 +72,12 @@ struct ReskindevproApp: App {
         .defaultSize(width: 980, height: 680)
         .restorationBehavior(.disabled)
 
+        // 3D Showroom: gigs around you in your room
+        ImmersiveSpace(id: appModel.immersiveSpaceID) {
+            stores(ImmersiveView())
+        }
+        .immersionStyle(selection: .constant(.mixed), in: .mixed)
+
         // 3D Delivery Box Window (Volumetric)
         WindowGroup(id: WindowID.deliveryBox) {
             Delivery3DView()

@@ -67,11 +67,12 @@ struct GigCardView: View {
                         Text("FROM").font(.caption2.weight(.semibold))
                         Text("$\(String(format: "%.0f", gig.price))").font(.title3.weight(.bold))
                     }
-                    .foregroundStyle(Color.brandGreen)
+                    // Solid pill: green-on-green glass was hard to read in bright rooms
+                    .foregroundStyle(.white)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 8)
-                    .background(Color.brandGreen.opacity(0.18), in: Capsule())
-                    .overlay(Capsule().stroke(Color.brandGreen.opacity(0.35), lineWidth: 1))
+                    .background(Color.brandGreen, in: Capsule())
+                    .shadow(color: Color.brandGreen.opacity(isFocused ? 0.6 : 0), radius: 12)
                 }
             }
             .padding(.horizontal, 20)

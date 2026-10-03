@@ -79,6 +79,7 @@ struct SpatialBottomDock: View {
             DockTabItem(icon: "tray", text: "Inbox", badge: chat.unreadTotal) {
                 openWindow(id: WindowID.inbox, value: WindowID.single)
             }
+            ToggleImmersiveSpaceButton()
             if session.isSignedIn {
                 DockTabItem(icon: "bell", text: "Alerts", badge: session.unreadNotifications) {
                     showNotifications = true
