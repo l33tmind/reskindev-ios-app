@@ -135,7 +135,8 @@ struct ImmersiveView: View {
         .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large))
     }
 
-    /// Each shelf is a 130° arc 2.1 m away, turned to face you; first shelf at eye level, second below
+    /// Each shelf is two arcs 2.1 m away on your left and right (the middle stays clear for the windows),
+    /// turned to face you; first shelf at eye level, second below
     private static func layout(root: Entity, shelves: [Shelf], attachments: RealityViewAttachments) {
         var wanted: Set<String> = [titleID]
         for shelf in shelves {
@@ -147,8 +148,7 @@ struct ImmersiveView: View {
         }
 
         let radius: Float = 2.1
-        let spread: Float = .pi * 13 / 18          // 130°
-        let shelfHeights: [Float] = [1.6, 0.75]    // card centres (metres from the floor)
+        let shelfHeights: [Float] = [1.55, 0.8]    // card centres (metres from the floor)
         let cardScale: Float = 2.3                  // ≈ 50 cm wide cards
 
         if let title = attachments.entity(for: titleID) {
@@ -162,13 +162,20 @@ struct ImmersiveView: View {
             let y = shelfHeights[row]
             let count = shelf.gigs.count
 
-            // Shelf label sits at the left end of its arc
+            // Cards sit to your left and right, leaving the middle clear for the app's windows:
+            // ±43°, ±65°, ±87°… alternating left/right
+            func angle(_ index: Int) -> Float {
+                let side: Float = index.isMultiple(of: 2) ? -1 : 1
+                return side * (0.75 + Float(index / 2) * 0.38)
+            }
+
+            // Shelf label floats above the first (left) card
             if let label = attachments.entity(for: labelID(shelf)) {
                 label.name = labelID(shelf)
                 if label.parent == nil { root.addChild(label) }
-                let angle = -spread / 2 - 0.22
-                label.position = [radius * sin(angle), y + 0.15, -radius * cos(angle)]
-                label.orientation = simd_quatf(angle: -angle, axis: [0, 1, 0])
+                let a = angle(0)
+                label.position = [radius * sin(a), y + 0.5, -radius * cos(a)]
+                label.orientation = simd_quatf(angle: -a, axis: [0, 1, 0])
                 label.scale = [1.5, 1.5, 1.5]
             }
 
@@ -177,10 +184,9 @@ struct ImmersiveView: View {
                 card.name = cardID(shelf, gig)
                 if card.parent == nil { root.addChild(card) }
 
-                let step = count > 1 ? spread / Float(count - 1) : 0
-                let angle = count > 1 ? -spread / 2 + step * Float(index) : 0
-                card.position = [radius * sin(angle), y, -radius * cos(angle)]
-                card.orientation = simd_quatf(angle: -angle, axis: [0, 1, 0])
+                let a = angle(index)
+                card.position = [radius * sin(a), y, -radius * cos(a)]
+                card.orientation = simd_quatf(angle: -a, axis: [0, 1, 0])
                 card.scale = [cardScale, cardScale, cardScale]
             }
         }

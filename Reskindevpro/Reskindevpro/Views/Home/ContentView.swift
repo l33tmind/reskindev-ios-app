@@ -38,6 +38,17 @@ struct ContentView: View {
         }
         #if DEBUG
         // `-ShowroomDemo` launch argument: open the Showroom right away (simulator screenshots)
+        // `-OpenGigDemo` / `-DeliveryDemo`: open a gig page / the delivery box once data is in (screenshots)
+        .onChange(of: gigStore.isLoading, initial: true) {
+            let args = ProcessInfo.processInfo.arguments
+            guard !gigStore.isLoading else { return }
+            if args.contains("-OpenGigDemo"), let gig = gigStore.spotlightGigs.first {
+                openWindow(id: WindowID.gigDetail, value: gig.id)
+            }
+            if args.contains("-DeliveryDemo") {
+                openWindow(id: WindowID.deliveryBox)
+            }
+        }
         .task {
             if ProcessInfo.processInfo.arguments.contains("-ShowroomDemo"), appModel.immersiveSpaceState == .closed {
                 appModel.immersiveSpaceState = .inTransition
