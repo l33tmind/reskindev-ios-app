@@ -37,6 +37,13 @@ struct CenterStageView: View {
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 10) {
+                        // Budget set by Siri ("under 20 dollars"): tap to clear
+                        if let max = store.maxPrice {
+                            FilterPill(title: "Under \(max.usd)", icon: "xmark.circle.fill", isActive: true) {
+                                withAnimation { store.maxPrice = nil }
+                            }
+                            .accessibilityHint("Removes the budget filter")
+                        }
                         FilterPill(title: "All", icon: "square.grid.2x2.fill", isActive: store.selectedCategory == nil) {
                             store.selectedCategory = nil
                         }
@@ -100,7 +107,8 @@ struct CenterStageView: View {
 
     /// Searching / filtering: one results row. Otherwise: Recently Viewed, All Services, then one row per category.
     private func sections(_ gigs: [GigModel]) -> [GigSection] {
-        let isFiltering = store.selectedCategory != nil || !store.searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        let isFiltering = store.selectedCategory != nil || store.maxPrice != nil
+            || !store.searchText.trimmingCharacters(in: .whitespaces).isEmpty
         if isFiltering {
             return [GigSection(title: "Results (\(gigs.count))", icon: "magnifyingglass", gigs: gigs)]
         }

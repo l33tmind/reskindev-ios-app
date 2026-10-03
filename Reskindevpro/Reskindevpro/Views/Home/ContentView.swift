@@ -13,10 +13,12 @@ struct ContentView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(SessionStore.self) private var session
     @Environment(ChatStore.self) private var chat
+    @Environment(GigStore.self) private var gigStore
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     private let push = PushService.shared
+    private let siri = SiriBridge.shared
 
     var body: some View {
         @Bindable var appModel = appModel
@@ -36,6 +38,14 @@ struct ContentView: View {
         // Closing the main (home) window quits the whole app: take every other window with it,
         // so reopening the app never lands on a lone side panel or gig page
         .onDisappear(perform: closeEverything)
+        // Siri: "find video editing on Reskindev" → filter Explore and open the best match
+        .onChange(of: siri.pending, initial: true) {
+            guard let request = siri.pending, !gigStore.isLoading else { return }
+            runSiri(request)
+        }
+        .onChange(of: gigStore.isLoading) {
+            if let request = siri.pending, !gigStore.isLoading { runSiri(request) }
+        }
         // Tapped a chat push → open that WorkStream
         .onChange(of: push.pendingChatID) {
             guard let chatID = push.pendingChatID else { return }
@@ -47,6 +57,14 @@ struct ContentView: View {
 }
 
 extension ContentView {
+    func runSiri(_ request: ServiceSearchRequest) {
+        siri.pending = nil
+        appModel.selectedTab = .explore
+        if let best = gigStore.apply(request) {
+            openWindow(id: WindowID.gigDetail, value: best.id)
+        }
+    }
+
     func closeEverything() {
         if appModel.showOrders { dismissWindow(id: WindowID.orders, value: WindowID.single) }
         if appModel.showSidebar { dismissWindow(id: WindowID.sidebar, value: WindowID.single) }

@@ -19,6 +19,8 @@ final class GigStore {
 
     var searchText = ""
     var selectedCategory: String? = nil   // nil = All
+    /// Budget filter (starting price), e.g. from Siri "under 20 dollars"
+    var maxPrice: Double? = nil
 
     /// Admin-managed pages (Privacy Policy, Terms, Refund…) from the `pages` collection
     private(set) var pages: [SitePage] = []
@@ -36,8 +38,27 @@ final class GigStore {
                 || gig.title.lowercased().contains(query)
                 || gig.sellerName.lowercased().contains(query)
                 || gig.keywords.contains { $0.lowercased().contains(query) }
-            return matchesCategory && matchesSearch
+            let matchesBudget = maxPrice.map { gig.price <= $0 } ?? true
+            return matchesCategory && matchesSearch && matchesBudget
         }
+    }
+
+    /// Applies a Siri request: picks the admin category that matches the spoken keywords
+    /// (or searches for them), sets the budget, and returns the best match (highest rated, then cheapest)
+    @discardableResult
+    func apply(_ request: ServiceSearchRequest) -> GigModel? {
+        let keywords = request.keywords.map { $0.lowercased() }
+        if let category = categories.first(where: { name in keywords.contains { name.lowercased().contains($0) } }) {
+            selectedCategory = category
+            searchText = ""
+        } else {
+            selectedCategory = nil
+            searchText = request.keywords.first ?? ""
+        }
+        maxPrice = request.maxPrice
+        return filteredGigs.sorted {
+            ($0.averageRating, -$0.price) > ($1.averageRating, -$1.price)
+        }.first
     }
 
     func gig(id: String) -> GigModel? { gigs.first { $0.id == id } }
@@ -91,7 +112,7 @@ final class GigStore {
     /// While searching or filtering by category it's simply the first five results.
     var spotlightGigs: [GigModel] {
         let limit = 5
-        let isFiltering = selectedCategory != nil || !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        let isFiltering = selectedCategory != nil || maxPrice != nil || !searchText.trimmingCharacters(in: .whitespaces).isEmpty
         if isFiltering { return Array(filteredGigs.prefix(limit)) }
 
         var picked: [GigModel] = []
