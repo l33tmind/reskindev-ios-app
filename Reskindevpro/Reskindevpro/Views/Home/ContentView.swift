@@ -6,9 +6,9 @@ import SwiftUI
 
 // MARK: - Main window: visionOS tab bar (Explore · Messages · Profile)
 // The tab bar is the system ornament on the window's leading edge; looking at it expands the labels.
-// Home (Explore) opens two real side windows — Menu on the left, My Orders on the right — tilted in like a
-// cockpit, each with the system window bar to move or close it. Other tabs close the Menu (it's in Profile)
-// and straighten My Orders.
+// Home (Explore) wears two side panels as ornaments — Menu on the left, My Orders on the right — tilted in
+// like a cockpit and attached right beside the window, so the main window bar moves all three together.
+// Either panel can be popped out into its own window (with its own window bar) to place it anywhere.
 struct ContentView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(SessionStore.self) private var session
@@ -39,15 +39,6 @@ struct ContentView: View {
             appModel.selectedTab = .messages
             push.pendingChatID = nil
         }
-        // Home look: both side windows around Explore; elsewhere only My Orders stays (straight)
-        .onChange(of: appModel.selectedTab, initial: true) {
-            if appModel.isHome {
-                if !appModel.showSidebar { openWindow(id: WindowID.sidebar, value: WindowID.single) }
-                if !appModel.showOrders { openWindow(id: WindowID.orders, value: WindowID.single) }
-            } else if appModel.showSidebar {
-                dismissWindow(id: WindowID.sidebar, value: WindowID.single)
-            }
-        }
     }
 }
 
@@ -55,8 +46,13 @@ struct ContentView: View {
 
 struct ExploreView: View {
     @Environment(SessionStore.self) private var session
+    @Environment(AppModel.self) private var appModel
     @Environment(\.openWindow) private var openWindow
     @State private var showNotifications = false
+
+    /// Shown as an ornament unless hidden or popped out into its own window
+    private var sidebarOrnament: Bool { appModel.sidebarPanelShown && !appModel.showSidebar }
+    private var ordersOrnament: Bool { appModel.ordersPanelShown && !appModel.showOrders }
 
     var body: some View {
         CenterStageView()
@@ -76,19 +72,41 @@ struct ExploreView: View {
                         .background(Color.red.opacity(0.85), in: Capsule())
                 }
             }
+            // Cockpit side panels, hugging the window and turned in toward the viewer
+            .ornament(visibility: sidebarOrnament ? .visible : .hidden,
+                      attachmentAnchor: .scene(.leading), contentAlignment: .trailing) {
+                CockpitPanel(side: .left, onPopOut: {
+                    openWindow(id: WindowID.sidebar, value: WindowID.single)
+                }) {
+                    LeftSidebarView().frame(width: 320, height: 720)
+                }
+                // Leave room for the system tab bar on this edge
+                .padding(.trailing, 84)
+            }
+            .ornament(visibility: ordersOrnament ? .visible : .hidden,
+                      attachmentAnchor: .scene(.trailing), contentAlignment: .leading) {
+                CockpitPanel(side: .right, onPopOut: {
+                    openWindow(id: WindowID.orders, value: WindowID.single)
+                }) {
+                    RightOrdersView().frame(width: 440, height: 720)
+                }
+                .padding(.leading, 24)
+            }
             // Few, clear actions in the standard bottom toolbar ornament
             .toolbar {
                 ToolbarItemGroup(placement: .bottomOrnament) {
                     Button {
-                        openWindow(id: WindowID.sidebar, value: WindowID.single)
+                        withAnimation { appModel.sidebarPanelShown.toggle() }
                     } label: {
-                        Label("Menu", systemImage: "sidebar.leading")
+                        Label(appModel.sidebarPanelShown ? "Hide Menu" : "Show Menu", systemImage: "sidebar.leading")
                     }
+                    .disabled(appModel.showSidebar)
                     Button {
-                        openWindow(id: WindowID.orders, value: WindowID.single)
+                        withAnimation { appModel.ordersPanelShown.toggle() }
                     } label: {
-                        Label("My Orders", systemImage: "shippingbox")
+                        Label(appModel.ordersPanelShown ? "Hide Orders" : "Show Orders", systemImage: "shippingbox")
                     }
+                    .disabled(appModel.showOrders)
                     ToggleImmersiveSpaceButton()
                     if session.isSignedIn {
                         Button {
@@ -104,24 +122,39 @@ struct ExploreView: View {
     }
 }
 
-/// A side window (Menu / My Orders): keeps AppModel in sync with whether it's open, and on Home tilts its
-/// content in toward the viewer, hinged on the edge next to the main window so the outer edge comes forward.
-/// The system window bar below stays straight and is how people move or close it.
+/// A popped-out side window (Menu / My Orders): keeps AppModel in sync with whether it's open.
+/// While it's open, the matching cockpit ornament hides; closing the window brings the ornament back.
+
+/// Cockpit side panel: turned 34° toward the viewer on the edge next to the window, with a pop-out button
+struct CockpitPanel<Content: View>: View {
+    enum Side { case left, right }
+    let side: Side
+    var onPopOut: () -> Void
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(spacing: 12) {
+            content
+            Button(action: onPopOut) {
+                Label("Open as window", systemImage: "macwindow.on.rectangle")
+                    .font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.bordered)
+            .help("Move this panel anywhere in your room")
+        }
+        .rotation3DEffect(.degrees(side == .left ? 34 : -34), axis: (x: 0, y: 1, z: 0),
+                          anchor: side == .left ? .trailing : .leading)
+    }
+}
+
 struct PanelWindow<Content: View>: View {
     enum Kind { case sidebar, orders }
     let kind: Kind
     @ViewBuilder let content: Content
     @Environment(AppModel.self) private var appModel
 
-    /// Left panel hinges on its right edge, right panel on its left edge
-    private var yaw: Double { kind == .sidebar ? 34 : -34 }
-
     var body: some View {
         content
-            .rotation3DEffect(.degrees(appModel.isHome ? yaw : 0), axis: (x: 0, y: 1, z: 0),
-                              anchor: kind == .sidebar ? .trailing : .leading)
-            .offset(z: appModel.isHome ? 24 : 0)
-            .animation(.spring(duration: 0.5), value: appModel.isHome)
             .onAppear { set(true) }
             .onDisappear { set(false) }
     }

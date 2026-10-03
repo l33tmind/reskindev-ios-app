@@ -44,8 +44,11 @@ class AppModel {
     /// Whether the My Orders / Menu side windows are open
     var showOrders = false
     var showSidebar = false
-    /// Home look: on Explore the side windows tilt in like a cockpit; elsewhere they stand straight
+    /// Home look: on Explore the side panels hug the main window like a cockpit
     var isHome: Bool { selectedTab == .explore }
+    /// Side panels attached to the Explore window (hidden while that panel is popped out into its own window)
+    var sidebarPanelShown = true
+    var ordersPanelShown = true
 
     /// Section shown in the Profile tab
     var profileTab: ProfileTab = .profile
