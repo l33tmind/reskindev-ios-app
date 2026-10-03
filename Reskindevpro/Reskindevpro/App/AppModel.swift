@@ -41,8 +41,11 @@ class AppModel {
     enum MainTab: Hashable { case explore, messages, profile }
     /// Tab bar of the main window
     var selectedTab: MainTab = .explore
-    /// Whether the My Orders window is open
+    /// Whether the My Orders / Menu side windows are open
     var showOrders = false
+    var showSidebar = false
+    /// Home look: on Explore the side windows tilt in like a cockpit; elsewhere they stand straight
+    var isHome: Bool { selectedTab == .explore }
 
     /// Section shown in the Profile tab
     var profileTab: ProfileTab = .profile
@@ -56,6 +59,7 @@ class AppModel {
 enum WindowID {
     static let main = "Main"
     static let orders = "Orders"
+    static let sidebar = "Sidebar"
     static let gigDetail = "GigDetail"
     static let sellerProfile = "SellerProfile"
     static let page = "Page"

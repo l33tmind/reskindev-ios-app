@@ -37,9 +37,23 @@ struct ReskindevproApp: App {
         // The app always opens on the main window, even if another window was the last one open
         .defaultLaunchBehavior(.presented)
 
+        // Menu: its own window on the main window's left (Home look)
+        WindowGroup(id: WindowID.sidebar, for: String.self) { _ in
+            stores(PanelWindow(kind: .sidebar) { LeftSidebarView().frame(width: 320, height: 720) })
+        }
+        .windowStyle(.plain)
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
+        .defaultWindowPlacement { _, context in
+            if let main = context.windows.first(where: { $0.id == WindowID.main }) {
+                return WindowPlacement(.leading(main))
+            }
+            return WindowPlacement(.none)
+        }
+
         // My Orders / Orders Workspace: its own window, first opened beside the main window
         WindowGroup(id: WindowID.orders, for: String.self) { _ in
-            stores(PanelWindow { RightOrdersView().frame(width: 460, height: 760) })
+            stores(PanelWindow(kind: .orders) { RightOrdersView().frame(width: 440, height: 720) })
         }
         .windowStyle(.plain)
         .windowResizability(.contentSize)

@@ -6,12 +6,15 @@ import SwiftUI
 
 // MARK: - Main window: visionOS tab bar (Explore · Messages · Profile)
 // The tab bar is the system ornament on the window's leading edge; looking at it expands the labels.
-// My Orders lives in its own window next to this one, like a gig detail window.
+// Home (Explore) opens two real side windows — Menu on the left, My Orders on the right — tilted in like a
+// cockpit, each with the system window bar to move or close it. Other tabs close the Menu (it's in Profile)
+// and straighten My Orders.
 struct ContentView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(SessionStore.self) private var session
     @Environment(ChatStore.self) private var chat
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
     private let push = PushService.shared
 
     var body: some View {
@@ -36,10 +39,13 @@ struct ContentView: View {
             appModel.selectedTab = .messages
             push.pendingChatID = nil
         }
-        // Signed-in people get their orders window beside the app
-        .onChange(of: session.uid, initial: true) {
-            if session.isSignedIn && !appModel.showOrders {
-                openWindow(id: WindowID.orders, value: WindowID.single)
+        // Home look: both side windows around Explore; elsewhere only My Orders stays (straight)
+        .onChange(of: appModel.selectedTab, initial: true) {
+            if appModel.isHome {
+                if !appModel.showSidebar { openWindow(id: WindowID.sidebar, value: WindowID.single) }
+                if !appModel.showOrders { openWindow(id: WindowID.orders, value: WindowID.single) }
+            } else if appModel.showSidebar {
+                dismissWindow(id: WindowID.sidebar, value: WindowID.single)
             }
         }
     }
@@ -74,6 +80,11 @@ struct ExploreView: View {
             .toolbar {
                 ToolbarItemGroup(placement: .bottomOrnament) {
                     Button {
+                        openWindow(id: WindowID.sidebar, value: WindowID.single)
+                    } label: {
+                        Label("Menu", systemImage: "sidebar.leading")
+                    }
+                    Button {
                         openWindow(id: WindowID.orders, value: WindowID.single)
                     } label: {
                         Label("My Orders", systemImage: "shippingbox")
@@ -93,15 +104,33 @@ struct ExploreView: View {
     }
 }
 
-/// Keeps AppModel in sync with whether the orders window is open (people can close it with the window controls)
+/// A side window (Menu / My Orders): keeps AppModel in sync with whether it's open, and on Home tilts its
+/// content in toward the viewer, hinged on the edge next to the main window so the outer edge comes forward.
+/// The system window bar below stays straight and is how people move or close it.
 struct PanelWindow<Content: View>: View {
+    enum Kind { case sidebar, orders }
+    let kind: Kind
     @ViewBuilder let content: Content
     @Environment(AppModel.self) private var appModel
 
+    /// Left panel hinges on its right edge, right panel on its left edge
+    private var yaw: Double { kind == .sidebar ? 34 : -34 }
+
     var body: some View {
         content
-            .onAppear { appModel.showOrders = true }
-            .onDisappear { appModel.showOrders = false }
+            .rotation3DEffect(.degrees(appModel.isHome ? yaw : 0), axis: (x: 0, y: 1, z: 0),
+                              anchor: kind == .sidebar ? .trailing : .leading)
+            .offset(z: appModel.isHome ? 24 : 0)
+            .animation(.spring(duration: 0.5), value: appModel.isHome)
+            .onAppear { set(true) }
+            .onDisappear { set(false) }
+    }
+
+    private func set(_ open: Bool) {
+        switch kind {
+        case .sidebar: appModel.showSidebar = open
+        case .orders: appModel.showOrders = open
+        }
     }
 }
 
