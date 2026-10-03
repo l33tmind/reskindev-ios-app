@@ -74,6 +74,40 @@ final class GigStore {
             }
     }
 
+    // MARK: Spotlight carousel (top row)
+
+    /// Recently opened gigs on this device, newest first (the website has no "recently viewed" data to share)
+    private(set) var recentIDs: [String] = UserDefaults.standard.stringArray(forKey: "recentGigIDs") ?? []
+
+    func noteViewed(_ gigID: String) {
+        recentIDs.removeAll { $0 == gigID }
+        recentIDs.insert(gigID, at: 0)
+        recentIDs = Array(recentIDs.prefix(10))
+        UserDefaults.standard.set(recentIDs, forKey: "recentGigIDs")
+    }
+
+    /// Five gigs for the top carousel, most relevant first:
+    /// up to 2 recently viewed, then the first gig of each category (admin order), then the rest.
+    /// While searching or filtering by category it's simply the first five results.
+    var spotlightGigs: [GigModel] {
+        let limit = 5
+        let isFiltering = selectedCategory != nil || !searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        if isFiltering { return Array(filteredGigs.prefix(limit)) }
+
+        var picked: [GigModel] = []
+        var seen = Set<String>()
+        func add(_ gig: GigModel?) {
+            guard let gig, picked.count < limit, seen.insert(gig.id).inserted else { return }
+            picked.append(gig)
+        }
+        recentIDs.compactMap { gig(id: $0) }.prefix(2).forEach(add)
+        for category in categories {
+            add(gigs.first { $0.category == category })
+        }
+        gigs.forEach(add)
+        return picked
+    }
+
     /// services/{id}.views +1, once per app session (website ViewTracker; rules only let signed-in users write)
     func trackView(_ gigID: String) {
         guard !trackedViews.contains(gigID) else { return }

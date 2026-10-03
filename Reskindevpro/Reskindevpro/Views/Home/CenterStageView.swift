@@ -64,7 +64,7 @@ struct CenterStageView: View {
                 } else if gigs.isEmpty {
                     ContentUnavailableView.search(text: store.searchText)
                 } else {
-                    carousel(gigs)
+                    carousel(Self.fanned(store.spotlightGigs))
                 }
             }
             .frame(height: 430)
@@ -108,7 +108,7 @@ struct CenterStageView: View {
         let centerIndex = gigs.firstIndex { $0.id == centeredID } ?? gigs.count / 2
 
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: -40) { // overlap like a fanned deck
+            HStack(spacing: -110) { // overlap like a fanned deck so all five fit
                 ForEach(Array(gigs.enumerated()), id: \.element.id) { index, gig in
                     let offset = index - centerIndex
                     let distance = CGFloat(abs(offset))
@@ -144,9 +144,22 @@ struct CenterStageView: View {
         .onChange(of: gigs.map(\.id)) { recenter(gigs) }
     }
 
+    /// Puts the most relevant gig (index 0) in the middle and fans the next ones out to either side:
+    /// [a, b, c, d, e] → [d, b, a, c, e]
+    static func fanned(_ gigs: [GigModel]) -> [GigModel] {
+        var left: [GigModel] = []
+        var right: [GigModel] = []
+        for (index, gig) in gigs.dropFirst().enumerated() {
+            if index.isMultiple(of: 2) { left.insert(gig, at: 0) } else { right.append(gig) }
+        }
+        return left + Array(gigs.prefix(1)) + right
+    }
+
     private func recenter(_ gigs: [GigModel]) {
         guard !gigs.isEmpty else { return }
-        if centeredID == nil || !gigs.contains(where: { $0.id == centeredID }) {
+        // Focus the most relevant card (recently viewed / first match), which fanned() put in the middle
+        let focus = gigs[gigs.count / 2].id
+        if centeredID != focus {
             centeredID = gigs[gigs.count / 2].id
         }
     }

@@ -76,6 +76,7 @@ private struct GigDetailContent: View {
         }
         .task(id: gig.id) {
             store.trackView(gig.id)
+            store.noteViewed(gig.id)
             reviews = await store.reviews(for: gig.id)
         }
         .sheet(isPresented: $showSignIn) { SignInView() }
