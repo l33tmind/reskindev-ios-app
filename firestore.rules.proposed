@@ -1,0 +1,171 @@
+rules_version = '2';
+
+// PROPOSED tighter rules — NOT deployed. Review, test against the website, the iOS (Flutter) app and the
+// Vision Pro app, then copy over firestore.rules and run `firebase deploy --only firestore:rules`.
+//
+// What changes vs. the current firestore.rules:
+// - The old catch-all `match /{document=**} { allow read, write: if request.auth != null; }` is gone.
+//   Firestore ORs every matching rule, so that line let any signed-in user write ANY document and made
+//   every other rule meaningless (e.g. anyone could mark someone else's order "completed").
+// - Orders, chats and messages: only the two people involved (or an admin) can read/change them.
+// - Gigs: only the author or an admin edits them, and authors can't approve their own gig (status stays
+//   pending/paused/deleted); anyone signed in may only bump views/rating counters.
+// - Users can't change their own role (after it's set), status (blocked) or verified badge.
+// - Admin-only: settings, admin_settings, pages, coupons (except usageCount), notifications, withdrawals status.
+//
+// Known limits (need server-side code, not rules):
+// - users/{uid}.walletBalance is still client-writable by its owner, because checkout deducts it on the client.
+//   Moving wallet payments into a Cloud Function would close that.
+// - The website inbox's "find chat by orderId" redirect after accepting an offer queries all conversations;
+//   under these rules that query is denied (it's inside a try/catch, so only the auto-redirect is lost).
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() { return request.auth != null; }
+    function me() { return request.auth.uid; }
+    function userDoc() { return get(/databases/$(database)/documents/users/$(me())); }
+    function isAdmin() {
+      return signedIn() && (userDoc().data.get('role', '') == 'admin'
+        || request.auth.token.email == 'mdrobiussany1225@gmail.com');
+    }
+    function changes() { return request.resource.data.diff(resource.data).affectedKeys(); }
+    function onlyChanges(keys) { return changes().hasOnly(keys); }
+
+    // ---------- Users ----------
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create: if signedIn() && me() == userId;
+      allow update: if isAdmin() || (me() == userId
+        && !changes().hasAny(['status', 'verified'])
+        // role can be set once (signup / first Flutter login), then only by an admin
+        && (!changes().hasAny(['role'])
+            || (resource.data.get('role', null) == null && request.resource.data.role in ['buyer', 'freelancer'])));
+      allow delete: if isAdmin() || me() == userId;
+
+      // Published reviews (written by the other side of an order)
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if signedIn();
+        allow update, delete: if isAdmin();
+      }
+
+      // Admin broadcasts
+      match /notifications/{notificationId} {
+        allow read, delete: if isAdmin() || me() == userId;
+        allow create: if isAdmin();
+        allow update: if isAdmin() || (me() == userId && onlyChanges(['read']));
+      }
+    }
+
+    // ---------- Gigs ----------
+    match /services/{serviceId} {
+      allow read: if true;
+      // New gigs from sellers wait for admin approval (website + iOS editors already send "pending")
+      allow create: if isAdmin()
+        || (signedIn() && request.resource.data.authorId == me() && request.resource.data.status == 'pending');
+      allow update: if isAdmin()
+        || (resource.data.authorId == me()
+            && (!changes().hasAny(['status']) || request.resource.data.status in ['pending', 'paused', 'deleted'])
+            && !changes().hasAny(['authorId', 'isFeatured', 'order']))
+        || (signedIn() && onlyChanges(['views', 'reviewCount', 'averageRating', 'rating']));
+      allow delete: if isAdmin() || resource.data.authorId == me();
+
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow create: if signedIn();
+        // Seller replies come from the gig's author
+        allow update: if isAdmin()
+          || get(/databases/$(database)/documents/services/$(serviceId)).data.authorId == me();
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ---------- Orders ----------
+    function isParty(order) {
+      return signedIn() && (order.get('userId', '') == me() || order.get('clientUid', '') == me()
+        || order.get('authorId', '') == me() || order.get('freelancerId', '') == me());
+    }
+
+    match /orders/{orderId} {
+      allow read: if isAdmin() || isParty(resource.data);
+      allow create: if signedIn() && (request.resource.data.get('userId', '') == me()
+        || request.resource.data.get('clientUid', '') == me());
+      allow update: if isAdmin() || (isParty(resource.data)
+        // nobody moves an order to someone else
+        && !changes().hasAny(['userId', 'clientUid', 'authorId', 'freelancerId', 'price']));
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Chats ----------
+    function isMember(chat) { return signedIn() && me() in chat.get('participants', []); }
+
+    match /conversations/{chatId} {
+      allow read, update: if isAdmin() || isMember(resource.data);
+      allow create: if signedIn() && me() in request.resource.data.participants;
+      allow delete: if isAdmin();
+
+      match /messages/{messageId} {
+        function chat() { return get(/databases/$(database)/documents/conversations/$(chatId)).data; }
+        allow read, create, update: if isAdmin() || isMember(chat());
+        allow delete: if isAdmin();
+      }
+    }
+
+    // Admin support inbox (top-level)
+    match /messages/{messageId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ---------- Admin order notifications ----------
+    match /notifications/{notificationId} {
+      allow read, delete: if isAdmin() || (signedIn() && resource.data.userId == me());
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (signedIn() && resource.data.userId == me() && onlyChanges(['read']));
+    }
+
+    // ---------- Money ----------
+    match /withdrawals/{withdrawalId} {
+      allow read: if isAdmin() || (signedIn() && resource.data.freelancerId == me());
+      allow create: if signedIn() && request.resource.data.freelancerId == me()
+        && request.resource.data.status == 'pending';
+      allow update, delete: if isAdmin();
+    }
+
+    match /coupons/{couponId} {
+      allow read: if signedIn();
+      allow create, delete: if isAdmin();
+      allow update: if isAdmin() || (signedIn() && onlyChanges(['usageCount']));
+    }
+
+    // ---------- Site config (read by everyone, written by admin) ----------
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /admin_settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /pages/{pageId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---------- Reports & support ----------
+    match /reports/{reportId} {
+      allow create: if signedIn();
+      allow read, update, delete: if isAdmin();
+    }
+    match /support_tickets/{ticketId} {
+      // Fields differ between the website and the Flutter app, so keep this as open as today
+      allow read, write: if signedIn();
+    }
+
+    // Legacy top-level reviews (read by /admin/reviews)
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+  }
+}
