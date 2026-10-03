@@ -20,12 +20,11 @@ struct ContentView: View {
         HStack(alignment: .center, spacing: 40) {
             // Panel A: Left Sidebar (angled inward)
             if appModel.sidebarDocked {
-                DraggablePanel(title: "Menu", offset: $appModel.sidebarOffset, baseDepth: Tilt.depth,
+                DraggablePanel(title: "Menu", offset: $appModel.sidebarOffset, yaw: Tilt.yaw, baseDepth: Tilt.depth,
                                onPopOut: { popOut(sidebar: true) },
                                onClose: { withAnimation { appModel.sidebarDocked = false } }) {
                     LeftSidebarView()
                         .frame(width: 320, height: 720)
-                        .panelTilt(yaw: Tilt.yaw)
                 }
                 .transition(.move(edge: .leading).combined(with: .opacity))
             }
@@ -38,12 +37,11 @@ struct ContentView: View {
 
             // Panel C: Orders (angled inward)
             if appModel.ordersDocked {
-                DraggablePanel(title: "Orders", offset: $appModel.ordersOffset, baseDepth: Tilt.depth,
+                DraggablePanel(title: "Orders", offset: $appModel.ordersOffset, yaw: -Tilt.yaw, baseDepth: Tilt.depth,
                                onPopOut: { popOut(sidebar: false) },
                                onClose: { withAnimation { appModel.ordersDocked = false } }) {
                     RightOrdersView()
                         .frame(width: 440, height: 720)
-                        .panelTilt(yaw: -Tilt.yaw)
                 }
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
@@ -101,18 +99,22 @@ enum Tilt {
 
 extension View {
     /// Turn (yaw) toward the viewer, then lean back (pitch) from the bottom edge
-    func panelTilt(yaw: Double) -> some View {
+    func panelTilt(yaw: Double, pitch: Double = Tilt.pitch) -> some View {
         self
             .rotation3DEffect(.degrees(yaw), axis: (x: 0, y: 1, z: 0))
-            .rotation3DEffect(.degrees(Tilt.pitch), axis: (x: 1, y: 0, z: 0), anchor: .bottom)
+            .rotation3DEffect(.degrees(pitch), axis: (x: 1, y: 0, z: 0), anchor: .bottom)
     }
 }
 
 /// A docked side panel with a visionOS-style grab bar underneath:
 /// drag the bar to move the panel (x / y, and toward / away from you), ↺ resets, ⧉ pops it out, ✕ hides it.
+/// Panel and bar are tilted together in the cockpit layout; once grabbed the panel straightens to face
+/// the viewer and stays straight where it's dropped, until ↺ puts it back.
 struct DraggablePanel<Content: View>: View {
     let title: String
     @Binding var offset: AppModel.PanelOffset
+    /// Cockpit turn while docked in its home spot
+    var yaw: Double = 0
     var baseDepth: Double = 0
     var onPopOut: () -> Void
     var onClose: () -> Void
@@ -121,11 +123,16 @@ struct DraggablePanel<Content: View>: View {
     @State private var dragStart: AppModel.PanelOffset?
     @State private var isDragging = false
 
+    /// Tilted only while untouched in its home spot
+    private var isTilted: Bool { !isDragging && !offset.isMoved }
+
     var body: some View {
         VStack(spacing: 14) {
             content
             grabBar
         }
+        .panelTilt(yaw: isTilted ? yaw : 0, pitch: isTilted ? Tilt.pitch : 0)
+        .animation(.spring(duration: 0.45), value: isTilted)
         .scaleEffect(isDragging ? 1.02 : 1)
         .offset(x: offset.x, y: offset.y)
         .offset(z: baseDepth + offset.z)
