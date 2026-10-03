@@ -17,6 +17,7 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     private let push = PushService.shared
     private let siri = SiriBridge.shared
 
@@ -35,6 +36,17 @@ struct ContentView: View {
                 ProfileView()
             }
         }
+        #if DEBUG
+        // `-ShowroomDemo` launch argument: open the Showroom right away (simulator screenshots)
+        .task {
+            if ProcessInfo.processInfo.arguments.contains("-ShowroomDemo"), appModel.immersiveSpaceState == .closed {
+                appModel.immersiveSpaceState = .inTransition
+                if case .opened = await openImmersiveSpace(id: appModel.immersiveSpaceID) {} else {
+                    appModel.immersiveSpaceState = .closed
+                }
+            }
+        }
+        #endif
         // Closing the main (home) window quits the whole app: take every other window with it,
         // so reopening the app never lands on a lone side panel or gig page
         .onDisappear(perform: closeEverything)

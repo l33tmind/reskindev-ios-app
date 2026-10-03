@@ -16,6 +16,8 @@ struct ImmersiveView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    @State private var perches = ButterflyPerches()
+    @State private var flight: Task<Void, Never>?
 
     /// One arc of cards
     struct Shelf {
@@ -52,9 +54,19 @@ struct ImmersiveView: View {
             root.name = "showroom"
             content.add(root)
             Self.layout(root: root, shelves: shelves, attachments: attachments)
+            perches.names = Self.perchNames(shelves)
+
+            // The butterfly starts in front of you and begins its rounds
+            if let butterfly = await Butterfly.load() {
+                butterfly.position = [0.25, 1.35, -0.9]
+                root.addChild(butterfly)
+                let perches = perches
+                flight = Task { await Butterfly.fly(butterfly, in: root, perches: perches) }
+            }
         } update: { content, attachments in
             guard let root = content.entities.first(where: { $0.name == "showroom" }) else { return }
             Self.layout(root: root, shelves: shelves, attachments: attachments)
+            perches.names = Self.perchNames(shelves)
         } attachments: {
             Attachment(id: Self.titleID) { header }
             ForEach(shelves, id: \.key) { shelf in
@@ -80,7 +92,24 @@ struct ImmersiveView: View {
             }
         }
         .onAppear { appModel.immersiveSpaceState = .open }
-        .onDisappear { appModel.immersiveSpaceState = .closed }
+        .onDisappear {
+            flight?.cancel()
+            appModel.immersiveSpaceState = .closed
+        }
+    }
+
+    /// Where the butterfly lands, in order: newest saved gig, then 2nd most recent gig
+    /// (falls back to what's there if one shelf is short)
+    private static func perchNames(_ shelves: [Shelf]) -> [String] {
+        let saved = shelves.first { $0.key == "saved" }
+        let recent = shelves.first { $0.key == "recent" }
+        var names: [String] = []
+        if let saved, let gig = saved.gigs.first { names.append(cardID(saved, gig)) }
+        if let recent, let gig = recent.gigs.dropFirst().first ?? recent.gigs.first { names.append(cardID(recent, gig)) }
+        if names.isEmpty, let shelf = shelves.first {
+            names = shelf.gigs.prefix(2).map { cardID(shelf, $0) }
+        }
+        return names
     }
 
     /// Leave the Showroom and show just the gig's page
@@ -113,7 +142,7 @@ struct ImmersiveView: View {
             wanted.insert(labelID(shelf))
             shelf.gigs.forEach { wanted.insert(cardID(shelf, $0)) }
         }
-        for child in root.children where !wanted.contains(child.name) {
+        for child in root.children where !wanted.contains(child.name) && child.name != Butterfly.entityName {
             child.removeFromParent()
         }
 
