@@ -34,7 +34,7 @@ struct ReskindevproApp: App {
                 .onChange(of: session.blockedUsers, initial: true) { chat.blockedByMe = session.blockedUsers }
         }
         .windowStyle(.plain)
-        .defaultSize(width: 924, height: 860)
+        .defaultSize(width: 1900, height: 1050)
         // The app always opens on the main window, even if another window was the last one open
         .defaultLaunchBehavior(.presented)
 

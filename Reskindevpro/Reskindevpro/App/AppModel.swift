@@ -38,10 +38,26 @@ class AppModel {
         var sellerOnly: Bool { self == .myGigs || self == .earnings }
     }
 
-    /// Sidebar and orders panels are their own windows so people can pull them closer or close them.
-    /// These mirror whether each window is currently open.
-    var showOrders = false
+    /// Side panels start docked in the main window next to the carousel. People can drag them anywhere
+    /// inside it (incl. closer/further), pop them out into their own window, or hide them.
+    var sidebarDocked = true
+    var ordersDocked = true
+    var sidebarOffset = PanelOffset()
+    var ordersOffset = PanelOffset()
+    /// Whether the popped-out window of each panel is open
     var showSidebar = false
+    var showOrders = false
+
+    var sidebarVisible: Bool { sidebarDocked || showSidebar }
+    var ordersVisible: Bool { ordersDocked || showOrders }
+
+    struct PanelOffset: Equatable {
+        var x: Double = 0
+        var y: Double = 0
+        /// Toward the viewer (+) — kept ≥ 0 so the panel never slips behind the window plane and gets clipped
+        var z: Double = 0
+        var isMoved: Bool { self != PanelOffset() }
+    }
     /// Tab shown in the Profile window
     var profileTab: ProfileTab = .profile
     /// Bumped by the dock's Search button to focus the search field

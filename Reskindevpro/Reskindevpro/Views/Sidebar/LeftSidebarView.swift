@@ -44,8 +44,9 @@ struct LeftSidebarView: View {
             ScrollView {
             VStack(alignment: .leading, spacing: 4) {
                 SidebarNavItem(icon: "person", text: session.mode == .seller ? "Manage Orders" : "My Orders",
-                               isActive: appModel.showOrders) {
-                    openWindow(id: WindowID.orders, value: WindowID.single)
+                               isActive: appModel.ordersVisible) {
+                    // Bring the orders panel back if it was hidden
+                    if !appModel.ordersVisible { withAnimation { appModel.ordersDocked = true } }
                 }
                 SidebarNavItem(icon: "tray", text: "Inbox", badge: chat.unreadTotal) {
                     openWindow(id: WindowID.inbox, value: WindowID.single)

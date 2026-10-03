@@ -37,7 +37,9 @@ struct RightOrdersView: View {
                     openWindow(id: WindowID.deliveryBox)
                 }
                 CircleIconButton(systemName: "xmark", label: "Close orders") {
-                    dismissWindow(id: WindowID.orders, value: WindowID.single)
+                    // Docked in the main window or popped out into its own: close wherever it is
+                    withAnimation { appModel.ordersDocked = false }
+                    if appModel.showOrders { dismissWindow(id: WindowID.orders, value: WindowID.single) }
                 }
             }
 

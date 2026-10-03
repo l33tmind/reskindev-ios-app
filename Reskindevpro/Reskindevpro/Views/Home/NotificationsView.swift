@@ -74,7 +74,7 @@ struct NotificationsView: View {
     private func open(_ item: AppNotification) {
         session.markRead(item)
         if item.link.contains("orders") || item.link.contains("freelancer") {
-            openWindow(id: WindowID.orders, value: WindowID.single)
+            if !appModel.ordersVisible { appModel.ordersDocked = true }
             dismiss()
         }
     }
