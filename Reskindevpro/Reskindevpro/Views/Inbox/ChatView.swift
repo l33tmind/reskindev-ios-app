@@ -97,12 +97,14 @@ struct ChatView: View {
             }
             Spacer()
 
-            if chat.amISeller, let order, order.isInProgress {
+            // Only the seller of this order delivers
+            if let order, order.isSeller(me), order.isInProgress {
                 Button { sheetAction = .deliver } label: { Label("Deliver Order", systemImage: "shippingbox.fill") }
                     .buttonStyle(.borderedProminent)
                     .tint(Color.brandGreen)
             }
-            if chat.amISeller || session.canSell {
+            // Only the seller side of this chat makes offers (buyers can't, even if their account also sells)
+            if chat.amISeller && !chat.amIBuyer {
                 Button { showOffer = true } label: { Label("Create Offer", systemImage: "briefcase") }
                     .buttonStyle(.bordered)
             }
