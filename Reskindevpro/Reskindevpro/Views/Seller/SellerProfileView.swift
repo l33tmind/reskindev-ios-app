@@ -47,6 +47,8 @@ struct SellerProfileView: View {
         .frame(minWidth: 960, minHeight: 680)
         .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large))
         .task(id: userKey) { await load() }
+        .onAppear { appModel.openSellerKeys.insert(userKey) }
+        .onDisappear { appModel.openSellerKeys.remove(userKey) }
         .sheet(isPresented: $showSignIn) { SignInView() }
         .errorAlert("Something went wrong", message: $errorMessage)
     }

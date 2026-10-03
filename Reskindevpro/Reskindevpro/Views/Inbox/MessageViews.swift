@@ -8,6 +8,7 @@ struct MessageRow: View {
     var onReply: (ChatMessage) -> Void = { _ in }
     var onAction: (OrderAction) -> Void = { _ in }
     var onError: (String) -> Void = { _ in }
+    @Environment(ChatStore.self) private var chat
 
     var body: some View {
         switch message.kind {
@@ -16,7 +17,9 @@ struct MessageRow: View {
         case .offer:
             OfferCard(message: message, isMine: message.senderId == me, conversation: conversation, onError: onError)
         case .text:
-            TextBubble(message: message, isMine: message.senderId == me)
+            TextBubble(message: message, isMine: message.senderId == me,
+                       avatar: message.senderId == me ? "" : chat.photo(for: message.senderId),
+                       senderName: message.senderName.isEmpty ? conversation.title(me: me) : message.senderName)
                 .contextMenu {
                     Button { onReply(message) } label: { Label("Reply", systemImage: "arrowshape.turn.up.left") }
                     Button { UIPasteboard.general.string = message.text } label: { Label("Copy", systemImage: "doc.on.doc") }
@@ -30,10 +33,16 @@ struct MessageRow: View {
 private struct TextBubble: View {
     let message: ChatMessage
     let isMine: Bool
+    var avatar: String = ""
+    var senderName: String = ""
 
     var body: some View {
-        HStack {
+        HStack(alignment: .bottom, spacing: 10) {
             if isMine { Spacer(minLength: 120) }
+            if !isMine {
+                UserAvatar(name: senderName, photoUrl: avatar, size: 34)
+                    .accessibilityHidden(true)
+            }
             VStack(alignment: isMine ? .trailing : .leading, spacing: 6) {
                 if let reply = message.replyToText {
                     VStack(alignment: .leading, spacing: 2) {

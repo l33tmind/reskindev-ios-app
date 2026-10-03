@@ -46,6 +46,12 @@ class AppModel {
     var showSidebar = false
     /// Home look: on Explore the side panels hug the main window like a cockpit
     var isHome: Bool { selectedTab == .explore }
+    /// Open gig / seller-profile windows, so closing the main window can close them too
+    var openGigIDs = Set<String>()
+    var openSellerKeys = Set<String>()
+    var isDeliveryBoxOpen = false
+    var isPagesOpen = false
+
     /// Side panels attached to the Explore window (hidden while that panel is popped out into its own window)
     var sidebarPanelShown = true
     var ordersPanelShown = true

@@ -58,6 +58,8 @@ struct Delivery3DView: View {
             }
             Attachment(id: "reveal") { revealCard }
         }
+        .onAppear { appModel.isDeliveryBoxOpen = true }
+        .onDisappear { appModel.isDeliveryBoxOpen = false }
         .gesture(
             TapGesture().targetedToAnyEntity().onEnded { _ in
                 guard !isOpened else { return }

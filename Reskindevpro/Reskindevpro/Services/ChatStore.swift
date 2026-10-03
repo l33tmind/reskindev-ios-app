@@ -47,6 +47,24 @@ final class ChatStore {
 
     var activeChat: Conversation? { conversations.first { $0.id == activeChatID } }
 
+    // MARK: Profile pictures (users/{uid}.photoURL — conversations only store names)
+
+    private(set) var photos: [String: String] = [:]
+    @ObservationIgnored private var requestedPhotos = Set<String>()
+
+    /// Photo URL for a participant; fetched once, then cached
+    func photo(for uid: String?) -> String {
+        guard let uid, !uid.isEmpty, uid != "system" else { return "" }
+        if !requestedPhotos.contains(uid) {
+            requestedPhotos.insert(uid)
+            Task { [weak self] in
+                guard let d = try? await Firestore.firestore().collection("users").document(uid).getDocument().data() else { return }
+                self?.photos[uid] = FS.string(d["photoURL"]) ?? FS.string(d["photoUrl"]) ?? ""
+            }
+        }
+        return photos[uid] ?? ""
+    }
+
     /// Red badge on the dock's Inbox button
     var unreadTotal: Int {
         guard let uid else { return 0 }

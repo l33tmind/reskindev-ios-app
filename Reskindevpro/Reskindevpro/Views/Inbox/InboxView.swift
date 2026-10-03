@@ -66,11 +66,12 @@ struct InboxView: View {
 private struct ConversationRow: View {
     let conversation: Conversation
     let me: String
+    @Environment(ChatStore.self) private var chat
 
     var body: some View {
         let unread = conversation.unreadCount(for: me)
         HStack(spacing: 14) {
-            UserAvatar(name: conversation.title(me: me), photoUrl: "", size: 46)
+            UserAvatar(name: conversation.title(me: me), photoUrl: chat.photo(for: conversation.otherID(me: me)), size: 46)
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text(conversation.title(me: me))

@@ -15,6 +15,7 @@ struct ContentView: View {
     @Environment(ChatStore.self) private var chat
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     private let push = PushService.shared
 
     var body: some View {
@@ -32,12 +33,29 @@ struct ContentView: View {
                 ProfileView()
             }
         }
+        // Closing the main (home) window quits the whole app: take every other window with it,
+        // so reopening the app never lands on a lone side panel or gig page
+        .onDisappear(perform: closeEverything)
         // Tapped a chat push → open that WorkStream
         .onChange(of: push.pendingChatID) {
             guard let chatID = push.pendingChatID else { return }
             chat.activeChatID = chatID
             appModel.selectedTab = .messages
             push.pendingChatID = nil
+        }
+    }
+}
+
+extension ContentView {
+    func closeEverything() {
+        if appModel.showOrders { dismissWindow(id: WindowID.orders, value: WindowID.single) }
+        if appModel.showSidebar { dismissWindow(id: WindowID.sidebar, value: WindowID.single) }
+        if appModel.isPagesOpen { dismissWindow(id: WindowID.page, value: WindowID.single) }
+        if appModel.isDeliveryBoxOpen { dismissWindow(id: WindowID.deliveryBox) }
+        for gigID in appModel.openGigIDs { dismissWindow(id: WindowID.gigDetail, value: gigID) }
+        for key in appModel.openSellerKeys { dismissWindow(id: WindowID.sellerProfile, value: key) }
+        if appModel.immersiveSpaceState == .open {
+            Task { await dismissImmersiveSpace() }
         }
     }
 }

@@ -48,6 +48,8 @@ struct ChatView: View {
             .ornament(visibility: showWorkspace ? .visible : .hidden,
                       attachmentAnchor: .scene(.trailing), contentAlignment: .leading) {
                 WorkspacePanel(onAction: { sheetAction = $0 })
+                    // Turned in toward the viewer, hinged on the edge next to the chat, so it's easy to read
+                    .rotation3DEffect(.degrees(-24), axis: (x: 0, y: 1, z: 0), anchor: .leading)
                     .padding(.leading, 20)
             }
             .sheet(item: $sheetAction) { action in
@@ -79,7 +81,7 @@ struct ChatView: View {
         let order = chat.currentOrder
         let name = chat.otherUser?.name ?? conversation.title(me: me)
         return HStack(alignment: .center, spacing: 16) {
-            UserAvatar(name: name, photoUrl: chat.otherUser?.photoUrl ?? "", size: 52)
+            UserAvatar(name: name, photoUrl: chat.photo(for: conversation.otherID(me: me)), size: 52)
             VStack(alignment: .leading, spacing: 4) {
                 (Text("WorkStream with ").foregroundStyle(.secondary) + Text(name).bold())
                     .font(.title3)
@@ -285,7 +287,7 @@ private struct WorkspacePanel: View {
                 if let uid = session.uid, let conversation = chat.activeChat {
                     let name = chat.otherUser?.name ?? conversation.title(me: uid)
                     HStack(spacing: 12) {
-                        UserAvatar(name: name, photoUrl: chat.otherUser?.photoUrl ?? "", size: 44)
+                        UserAvatar(name: name, photoUrl: chat.photo(for: conversation.otherID(me: uid)), size: 44)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(name).font(.headline)
                             Text(chat.amISeller ? "BUYER" : "SELLER")

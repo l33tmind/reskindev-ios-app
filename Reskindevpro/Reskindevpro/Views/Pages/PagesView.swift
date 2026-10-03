@@ -4,6 +4,7 @@ import UIKit
 /// Help & Policies window: the pages the admin manages in /admin/pages (Privacy Policy, Terms, Refund…)
 struct PagesView: View {
     @Environment(GigStore.self) private var gigStore
+    @Environment(AppModel.self) private var appModel
     @State private var selection: String?
 
     private var pages: [SitePage] { gigStore.pages }
@@ -23,6 +24,8 @@ struct PagesView: View {
             }
         }
         .frame(minWidth: 900, minHeight: 620)
+        .onAppear { appModel.isPagesOpen = true }
+        .onDisappear { appModel.isPagesOpen = false }
         .onAppear { if selection == nil { selection = preferredPage?.id } }
         .onChange(of: pages) { if selection == nil { selection = preferredPage?.id } }
     }

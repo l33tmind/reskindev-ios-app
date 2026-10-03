@@ -4,6 +4,7 @@ import SwiftUI
 struct GigDetailView: View {
     let gigID: String
     @Environment(GigStore.self) private var store
+    @Environment(AppModel.self) private var appModel
     @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
@@ -21,6 +22,8 @@ struct GigDetailView: View {
             }
         }
         .frame(minWidth: 1000, minHeight: 680)
+        .onAppear { appModel.openGigIDs.insert(gigID) }
+        .onDisappear { appModel.openGigIDs.remove(gigID) }
         .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large))
     }
 }
