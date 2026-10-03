@@ -139,6 +139,8 @@ struct ChatMessage: Identifiable, Hashable {
         case "extension_requested": ("Time Extension Requested", "clock.badge.questionmark")
         case "extension_accepted": ("Time Extension Accepted", "clock.badge.checkmark")
         case "extension_declined": ("Time Extension Declined", "clock.badge.xmark")
+        case "dispute_opened": ("Dispute Opened", "exclamationmark.shield.fill")
+        case "system_update": ("Order Update", "arrow.triangle.2.circlepath")
         default: ("Update", "info.circle.fill")
         }
     }

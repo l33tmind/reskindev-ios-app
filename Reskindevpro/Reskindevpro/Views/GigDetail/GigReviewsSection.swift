@@ -6,7 +6,7 @@ struct GigReviewsSection: View {
 
     private var average: Double {
         guard !reviews.isEmpty else { return 0 }
-        return Double(reviews.map(\.rating).reduce(0, +)) / Double(reviews.count)
+        return reviews.map(\.rating).reduce(0, +) / Double(reviews.count)
     }
 
     var body: some View {
@@ -34,9 +34,10 @@ struct GigReviewsSection: View {
                         Spacer()
                         HStack(spacing: 2) {
                             ForEach(0..<5, id: \.self) { i in
-                                Image(systemName: i < review.rating ? "star.fill" : "star")
+                                Image(systemName: i < Int(review.rating.rounded()) ? "star.fill" : "star")
                                     .foregroundStyle(Color.starYellow)
                             }
+                            Text(String(format: "%.1f", review.rating)).fontWeight(.bold).padding(.leading, 4)
                         }
                         .font(.caption)
                     }

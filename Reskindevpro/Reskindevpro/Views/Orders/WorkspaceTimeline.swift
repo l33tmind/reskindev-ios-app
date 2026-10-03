@@ -250,6 +250,21 @@ struct WorkspaceTimeline: View {
                             .font(.callout.weight(.semibold))
                     }
                 }
+                // Both reviews are public: show the seller's side too
+                if order.isReviewPublic, let sellerReview = order.sellerReview {
+                    box(tint: .blue) {
+                        Text("SELLER'S REVIEW OF THE BUYER").font(.caption2.weight(.heavy)).foregroundStyle(.blue)
+                        HStack(spacing: 2) {
+                            ForEach(0..<5, id: \.self) { i in
+                                Image(systemName: i < sellerReview.stars ? "star.fill" : "star").foregroundStyle(Color.starYellow)
+                            }
+                            Text(String(format: "%.1f", sellerReview.rating)).font(.headline).padding(.leading, 6)
+                        }
+                        if !sellerReview.comment.isEmpty {
+                            Text("“\(sellerReview.comment)”").font(.callout.italic()).foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 if isSeller && order.sellerReview == nil {
                     box(tint: .blue) {
                         Text("Leave a Review for the Buyer").font(.headline)

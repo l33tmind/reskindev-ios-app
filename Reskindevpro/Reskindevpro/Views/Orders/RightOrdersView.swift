@@ -170,6 +170,12 @@ struct OrderCard: View {
         return name.isEmpty ? "Freelancer" : name
     }
 
+    /// "2d 4h" / "5h 12m"
+    static func short(_ seconds: TimeInterval) -> String {
+        let m = Int(seconds) / 60
+        return m >= 1440 ? "\(m / 1440)d \((m % 1440) / 60)h" : "\(m / 60)h \(m % 60)m"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
@@ -190,6 +196,17 @@ struct OrderCard: View {
                     Text(order.price.usd)
                         .font(.title.weight(.bold))
                         .foregroundStyle(order.isPendingPayment ? Color.starYellow : Color.brandGreen)
+                }
+            }
+
+            // Live delivery countdown (starts when requirements are in)
+            if order.isTimerRunning {
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    let left = order.dueDate.timeIntervalSince(context.date)
+                    Label(left < 0 ? "Late by \(Self.short(-left))" : "Due in \(Self.short(left))",
+                          systemImage: "clock")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(left < 0 ? Color.red : Color.brandGreen)
                 }
             }
 

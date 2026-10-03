@@ -5,7 +5,7 @@ struct GigReview: Identifiable, Hashable {
     let id: String
     let userName: String
     let userImage: String
-    let rating: Int
+    let rating: Double
     let comment: String
     let createdAt: Date?
     let sellerReply: String?
@@ -14,7 +14,7 @@ struct GigReview: Identifiable, Hashable {
         self.id = id
         self.userName = FS.string(data["userName"]) ?? FS.string(data["buyerName"]) ?? "Client"
         self.userImage = FS.string(data["userImage"]) ?? FS.string(data["buyerImage"]) ?? ""
-        self.rating = FS.int(data["rating"]) ?? 0
+        self.rating = FS.double(data["rating"]) ?? 0
         self.comment = data["comment"] as? String ?? ""
         self.createdAt = FS.date(data["createdAt"])
         self.sellerReply = FS.string(FS.map(data["sellerReply"])["comment"])

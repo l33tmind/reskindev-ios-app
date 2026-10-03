@@ -61,6 +61,7 @@ struct ProfileView: View {
 
 private struct ProfileOverview: View {
     @Environment(SessionStore.self) private var session
+    @Environment(\.openWindow) private var openWindow
 
     private var completedCount: Int { session.orders.filter(\.isCompleted).count }
     private var activeCount: Int { session.orders.filter { !$0.isCompleted && $0.status != "cancelled" }.count }
@@ -90,6 +91,17 @@ private struct ProfileOverview: View {
                     StatTile(title: "Active Orders", value: "\(activeCount)", icon: "clock")
                     StatTile(title: "Completed", value: "\(completedCount)", icon: "checkmark.seal")
                     StatTile(title: "Saved", value: "\(session.savedGigIDs.count)", icon: "heart")
+                }
+
+                // Reviews from both sides of finished orders live on the public profile
+                if let uid = session.uid {
+                    Button {
+                        openWindow(id: WindowID.sellerProfile, value: uid)
+                    } label: {
+                        Label("My Public Profile & Reviews", systemImage: "star.bubble")
+                    }
+                    .buttonStyle(GlassOutlineButtonStyle())
+                    .frame(width: 360)
                 }
 
                 VStack(alignment: .leading, spacing: 14) {

@@ -186,7 +186,9 @@ enum OrderService {
             "requirements": text,
             "requirementsText": text,
             "requirementsProvided": true,
+            // Delivery countdown starts now
             "startedAt": FieldValue.serverTimestamp(),
+            "requirementsSubmittedAt": FieldValue.serverTimestamp(),
             "updatedAt": FieldValue.serverTimestamp(),
         ])
         await notify(order, session: session, actionType: "requirements_submitted",

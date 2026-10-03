@@ -59,6 +59,8 @@ struct OrderModel: Identifiable, Hashable {
     let isReviewPublic: Bool
     let extensionRequest: ExtensionRequest?
     let createdAt: Date
+    /// When the buyer's requirements came in: the delivery countdown starts here
+    let startedAt: Date?
     let deliveredAt: Date?
     let completedAt: Date?
 
@@ -93,6 +95,7 @@ struct OrderModel: Identifiable, Hashable {
         self.isReviewPublic = data["isReviewPublic"] as? Bool ?? false
         self.extensionRequest = ExtensionRequest(data["extensionRequest"])
         self.createdAt = FS.date(data["createdAt"]) ?? .now
+        self.startedAt = FS.date(data["requirementsSubmittedAt"]) ?? FS.date(data["startedAt"])
         self.deliveredAt = FS.date(data["deliveredAt"])
         self.completedAt = FS.date(data["completedAt"])
     }
@@ -102,8 +105,8 @@ struct OrderModel: Identifiable, Hashable {
     var isInProgress: Bool { ["processing", "in_progress", "revision"].contains(status) }
     /// Delivery countdown runs while the seller is working (website WorkspaceTimelineDetails)
     var isTimerRunning: Bool { isInProgress || status == "disputed" }
-    /// createdAt + deliveryDays, same as the website timer
-    var dueDate: Date { createdAt.addingTimeInterval(Double(deliveryDays) * 86_400) }
+    /// Requirements submitted + deliveryDays (website My Orders LiveTimer); older orders fall back to createdAt
+    var dueDate: Date { (startedAt ?? createdAt).addingTimeInterval(Double(deliveryDays) * 86_400) }
     var isDelivered: Bool { status == "delivered" }
     var isCompleted: Bool { status == "completed" }
     var isCancelRequested: Bool { status.hasPrefix("cancel_requested") }
