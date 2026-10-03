@@ -1,0 +1,141 @@
+import SwiftUI
+
+/// Seller earnings + Payoneer withdrawals (website /profile/earnings)
+struct EarningsView: View {
+    @Environment(SellerStore.self) private var seller
+    @Environment(SessionStore.self) private var session
+    @State private var showWithdraw = false
+
+    var body: some View {
+        let e = seller.earnings
+        ScrollView {
+            VStack(alignment: .leading, spacing: 26) {
+                HStack(spacing: 16) {
+                    tile("Available for Withdrawal", e.available.usd, "dollarsign.circle.fill", highlight: true)
+                    tile("Pending Clearance", e.pendingClearance.usd, "clock")
+                    tile("Total Earnings", e.totalEarnings.usd, "chart.line.uptrend.xyaxis")
+                    tile("Withdrawn", e.withdrawn.usd, "arrow.up.right.circle")
+                }
+
+                HStack {
+                    Label("\(e.completedOrders) completed orders · \(e.platformFee.formatted())% platform fee · funds clear 15 days after completion",
+                          systemImage: "info.circle")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Withdraw Funds") { showWithdraw = true }
+                        .buttonStyle(GlassOutlineButtonStyle(prominent: true))
+                        .frame(width: 220)
+                        .disabled(e.available < 20)
+                }
+
+                if !e.pending.isEmpty {
+                    list("Clearing Soon") {
+                        ForEach(e.pending.indices, id: \.self) { i in
+                            let item = e.pending[i]
+                            row(item.title, detail: "Clears \(item.clearsAt.formatted(.relative(presentation: .named)))",
+                                amount: item.amount.usd)
+                        }
+                    }
+                }
+
+                if !e.withdrawals.isEmpty {
+                    list("Withdrawals") {
+                        ForEach(e.withdrawals.indices, id: \.self) { i in
+                            let w = e.withdrawals[i]
+                            row(w.status.capitalized, detail: w.date?.formatted(date: .abbreviated, time: .omitted) ?? "",
+                                amount: w.amount.usd)
+                        }
+                    }
+                }
+            }
+            .padding(32)
+        }
+        .overlay { if seller.earningsLoading { ProgressView() } }
+        .navigationTitle("Earnings")
+        .task { await seller.loadEarnings(session: session) }
+        .sheet(isPresented: $showWithdraw) { WithdrawSheet() }
+    }
+
+    private func tile(_ title: String, _ value: String, _ icon: String, highlight: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon).font(.title2).foregroundStyle(Color.brandGreen)
+            Text(value).font(.title.weight(.bold)).lineLimit(1).minimumScaleFactor(0.6)
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(highlight ? Color.brandGreen.opacity(0.15) : Color.white.opacity(0.06),
+                    in: RoundedRectangle(cornerRadius: Radius.medium))
+    }
+
+    private func list<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title).font(.title3.weight(.bold))
+            content()
+        }
+    }
+
+    private func row(_ title: String, detail: String, amount: String) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.headline)
+                Text(detail).font(.caption).foregroundStyle(.secondary)
+            }
+            Spacer()
+            Text(amount).font(.headline)
+        }
+        .padding(14)
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.small))
+    }
+}
+
+private struct WithdrawSheet: View {
+    @Environment(SellerStore.self) private var seller
+    @Environment(SessionStore.self) private var session
+    @Environment(\.dismiss) private var dismiss
+    @State private var email = ""
+    @State private var amount = ""
+    @State private var working = false
+    @State private var errorMessage: String?
+    @State private var done = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Withdraw via Payoneer").font(.title.weight(.bold))
+            if done {
+                Label("Withdrawal request submitted! It will be reviewed within 3-5 business days.", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(Color.brandGreen)
+                Button("Done") { dismiss() }.buttonStyle(GlassOutlineButtonStyle(prominent: true))
+            } else {
+                Text("Available: \(seller.earnings.available.usd) · Minimum $20 · $3 processing charge")
+                    .font(.subheadline).foregroundStyle(.secondary)
+                GlassField(title: "Payoneer email", text: $email, prompt: "you@example.com")
+                GlassField(title: "Amount (USD)", text: $amount, prompt: "50")
+                if let errorMessage { Text(errorMessage).font(.callout).foregroundStyle(.red) }
+                HStack(spacing: 12) {
+                    Button("Cancel") { dismiss() }.buttonStyle(GlassOutlineButtonStyle())
+                    Button {
+                        Task {
+                            working = true
+                            errorMessage = nil
+                            do {
+                                try await seller.requestWithdrawal(amount: Double(amount) ?? 0, email: email, session: session)
+                                done = true
+                            } catch {
+                                errorMessage = error.localizedDescription
+                            }
+                            working = false
+                        }
+                    } label: {
+                        if working { ProgressView() } else { Text("Request Withdrawal") }
+                    }
+                    .buttonStyle(GlassOutlineButtonStyle(prominent: true))
+                    .disabled(working || email.trimmed.isEmpty || (Double(amount) ?? 0) <= 0)
+                }
+            }
+        }
+        .padding(32)
+        .frame(width: 520)
+    }
+}

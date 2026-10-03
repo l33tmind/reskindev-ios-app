@@ -1,0 +1,162 @@
+import SwiftUI
+import AuthenticationServices
+
+// MARK: - Sign In / Sign Up (same Firebase Auth users as the Flutter app & website)
+struct SignInView: View {
+    @Environment(SessionStore.self) private var session
+    @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
+    @State private var isSignUp = false
+    @State private var name = ""
+    @State private var email = ""
+    @State private var password = ""
+    @State private var role = "buyer"
+    @State private var isWorking = false
+    @State private var errorMessage: String?
+    @State private var appleNonce = ""
+
+    private var canSubmit: Bool {
+        !email.isEmpty && password.count >= 6 && (!isSignUp || !name.trimmingCharacters(in: .whitespaces).isEmpty)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text(isSignUp ? "Join Reskindev" : "Sign in to Reskindev")
+                .font(.title.weight(.bold))
+
+            // Same Apple / Google accounts as the iOS app
+            SignInWithAppleButton(.continue) { request in
+                appleNonce = SocialSignIn.makeNonce()
+                request.requestedScopes = [.fullName, .email]
+                request.nonce = SocialSignIn.sha256(appleNonce)
+            } onCompletion: { result in
+                Task { await finishApple(result) }
+            }
+            .signInWithAppleButtonStyle(.white)
+            .frame(height: Hit.min)
+            .clipShape(RoundedRectangle(cornerRadius: Radius.small))
+            .disabled(isWorking)
+
+            Button {
+                Task { await signInWithGoogle() }
+            } label: {
+                Label("Continue with Google", systemImage: "g.circle.fill")
+            }
+            .buttonStyle(GlassOutlineButtonStyle())
+            .disabled(isWorking)
+
+            HStack {
+                VStack { Divider() }
+                Text("or use email").font(.caption).foregroundStyle(.secondary)
+                VStack { Divider() }
+            }
+
+            Picker("Mode", selection: $isSignUp.animation()) {
+                Text("Sign In").tag(false)
+                Text("Sign Up").tag(true)
+            }
+            .pickerStyle(.segmented)
+
+            if isSignUp {
+                TextField("Full name", text: $name)
+                    .textContentType(.name)
+                    .textFieldStyle(.roundedBorder)
+
+                // Same choice as the website's signup page
+                Picker("I want to", selection: $role) {
+                    Text("Hire (Buyer)").tag("buyer")
+                    Text("Sell (Freelancer)").tag("freelancer")
+                }
+                .pickerStyle(.segmented)
+            }
+
+            TextField("Email", text: $email)
+                .textContentType(.emailAddress)
+                .keyboardType(.emailAddress)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textFieldStyle(.roundedBorder)
+            SecureField("Password (min 6 characters)", text: $password)
+                .textContentType(isSignUp ? .newPassword : .password)
+                .textFieldStyle(.roundedBorder)
+
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.callout)
+                    .foregroundStyle(.red)
+            }
+
+            HStack(spacing: 12) {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(GlassOutlineButtonStyle())
+                Button {
+                    Task { await submit() }
+                } label: {
+                    if isWorking { ProgressView() } else { Text(isSignUp ? "Create Account" : "Sign In") }
+                }
+                .buttonStyle(GlassOutlineButtonStyle(prominent: true))
+                .disabled(!canSubmit || isWorking)
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            Button("By continuing you agree to our Terms & Privacy Policy") {
+                openWindow(id: WindowID.page, value: WindowID.single)
+            }
+            .font(.caption)
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .padding(.bottom, 16)
+        }
+        .padding(32)
+        .frame(width: 480)
+    }
+
+    private func finishApple(_ result: Result<ASAuthorization, Error>) async {
+        switch result {
+        case .failure(let error):
+            if (error as? ASAuthorizationError)?.code != .canceled { errorMessage = error.localizedDescription }
+        case .success(let authorization):
+            await run {
+                let (credential, name) = try SocialSignIn.appleCredential(from: authorization, rawNonce: appleNonce)
+                try await session.signIn(with: credential, fallbackName: name)
+            }
+        }
+    }
+
+    private func signInWithGoogle() async {
+        await run {
+            let credential = try await SocialSignIn.googleCredential()
+            try await session.signIn(with: credential)
+        }
+    }
+
+    private func run(_ action: () async throws -> Void) async {
+        isWorking = true
+        errorMessage = nil
+        do {
+            try await action()
+            dismiss()
+        } catch SocialSignInError.cancelled {
+            // User closed the sheet: nothing to show
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isWorking = false
+    }
+
+    private func submit() async {
+        isWorking = true
+        errorMessage = nil
+        do {
+            if isSignUp {
+                try await session.signUp(name: name, email: email, password: password, role: role)
+            } else {
+                try await session.signIn(email: email, password: password)
+            }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isWorking = false
+    }
+}
