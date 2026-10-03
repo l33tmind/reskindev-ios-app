@@ -111,6 +111,7 @@ struct SignInView: View {
         }
         .padding(32)
         .frame(width: 480)
+        .sheetPresence()
     }
 
     private func finishApple(_ result: Result<ASAuthorization, Error>) async {

@@ -275,3 +275,19 @@ struct StarRatingPicker: View {
         }
     }
 }
+
+// MARK: - Sheet presence (lets Explore pull its 3D cards back behind a sheet)
+
+private struct SheetPresence: ViewModifier {
+    @Environment(AppModel.self) private var appModel
+    func body(content: Content) -> some View {
+        content
+            .onAppear { appModel.openSheets += 1 }
+            .onDisappear { appModel.openSheets = max(0, appModel.openSheets - 1) }
+    }
+}
+
+extension View {
+    /// Put on the root of every sheet's content
+    func sheetPresence() -> some View { modifier(SheetPresence()) }
+}

@@ -40,6 +40,7 @@ struct NotificationsView: View {
         }
         .padding(28)
         .frame(width: 560, height: 640)
+        .sheetPresence()
     }
 
     private func row(_ item: AppNotification) -> some View {

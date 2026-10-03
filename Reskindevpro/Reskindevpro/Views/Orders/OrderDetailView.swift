@@ -29,6 +29,7 @@ struct OrderDetailView: View {
                 .padding(16)
         }
         .errorAlert("Something went wrong", message: $errorMessage)
+        .sheetPresence()
     }
 
     private func content(_ order: OrderModel) -> some View {

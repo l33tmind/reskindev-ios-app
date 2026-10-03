@@ -192,5 +192,6 @@ struct OrderActionSheet: View {
         }
         .padding(32)
         .frame(width: 560)
+        .sheetPresence()
     }
 }

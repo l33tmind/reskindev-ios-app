@@ -46,6 +46,9 @@ class AppModel {
     var showSidebar = false
     /// Home look: on Explore the side panels hug the main window like a cockpit
     var isHome: Bool { selectedTab == .explore }
+    /// Sheets currently shown; while any is up, Explore flattens its floating cards so nothing covers the sheet
+    var openSheets = 0
+
     /// Open gig / seller-profile windows, so closing the main window can close them too
     var openGigIDs = Set<String>()
     var openSellerKeys = Set<String>()
