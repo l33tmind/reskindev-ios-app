@@ -5,6 +5,7 @@ struct NotificationsView: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppModel.self) private var appModel
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -73,7 +74,7 @@ struct NotificationsView: View {
     private func open(_ item: AppNotification) {
         session.markRead(item)
         if item.link.contains("orders") || item.link.contains("freelancer") {
-            appModel.showOrders = true
+            openWindow(id: WindowID.orders, value: WindowID.single)
             dismiss()
         }
     }

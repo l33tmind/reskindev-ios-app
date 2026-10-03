@@ -4,53 +4,62 @@ import SwiftUI
 // Colors, radius, CachedImage, skeleton, buttons → DesignSystem/
 // Windows: gig detail → Views/GigDetail, inbox → Views/Inbox, profile → Views/Profile
 
-// MARK: - Main window: sidebar · 3D carousel · orders, with the dock as an ornament
+// MARK: - Main window: search + 3D carousel, dock as an ornament.
+// The sidebar and orders panels are separate windows (see ReskindevproApp) placed to its left and right,
+// so each one can be grabbed, pulled closer, moved or closed on its own.
 struct ContentView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(SessionStore.self) private var session
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        HStack(alignment: .center, spacing: 40) {
-
-            // Panel A: Left Sidebar (Angled Inward)
-            LeftSidebarView()
-                .frame(width: 320, height: 720)
-                .rotation3DEffect(.degrees(12), axis: (x: 0, y: 1, z: 0))
-                .offset(z: 50)
-
-            // Panel B: Center Stage (Floating Filter & 3D Carousel)
-            CenterStageView()
-                .frame(width: 900)
-
-            // Panel C: Right Workspace (Angled Inward)
-            if appModel.showOrders {
-                RightOrdersView()
-                    .frame(width: 440, height: 720)
-                    .rotation3DEffect(.degrees(-12), axis: (x: 0, y: 1, z: 0))
-                    .offset(z: 50)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+        CenterStageView()
+            .frame(width: 900)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 40)
+            // Admin → Users → Block
+            .overlay(alignment: .top) {
+                if session.isBlockedByAdmin {
+                    Label("Your account has been suspended by Reskindev. Contact support to restore ordering and messaging.",
+                          systemImage: "exclamationmark.octagon.fill")
+                        .font(.headline)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 14)
+                        .background(Color.red.opacity(0.85), in: Capsule())
+                        .offset(y: -10)
+                }
             }
-        }
-        .padding(.horizontal, 60)
-        .padding(.vertical, 40)
-        .animation(.spring(duration: 0.4), value: appModel.showOrders)
-        // Admin → Users → Block
-        .overlay(alignment: .top) {
-            if session.isBlockedByAdmin {
-                Label("Your account has been suspended by Reskindev. Contact support to restore ordering and messaging.",
-                      systemImage: "exclamationmark.octagon.fill")
-                    .font(.headline)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 24)
-                    .padding(.vertical, 14)
-                    .background(Color.red.opacity(0.85), in: Capsule())
-                    .offset(y: -10)
+            // Bottom dock as a real visionOS ornament: follows the window, sits below it
+            .ornament(attachmentAnchor: .scene(.bottom), contentAlignment: .top) {
+                SpatialBottomDock()
+                    .padding(.top, 20)
             }
-        }
-        // Bottom dock as a real visionOS ornament: follows the window, sits below it
-        .ornament(attachmentAnchor: .scene(.bottom), contentAlignment: .top) {
-            SpatialBottomDock()
-                .padding(.top, 20)
+            .onAppear {
+                // Launch layout: menu on the left, orders on the right
+                if !appModel.showSidebar { openWindow(id: WindowID.sidebar, value: WindowID.single) }
+                if !appModel.showOrders { openWindow(id: WindowID.orders, value: WindowID.single) }
+            }
+    }
+}
+
+/// Keeps AppModel in sync with whether a side panel window is open (people can close it with the window controls)
+struct PanelWindow<Content: View>: View {
+    enum Kind { case sidebar, orders }
+    let kind: Kind
+    @ViewBuilder let content: Content
+    @Environment(AppModel.self) private var appModel
+
+    var body: some View {
+        content
+            .onAppear { set(true) }
+            .onDisappear { set(false) }
+    }
+
+    private func set(_ open: Bool) {
+        switch kind {
+        case .sidebar: appModel.showSidebar = open
+        case .orders: appModel.showOrders = open
         }
     }
 }
@@ -58,6 +67,7 @@ struct ContentView: View {
 // MARK: - Bottom Dock (shown as an ornament)
 struct SpatialBottomDock: View {
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
     @Environment(AppModel.self) private var appModel
     @Environment(ChatStore.self) private var chat
     @Environment(GigStore.self) private var gigStore
@@ -66,6 +76,9 @@ struct SpatialBottomDock: View {
 
     var body: some View {
         HStack(spacing: 28) {
+            DockTabItem(icon: "sidebar.leading", text: "Menu", isActive: appModel.showSidebar) {
+                toggle(WindowID.sidebar, isOpen: appModel.showSidebar)
+            }
             DockTabItem(icon: "house.fill", text: "Home", isActive: true) {
                 gigStore.searchText = ""
                 gigStore.selectedCategory = nil
@@ -74,7 +87,7 @@ struct SpatialBottomDock: View {
                 appModel.searchFocusRequest += 1
             }
             DockTabItem(icon: "doc.text", text: "Orders", isActive: appModel.showOrders) {
-                appModel.showOrders.toggle()
+                toggle(WindowID.orders, isOpen: appModel.showOrders)
             }
             DockTabItem(icon: "tray", text: "Inbox", badge: chat.unreadTotal) {
                 openWindow(id: WindowID.inbox, value: WindowID.single)
@@ -94,6 +107,15 @@ struct SpatialBottomDock: View {
         .padding(.vertical, 12)
         .glassBackgroundEffect(in: Capsule())
         .sheet(isPresented: $showNotifications) { NotificationsView() }
+    }
+
+    /// Opens a side panel next to the main window, or closes it
+    private func toggle(_ id: String, isOpen: Bool) {
+        if isOpen {
+            dismissWindow(id: id, value: WindowID.single)
+        } else {
+            openWindow(id: id, value: WindowID.single)
+        }
     }
 }
 

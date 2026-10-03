@@ -38,8 +38,10 @@ class AppModel {
         var sellerOnly: Bool { self == .myGigs || self == .earnings }
     }
 
-    /// Right-hand orders panel in the main window
-    var showOrders = true
+    /// Sidebar and orders panels are their own windows so people can pull them closer or close them.
+    /// These mirror whether each window is currently open.
+    var showOrders = false
+    var showSidebar = false
     /// Tab shown in the Profile window
     var profileTab: ProfileTab = .profile
     /// Bumped by the dock's Search button to focus the search field
@@ -50,6 +52,9 @@ class AppModel {
 
 /// Fixed window values so each of these windows opens once and is reused
 enum WindowID {
+    static let main = "Main"
+    static let sidebar = "Sidebar"
+    static let orders = "Orders"
     static let gigDetail = "GigDetail"
     static let inbox = "Inbox"
     static let profile = "Profile"

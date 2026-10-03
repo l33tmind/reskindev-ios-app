@@ -5,6 +5,7 @@ struct RightOrdersView: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppModel.self) private var appModel
     @Environment(\.openWindow) private var openWindow
+    @Environment(\.dismissWindow) private var dismissWindow
     @State private var showSignIn = false
     @State private var filter: OrderFilter = .active
 
@@ -36,7 +37,7 @@ struct RightOrdersView: View {
                     openWindow(id: WindowID.deliveryBox)
                 }
                 CircleIconButton(systemName: "xmark", label: "Close orders") {
-                    appModel.showOrders = false
+                    dismissWindow(id: WindowID.orders, value: WindowID.single)
                 }
             }
 

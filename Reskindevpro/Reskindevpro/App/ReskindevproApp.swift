@@ -17,8 +17,8 @@ struct ReskindevproApp: App {
     }
 
     var body: some Scene {
-        // Main window: sidebar · 3D carousel · orders + dock ornament
-        WindowGroup {
+        // Main window: search + 3D carousel, with the dock ornament
+        WindowGroup(id: WindowID.main) {
             stores(ContentView())
                 // Inbox follows the signed-in user
                 .onChange(of: session.uid, initial: true) {
@@ -29,9 +29,37 @@ struct ReskindevproApp: App {
                 .onChange(of: session.blockedUsers, initial: true) { chat.blockedByMe = session.blockedUsers }
         }
         .windowStyle(.plain)
-        .defaultSize(width: 1900, height: 1000)
+        .defaultSize(width: 924, height: 860)
         // The app always opens on the main window, even if another window was the last one open
         .defaultLaunchBehavior(.presented)
+
+        // Left panel: its own window so it can be moved, pulled closer or closed
+        WindowGroup(id: WindowID.sidebar, for: String.self) { _ in
+            stores(PanelWindow(kind: .sidebar) { LeftSidebarView().frame(width: 320, height: 720) })
+        }
+        .windowStyle(.plain)
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
+        .defaultWindowPlacement { _, context in
+            if let main = context.windows.first(where: { $0.id == WindowID.main }) {
+                return WindowPlacement(.leading(main))
+            }
+            return WindowPlacement(.none)
+        }
+
+        // Right panel: My Orders / Orders Workspace
+        WindowGroup(id: WindowID.orders, for: String.self) { _ in
+            stores(PanelWindow(kind: .orders) { RightOrdersView().frame(width: 440, height: 720) })
+        }
+        .windowStyle(.plain)
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
+        .defaultWindowPlacement { _, context in
+            if let main = context.windows.first(where: { $0.id == WindowID.main }) {
+                return WindowPlacement(.trailing(main))
+            }
+            return WindowPlacement(.none)
+        }
 
         // Gig Detail Window (one per gig)
         WindowGroup(id: WindowID.gigDetail, for: String.self) { $gigID in

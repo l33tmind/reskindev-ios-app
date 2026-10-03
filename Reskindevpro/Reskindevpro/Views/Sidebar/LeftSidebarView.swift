@@ -45,7 +45,7 @@ struct LeftSidebarView: View {
             VStack(alignment: .leading, spacing: 4) {
                 SidebarNavItem(icon: "person", text: session.mode == .seller ? "Manage Orders" : "My Orders",
                                isActive: appModel.showOrders) {
-                    appModel.showOrders = true
+                    openWindow(id: WindowID.orders, value: WindowID.single)
                 }
                 SidebarNavItem(icon: "tray", text: "Inbox", badge: chat.unreadTotal) {
                     openWindow(id: WindowID.inbox, value: WindowID.single)
