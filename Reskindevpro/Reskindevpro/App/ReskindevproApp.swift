@@ -108,7 +108,7 @@ struct ReskindevproApp: App {
 
         // 3D Delivery Box Window (Volumetric)
         WindowGroup(id: WindowID.deliveryBox) {
-            Delivery3DView()
+            stores(Delivery3DView())
         }
         .windowStyle(.volumetric)
         .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)
