@@ -5,6 +5,7 @@ struct OrderDetailView: View {
     let orderID: String
     @Environment(SessionStore.self) private var session
     @Environment(ChatStore.self) private var chat
+    @Environment(AppModel.self) private var appModel
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
 
@@ -129,7 +130,7 @@ struct OrderDetailView: View {
             return
         }
         chat.activeChatID = conversation.id
-        openWindow(id: WindowID.inbox, value: WindowID.single)
+        appModel.selectedTab = .messages
         dismiss()
     }
 }

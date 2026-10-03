@@ -143,7 +143,7 @@ struct CenterStageView: View {
                             CompactGigCard(gig: gig)
                         }
                         .buttonStyle(.plain)
-                        .gazeLift(scale: 1.05, radius: Radius.medium)
+                        .gazeLift(scale: 1.10, radius: Radius.medium)
                     }
                 }
                 .padding(.vertical, 10)
@@ -188,7 +188,7 @@ struct CenterStageView: View {
                         GigCardView(gig: gig, isFocused: offset == 0)
                     }
                     .buttonStyle(.plain)
-                    .gazeLift(scale: offset == 0 ? 1.04 : 1.06)
+                    .gazeLift(scale: offset == 0 ? 1.08 : 1.15)
                     .rotation3DEffect(.degrees(Double(offset.signum()) * -32), axis: (x: 0, y: 1, z: 0))
                     .offset(z: max(0, 3 - distance) * 30) // keep every card in front of the window plane, focused card closest
                     .scaleEffect(distance == 0 ? 1 : (distance == 1 ? 0.86 : 0.74))

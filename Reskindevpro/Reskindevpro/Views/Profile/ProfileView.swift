@@ -4,7 +4,7 @@ import SwiftUI
 struct ProfileView: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppModel.self) private var appModel
-    @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.openWindow) private var openWindow
     @State private var showSignIn = false
 
     var body: some View {
@@ -13,9 +13,24 @@ struct ProfileView: View {
         Group {
             if session.isSignedIn {
                 NavigationSplitView {
-                    List(AppModel.ProfileTab.allCases.filter { session.canSell || !$0.sellerOnly },
-                         selection: Binding($appModel.profileTab)) { tab in
-                        Label(tab.rawValue, systemImage: tab.icon).tag(tab)
+                    List(selection: Binding($appModel.profileTab)) {
+                        Section {
+                            ForEach(AppModel.ProfileTab.allCases.filter { session.canSell || !$0.sellerOnly }) { tab in
+                                Label(tab.rawValue, systemImage: tab.icon).tag(tab)
+                            }
+                        }
+                        Section {
+                            Button {
+                                openWindow(id: WindowID.page, value: WindowID.single)
+                            } label: {
+                                Label("Help & Policies", systemImage: "questionmark.circle")
+                            }
+                            Button(role: .destructive) {
+                                session.signOut()
+                            } label: {
+                                Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+                        }
                     }
                     .navigationTitle("Account")
                 } detail: {

@@ -9,6 +9,7 @@ struct SellerProfileView: View {
     @Environment(GigStore.self) private var gigStore
     @Environment(SessionStore.self) private var session
     @Environment(ChatStore.self) private var chat
+    @Environment(AppModel.self) private var appModel
     @Environment(\.openWindow) private var openWindow
 
     @State private var profile: PublicProfile?
@@ -182,7 +183,7 @@ struct SellerProfileView: View {
         Task {
             do {
                 chat.activeChatID = try await chat.contact(userID: uid, name: name)
-                openWindow(id: WindowID.inbox, value: WindowID.single)
+                appModel.selectedTab = .messages
             } catch {
                 errorMessage = error.localizedDescription
             }

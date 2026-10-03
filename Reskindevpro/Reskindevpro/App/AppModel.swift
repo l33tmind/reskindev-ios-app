@@ -38,27 +38,13 @@ class AppModel {
         var sellerOnly: Bool { self == .myGigs || self == .earnings }
     }
 
-    /// Side panels start docked in the main window next to the carousel. People can drag them anywhere
-    /// inside it (incl. closer/further), pop them out into their own window, or hide them.
-    var sidebarDocked = true
-    var ordersDocked = true
-    var sidebarOffset = PanelOffset()
-    var ordersOffset = PanelOffset()
-    /// Whether the popped-out window of each panel is open
-    var showSidebar = false
+    enum MainTab: Hashable { case explore, messages, profile }
+    /// Tab bar of the main window
+    var selectedTab: MainTab = .explore
+    /// Whether the My Orders window is open
     var showOrders = false
 
-    var sidebarVisible: Bool { sidebarDocked || showSidebar }
-    var ordersVisible: Bool { ordersDocked || showOrders }
-
-    struct PanelOffset: Equatable {
-        var x: Double = 0
-        var y: Double = 0
-        /// Toward the viewer (+) — kept ≥ 0 so the panel never slips behind the window plane and gets clipped
-        var z: Double = 0
-        var isMoved: Bool { self != PanelOffset() }
-    }
-    /// Tab shown in the Profile window
+    /// Section shown in the Profile tab
     var profileTab: ProfileTab = .profile
     /// Bumped by the dock's Search button to focus the search field
     var searchFocusRequest = 0
@@ -69,11 +55,8 @@ class AppModel {
 /// Fixed window values so each of these windows opens once and is reused
 enum WindowID {
     static let main = "Main"
-    static let sidebar = "Sidebar"
     static let orders = "Orders"
     static let gigDetail = "GigDetail"
-    static let inbox = "Inbox"
-    static let profile = "Profile"
     static let sellerProfile = "SellerProfile"
     static let page = "Page"
     static let deliveryBox = "DeliveryBox"

@@ -22,6 +22,7 @@ struct CheckoutView: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(ChatStore.self) private var chat
+    @Environment(AppModel.self) private var appModel
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismiss) private var dismiss
 
@@ -58,6 +59,8 @@ struct CheckoutView: View {
         .frame(width: 1000, height: 760)
         .task {
             feePercent = await OrderService.serviceFeePercent()
+            // Saved phone from the profile, so most people only press "Place Order"
+            if form.phone.isEmpty { form.phone = session.phone }
             // Custom offers: requirements start from the seller's offer description
             if case .offer(let message, _) = item, form.requirements.isEmpty { form.requirements = message.offerDescription }
         }
@@ -87,16 +90,28 @@ struct CheckoutView: View {
                 }
             }
 
-            section("Contact Information", icon: "person.text.rectangle") {
-                GlassField(title: "Phone Number (Required)", text: $form.phone)
-                GlassField(title: "Company / Brand Name (Optional)", text: $form.company)
-                GlassField(title: "Address (Optional)", text: $form.address)
+            // Only what's needed up front; everything optional is tucked away
+            section("How can we reach you?", icon: "phone") {
+                GlassField(title: "Phone number", text: $form.phone, prompt: "+880 1XXX-XXXXXX")
+                if !session.phone.isEmpty && form.phone == session.phone {
+                    Label("From your profile", systemImage: "checkmark.circle")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
             }
 
-            section("Project Details", icon: "pencil") {
-                GlassField(title: "Describe what you need so we can start quickly", text: $form.requirements,
+            section("What do you need? (optional)", icon: "pencil") {
+                GlassField(title: "You can also send details later in chat", text: $form.requirements,
                            prompt: "E.g. I need a 5-page website for my restaurant...", axis: .vertical)
             }
+
+            DisclosureGroup("More details (optional)") {
+                VStack(spacing: 12) {
+                    GlassField(title: "Company / Brand name", text: $form.company)
+                    GlassField(title: "Address", text: $form.address)
+                }
+                .padding(.top, 10)
+            }
+            .font(.headline)
         }
     }
 
@@ -132,8 +147,9 @@ struct CheckoutView: View {
 
             Divider()
 
-            // Coupon (gig checkout only, like the website)
+            // Coupon (gig checkout only, like the website) — hidden until asked for
             if !isOffer {
+            DisclosureGroup("Have a coupon?") {
             HStack(spacing: 8) {
                 TextField("Coupon code", text: $couponCode)
                     .textFieldStyle(.roundedBorder)
@@ -153,6 +169,8 @@ struct CheckoutView: View {
                     .foregroundStyle(Color.brandGreen)
             }
             }
+            .font(.subheadline)
+            }
 
             priceRow("Subtotal", basePrice.usd)
             if pricing.discount > 0 { priceRow("Discount", "−\(pricing.discount.usd)") }
@@ -169,7 +187,7 @@ struct CheckoutView: View {
             Button {
                 Task { await placeOrder() }
             } label: {
-                if submitting { ProgressView() } else { Text("Confirm Order • \(pricing.total.usd)") }
+                if submitting { ProgressView() } else { Text("Place Order • \(pricing.total.usd)") }
             }
             .buttonStyle(GlassOutlineButtonStyle(prominent: true))
             .disabled(submitting || form.phone.trimmed.isEmpty || session.isBlockedByAdmin)
@@ -257,7 +275,11 @@ struct CheckoutView: View {
             }
             if let chatID = result.chatID {
                 chat.activeChatID = chatID
-                openWindow(id: WindowID.inbox, value: WindowID.single)
+                appModel.selectedTab = .messages
+            }
+            if session.phone.isEmpty, !form.phone.trimmed.isEmpty {
+                try? await session.updateProfile(displayName: session.displayName, username: session.username,
+                                                  phone: form.phone.trimmed, country: session.country, bio: session.bio)
             }
             withAnimation { placedOrder = true }
         } catch {

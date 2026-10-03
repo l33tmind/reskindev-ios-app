@@ -31,12 +31,15 @@ private struct GigDetailContent: View {
 
     @Environment(SessionStore.self) private var session
     @Environment(ChatStore.self) private var chat
+    @Environment(AppModel.self) private var appModel
     @Environment(GigStore.self) private var store
     @Environment(\.openWindow) private var openWindow
     @State private var selectedImage = 0
     @State private var selectedPackageID: String?
     @State private var showSignIn = false
     @State private var showCheckout = false
+    /// Order Now was pressed while signed out: continue to checkout right after signing in
+    @State private var pendingCheckout = false
     @State private var isContacting = false
     @State private var reviews: [GigReview] = []
     @State private var errorMessage: String?
@@ -79,7 +82,10 @@ private struct GigDetailContent: View {
             store.noteViewed(gig.id)
             reviews = await store.reviews(for: gig.id)
         }
-        .sheet(isPresented: $showSignIn) { SignInView() }
+        .sheet(isPresented: $showSignIn, onDismiss: {
+            if pendingCheckout && session.isSignedIn { showCheckout = true }
+            pendingCheckout = false
+        }) { SignInView() }
         .sheet(isPresented: $showCheckout) {
             if let pkg = selectedPackage {
                 CheckoutView(gig: gig, package: pkg)
@@ -102,7 +108,7 @@ private struct GigDetailContent: View {
         Task {
             do {
                 chat.activeChatID = try await chat.contactSeller(gig: gig)
-                openWindow(id: WindowID.inbox, value: WindowID.single)
+                appModel.selectedTab = .messages
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -269,8 +275,10 @@ private struct GigDetailContent: View {
 
                 let isOwnGig = gig.authorId == session.uid
                 VStack(spacing: 12) {
-                    Button("Continue ($\(String(format: "%.0f", pkg.price)))") {
-                        if session.isSignedIn { showCheckout = true } else { showSignIn = true }
+                    Button {
+                        if session.isSignedIn { showCheckout = true } else { pendingCheckout = true; showSignIn = true }
+                    } label: {
+                        Label("Order Now • $\(String(format: "%.0f", pkg.price))", systemImage: "cart.fill")
                     }
                     .buttonStyle(GlassOutlineButtonStyle(prominent: true))
                     .disabled(isOwnGig)

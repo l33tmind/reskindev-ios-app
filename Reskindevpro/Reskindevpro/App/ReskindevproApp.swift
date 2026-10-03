@@ -18,7 +18,7 @@ struct ReskindevproApp: App {
     }
 
     var body: some Scene {
-        // Main window: search + 3D carousel, with the dock ornament
+        // Main window: tab bar (Explore · Messages · Profile)
         WindowGroup(id: WindowID.main) {
             stores(ContentView())
                 // Inbox follows the signed-in user
@@ -33,28 +33,13 @@ struct ReskindevproApp: App {
                 .onChange(of: session.displayName) { chat.bind(uid: session.uid, name: session.displayName) }
                 .onChange(of: session.blockedUsers, initial: true) { chat.blockedByMe = session.blockedUsers }
         }
-        .windowStyle(.plain)
-        .defaultSize(width: 1900, height: 1050)
+        .defaultSize(width: 1100, height: 900)
         // The app always opens on the main window, even if another window was the last one open
         .defaultLaunchBehavior(.presented)
 
-        // Left panel: its own window so it can be moved, pulled closer or closed
-        WindowGroup(id: WindowID.sidebar, for: String.self) { _ in
-            stores(PanelWindow(kind: .sidebar) { LeftSidebarView().frame(width: 320, height: 720) })
-        }
-        .windowStyle(.plain)
-        .windowResizability(.contentSize)
-        .restorationBehavior(.disabled)
-        .defaultWindowPlacement { _, context in
-            if let main = context.windows.first(where: { $0.id == WindowID.main }) {
-                return WindowPlacement(.leading(main))
-            }
-            return WindowPlacement(.none)
-        }
-
-        // Right panel: My Orders / Orders Workspace
+        // My Orders / Orders Workspace: its own window, first opened beside the main window
         WindowGroup(id: WindowID.orders, for: String.self) { _ in
-            stores(PanelWindow(kind: .orders) { RightOrdersView().frame(width: 440, height: 720) })
+            stores(PanelWindow { RightOrdersView().frame(width: 460, height: 760) })
         }
         .windowStyle(.plain)
         .windowResizability(.contentSize)
@@ -89,20 +74,6 @@ struct ReskindevproApp: App {
             stores(PagesView())
         }
         .defaultSize(width: 1000, height: 700)
-        .restorationBehavior(.disabled)
-
-        // Inbox Window (single, reused)
-        WindowGroup(id: WindowID.inbox, for: String.self) { _ in
-            stores(InboxView())
-        }
-        .defaultSize(width: 1100, height: 720)
-        .restorationBehavior(.disabled)
-
-        // Profile / Saved / Settings Window (single, reused)
-        WindowGroup(id: WindowID.profile, for: String.self) { _ in
-            stores(ProfileView())
-        }
-        .defaultSize(width: 980, height: 680)
         .restorationBehavior(.disabled)
 
         // 3D Showroom: gigs around you in your room

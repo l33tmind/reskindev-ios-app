@@ -49,20 +49,10 @@ struct ToggleImmersiveSpaceButton: View {
                 }
             }
         } label: {
-            // Dock-style item: the Showroom is the app's immersive space
-            VStack(spacing: 6) {
-                Image(systemName: appModel.immersiveSpaceState == .open ? "cube.fill" : "cube.transparent")
-                    .font(.title2)
-                    .symbolEffect(.bounce, value: appModel.immersiveSpaceState == .open)
-                Text(appModel.immersiveSpaceState == .open ? "Exit 3D" : "Showroom")
-                    .font(.caption.weight(.medium))
-            }
-            .foregroundStyle(appModel.immersiveSpaceState == .open ? Color.brandGreen : Color.secondary)
-            .frame(minWidth: 72, minHeight: 72)
-            .contentShape(.hoverEffect, RoundedRectangle(cornerRadius: Radius.small))
+            // Toolbar item: the Showroom is the app's immersive space
+            Label(appModel.immersiveSpaceState == .open ? "Exit 3D" : "3D Showroom",
+                  systemImage: appModel.immersiveSpaceState == .open ? "cube.fill" : "cube.transparent")
         }
-        .buttonStyle(.plain)
-        .hoverEffect(.highlight)
         .disabled(appModel.immersiveSpaceState == .inTransition)
         .accessibilityLabel(appModel.immersiveSpaceState == .open ? "Exit 3D Showroom" : "Open 3D Showroom")
     }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Panel C: My Orders / Orders Workspace (live from Firestore `orders`)
+// MARK: - My Orders / Orders Workspace window (live from Firestore `orders`)
 struct RightOrdersView: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppModel.self) private var appModel
@@ -8,6 +8,15 @@ struct RightOrdersView: View {
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var showSignIn = false
     @State private var filter: OrderFilter = .active
+    @State private var nextStep: NextStep?
+    @State private var toast: String?
+
+    /// Order + the action its "next step" button starts
+    private struct NextStep: Identifiable {
+        let order: OrderModel
+        let action: OrderAction
+        var id: String { order.id + action.rawValue }
+    }
 
     enum OrderFilter: String, CaseIterable, Identifiable {
         case active = "Active", completed = "Completed", all = "All"
@@ -33,14 +42,25 @@ struct RightOrdersView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Spacer()
-                CircleIconButton(systemName: "cube.transparent", label: "View AR delivery") {
+                CircleIconButton(systemName: "cube.transparent", label: "Unbox your latest delivery in 3D") {
                     openWindow(id: WindowID.deliveryBox)
                 }
-                CircleIconButton(systemName: "xmark", label: "Close orders") {
-                    // Docked in the main window or popped out into its own: close wherever it is
-                    withAnimation { appModel.ordersDocked = false }
-                    if appModel.showOrders { dismissWindow(id: WindowID.orders, value: WindowID.single) }
+            }
+
+            // Sellers switch here between orders they placed and orders on their gigs
+            if session.isSignedIn && session.canSell {
+                Picker("Mode", selection: Binding(get: { session.mode }, set: { mode in withAnimation { session.mode = mode } })) {
+                    Label("Buying", systemImage: "cart").tag(SessionStore.Mode.buyer)
+                    Label("Selling", systemImage: "briefcase").tag(SessionStore.Mode.seller)
                 }
+                .pickerStyle(.segmented)
+            }
+
+            if let toast {
+                Label(toast, systemImage: "checkmark.circle.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(Color.brandGreen)
+                    .transition(.opacity)
             }
 
             if !session.isSignedIn {
@@ -70,14 +90,18 @@ struct RightOrdersView: View {
                     ScrollView {
                         VStack(spacing: 14) {
                             ForEach(Array(visibleOrders.enumerated()), id: \.element.id) { index, order in
-                                Button {
-                                    appModel.selectedOrderID = order.id
-                                } label: {
-                                    OrderCard(order: order, isHighlighted: index == 0)
+                                VStack(spacing: 8) {
+                                    Button {
+                                        appModel.selectedOrderID = order.id
+                                    } label: {
+                                        OrderCard(order: order, isHighlighted: index == 0)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .gazeLift(scale: 1.02, radius: Radius.medium)
+                                    .accessibilityHint("Opens order details and actions")
+
+                                    nextStepRow(order)
                                 }
-                                .buttonStyle(.plain)
-                                .gazeLift(scale: 1.02, radius: Radius.medium)
-                                .accessibilityHint("Opens order details and actions")
                             }
                         }
                         .padding(4)
@@ -91,9 +115,41 @@ struct RightOrdersView: View {
         .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large))
         .overlay(RoundedRectangle(cornerRadius: Radius.large).stroke(Color.white.opacity(0.18), lineWidth: 1))
         .sheet(isPresented: $showSignIn) { SignInView() }
+        .sheet(item: $nextStep) { step in
+            OrderActionSheet(order: step.order, action: step.action) { message in show(message) }
+        }
         .sheet(item: Binding(get: { appModel.selectedOrderID.map(SelectedOrder.init) },
                              set: { appModel.selectedOrderID = $0?.id })) { selected in
             OrderDetailView(orderID: selected.id)
+        }
+    }
+}
+
+extension RightOrdersView {
+    /// One big button for whatever this person should do next; otherwise who we're waiting on
+    @ViewBuilder
+    fileprivate func nextStepRow(_ order: OrderModel) -> some View {
+        if let action = order.nextAction(for: session.uid) {
+            Button {
+                nextStep = NextStep(order: order, action: action)
+            } label: {
+                Label(order.nextActionTitle(for: session.uid) ?? action.title, systemImage: action.icon)
+            }
+            .buttonStyle(GlassOutlineButtonStyle(prominent: true))
+        } else if let waiting = order.waitingText(for: session.uid) {
+            Label(waiting, systemImage: "hourglass")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
+        }
+    }
+
+    fileprivate func show(_ message: String) {
+        withAnimation { toast = message }
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            withAnimation { toast = nil }
         }
     }
 }

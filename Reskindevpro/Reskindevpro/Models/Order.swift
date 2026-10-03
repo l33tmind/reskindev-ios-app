@@ -143,3 +143,47 @@ struct OrderModel: Identifiable, Hashable {
         }
     }
 }
+
+// MARK: - "What's next" for the orders list (one clear step per order)
+
+extension OrderModel {
+    /// The single action this person should take now, if any
+    func nextAction(for uid: String?) -> OrderAction? {
+        if isBuyer(uid) {
+            if needsRequirements { return .requirements }
+            if isDelivered { return .acceptDelivery }
+            if isCompleted && buyerReview == nil { return .acceptDelivery }
+        }
+        if isSeller(uid) {
+            if isInProgress { return .deliver }
+            if isCompleted && buyerReview != nil && sellerReview == nil { return .reviewBuyer }
+        }
+        return nil
+    }
+
+    /// Friendlier button text than the form title
+    func nextActionTitle(for uid: String?) -> String? {
+        switch nextAction(for: uid) {
+        case .requirements: "Tell the seller what you need"
+        case .acceptDelivery: isCompleted ? "Leave a review" : "Review delivery & accept"
+        case .deliver: status == "revision" ? "Deliver the revision" : "Deliver your work"
+        case .reviewBuyer: "Rate the buyer"
+        default: nil
+        }
+    }
+
+    /// Shown when it's the other side's turn
+    func waitingText(for uid: String?) -> String? {
+        let buyer = isBuyer(uid)
+        switch status {
+        case "pending_payment": return buyer ? "Reskindev will contact you to confirm payment" : "Waiting for the buyer's payment"
+        case "requirements", "pending": return buyer ? nil : "Waiting for the buyer's requirements"
+        case "processing", "in_progress", "revision": return buyer ? "The seller is working on it" : nil
+        case "delivered": return buyer ? nil : "Waiting for the buyer to accept"
+        case "cancel_requested_by_buyer": return buyer ? "Waiting for the seller to respond" : "The buyer asked to cancel — open the order to respond"
+        case "cancel_requested_by_freelancer": return buyer ? "The seller asked to cancel — open the order to respond" : "Waiting for the buyer to respond"
+        case "disputed": return "Reskindev is reviewing this order"
+        default: return nil
+        }
+    }
+}

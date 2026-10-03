@@ -80,7 +80,7 @@ struct Delivery3DView: View {
                 }
                 Button {
                     appModel.selectedOrderID = delivery.id
-                    if !appModel.ordersVisible { appModel.ordersDocked = true }
+                    openWindow(id: WindowID.orders, value: WindowID.single)
                     dismissWindow(id: WindowID.deliveryBox)
                 } label: {
                     Label("Review & Accept", systemImage: "checkmark.seal.fill")
