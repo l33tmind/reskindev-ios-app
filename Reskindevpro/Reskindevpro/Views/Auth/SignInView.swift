@@ -14,6 +14,8 @@ struct SignInView: View {
     @State private var isWorking = false
     @State private var errorMessage: String?
     @State private var appleNonce = ""
+    /// When set (order flow), success hands over instead of dismissing the sheet
+    var onSuccess: (() -> Void)? = nil
 
     private var canSubmit: Bool {
         !email.isEmpty && password.count >= 6 && (!isSignUp || !name.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -135,13 +137,17 @@ struct SignInView: View {
         errorMessage = nil
         do {
             try await action()
-            dismiss()
+            finish()
         } catch SocialSignInError.cancelled {
             // User closed the sheet: nothing to show
         } catch {
             errorMessage = error.localizedDescription
         }
         isWorking = false
+    }
+
+    private func finish() {
+        if let onSuccess { onSuccess() } else { dismiss() }
     }
 
     private func submit() async {
@@ -153,7 +159,7 @@ struct SignInView: View {
             } else {
                 try await session.signIn(email: email, password: password)
             }
-            dismiss()
+            finish()
         } catch {
             errorMessage = error.localizedDescription
         }

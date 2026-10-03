@@ -56,7 +56,7 @@ struct CheckoutView: View {
                 .padding(32)
             }
         }
-        .frame(width: 1000, height: 760)
+        .frame(width: 1000, height: 700)
         .task {
             feePercent = await OrderService.serviceFeePercent()
             // Saved phone from the profile, so most people only press "Place Order"

@@ -42,10 +42,13 @@ private struct GigDetailContent: View {
     /// Starts on the video when there is one
     @State private var showVideo = true
     @State private var selectedPackageID: String?
-    @State private var showSignIn = false
-    @State private var showCheckout = false
-    /// Order Now was pressed while signed out: continue to checkout right after signing in
-    @State private var pendingCheckout = false
+    /// One sheet at a time: two sheets on the same view can drop a presentation
+    @State private var sheet: GigSheet?
+
+    enum GigSheet: String, Identifiable {
+        case signIn, order
+        var id: String { rawValue }
+    }
     @State private var isContacting = false
     @State private var reviews: [GigReview] = []
     @State private var errorMessage: String?
@@ -79,17 +82,22 @@ private struct GigDetailContent: View {
             gallery
                 .frame(width: 500)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    header
-                    if !gig.packages.isEmpty { packageSection }
-                    if !gig.description.isEmpty { aboutSection }
-                    if !reviews.isEmpty { GigReviewsSection(reviews: reviews) }
+            VStack(spacing: 14) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 22) {
+                        header
+                        if !gig.packages.isEmpty { packageSection }
+                        if !gig.description.isEmpty { aboutSection }
+                        if !reviews.isEmpty { GigReviewsSection(reviews: reviews) }
+                    }
+                    .padding(.trailing, 8)
+                    .padding(.bottom, 24)
                 }
-                .padding(.trailing, 8)
-                .padding(.bottom, 24)
+                .scrollIndicators(.hidden)
+
+                // Always visible, whatever you've scrolled to
+                if let pkg = selectedPackage { orderBar(pkg) }
             }
-            .scrollIndicators(.hidden)
         }
         }
         .padding(28)
@@ -98,20 +106,27 @@ private struct GigDetailContent: View {
             store.noteViewed(gig.id)
             reviews = await store.reviews(for: gig.id)
         }
-        .sheet(isPresented: $showSignIn, onDismiss: {
-            if pendingCheckout && session.isSignedIn { showCheckout = true }
-            pendingCheckout = false
-        }) { SignInView() }
-        .sheet(isPresented: $showCheckout) {
-            if let pkg = selectedPackage {
-                CheckoutView(gig: gig, package: pkg)
+        .sheet(item: $sheet) { which in
+            switch which {
+            case .signIn:
+                SignInView()
+            case .order:
+                // Signed out: sign in first, then the same sheet turns into checkout
+                Group {
+                    if session.isSignedIn, let pkg = selectedPackage {
+                        CheckoutView(gig: gig, package: pkg)
+                    } else {
+                        SignInView(onSuccess: {})
+                    }
+                }
+                .animation(.smooth, value: session.isSignedIn)
             }
         }
         .errorAlert("Something went wrong", message: $errorMessage)
     }
 
     private func toggleSave() {
-        guard session.isSignedIn else { showSignIn = true; return }
+        guard session.isSignedIn else { sheet = .signIn; return }
         Task {
             do { try await session.toggleSave(gig.id) } catch { errorMessage = error.localizedDescription }
         }
@@ -119,7 +134,7 @@ private struct GigDetailContent: View {
 
     /// Website ContactSellerButton: open (or create) the general chat and post the gig link
     private func contactSeller() {
-        guard session.isSignedIn else { showSignIn = true; return }
+        guard session.isSignedIn else { sheet = .signIn; return }
         isContacting = true
         Task {
             do {
@@ -305,33 +320,53 @@ private struct GigDetailContent: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.small))
                 }
+            }
+        }
+    }
 
-                let isOwnGig = gig.authorId == session.uid
-                VStack(spacing: 12) {
+    // MARK: Order bar (pinned under the details)
+
+    private func orderBar(_ pkg: GigPackage) -> some View {
+        let isOwnGig = !gig.authorId.isEmpty && gig.authorId == session.uid
+        return VStack(spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(pkg.name) package").font(.headline)
+                    Label("\(pkg.deliveryDays)-day delivery", systemImage: "clock")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(pkg.price.usd)
+                    .font(.title.weight(.bold))
+                    .foregroundStyle(Color.brandGreen)
+                    .contentTransition(.numericText())
+            }
+            if isOwnGig {
+                Label("This is your own service.", systemImage: "person.crop.circle")
+                    .font(.subheadline).foregroundStyle(.secondary)
+            } else {
+                HStack(spacing: 12) {
                     Button {
-                        if session.isSignedIn { showCheckout = true } else { pendingCheckout = true; showSignIn = true }
+                        sheet = .order
                     } label: {
-                        Label("Order Now • $\(String(format: "%.0f", pkg.price))", systemImage: "cart.fill")
+                        Label("Order Now", systemImage: "cart.fill")
                     }
                     .buttonStyle(GlassOutlineButtonStyle(prominent: true))
-                    .disabled(isOwnGig)
 
                     Button {
                         contactSeller()
                     } label: {
-                        if isContacting { ProgressView() } else { Label("Contact Seller", systemImage: "message") }
+                        if isContacting { ProgressView() } else { Label("Message", systemImage: "message") }
                     }
                     .buttonStyle(GlassOutlineButtonStyle())
-                    .disabled(isOwnGig || isContacting)
-
-                    if isOwnGig {
-                        Label("This is your own service.", systemImage: "person.crop.circle")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                    .frame(width: 170)
+                    .disabled(isContacting)
                 }
             }
         }
+        .padding(16)
+        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: Radius.medium))
+        .animation(.snappy, value: pkg.id)
     }
 
     // MARK: About
