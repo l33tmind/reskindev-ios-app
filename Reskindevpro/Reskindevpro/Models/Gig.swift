@@ -21,6 +21,8 @@ struct GigModel: Identifiable, Hashable {
     let images: [String]
     let galleryImages: [String]
     let youtubeUrl: String?
+    /// All gig videos (website `youtubeUrls`, falling back to the legacy single `youtubeUrl`)
+    let youtubeUrls: [String]
     let sellerName: String
     let authorId: String
     let averageRating: Double
@@ -77,7 +79,9 @@ struct GigModel: Identifiable, Hashable {
         self.images = images
         self.galleryImages = data["galleryImages"] as? [String] ?? []
         let yt = data["youtubeUrl"] as? String
-        self.youtubeUrl = (yt?.isEmpty ?? true) ? nil : yt
+        let urls = (data["youtubeUrls"] as? [String] ?? []).filter { !$0.isEmpty }
+        self.youtubeUrls = urls.isEmpty ? [yt].compactMap { $0 }.filter { !$0.isEmpty } : urls
+        self.youtubeUrl = youtubeUrls.first
         self.sellerName = data["authorName"] as? String ?? ""
         self.authorId = data["authorId"] as? String ?? ""
         self.averageRating = num("rating") ?? num("averageRating") ?? 0
@@ -116,4 +120,18 @@ struct GigModel: Identifiable, Hashable {
         s = s.replacingOccurrences(of: "\n{3,}", with: "\n\n", options: .regularExpression)
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
+}
+
+extension GigModel {
+    /// "dQw4w9WgXcQ" from watch?v=, youtu.be/, /embed/, /shorts/ … links (same rule as the website's VideoGallery)
+    static func youtubeID(from url: String) -> String? {
+        let pattern = #"(?:youtube\.com/(?:[^/]+/.+/|(?:v|e(?:mbed)?|shorts)/|.*[?&]v=)|youtu\.be/)([^"&?/\s]{11})"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: url, range: NSRange(url.startIndex..., in: url)),
+              let range = Range(match.range(at: 1), in: url) else { return nil }
+        return String(url[range])
+    }
+
+    /// Embeddable video IDs, in order
+    var videoIDs: [String] { youtubeUrls.compactMap(Self.youtubeID(from:)) }
 }

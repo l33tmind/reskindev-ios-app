@@ -35,6 +35,9 @@ private struct GigDetailContent: View {
     @Environment(GigStore.self) private var store
     @Environment(\.openWindow) private var openWindow
     @State private var selectedImage = 0
+    @State private var selectedVideo = 0
+    /// Starts on the video when there is one
+    @State private var showVideo = true
     @State private var selectedPackageID: String?
     @State private var showSignIn = false
     @State private var showCheckout = false
@@ -49,6 +52,26 @@ private struct GigDetailContent: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            // Clear way back to the marketplace (this window opened on top of it)
+            HStack(spacing: 8) {
+                Button(action: onClose) {
+                    Label("Back", systemImage: "chevron.left")
+                        .font(.headline)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 48)
+                }
+                .buttonStyle(.bordered)
+                .buttonBorderShape(.capsule)
+                .accessibilityHint("Closes this service and returns to Explore")
+                Spacer()
+                CircleIconButton(systemName: session.isSaved(gig.id) ? "heart.fill" : "heart",
+                                 label: session.isSaved(gig.id) ? "Remove from saved" : "Save this service") {
+                    toggleSave()
+                }
+                .foregroundStyle(session.isSaved(gig.id) ? Color.red : Color.primary)
+            }
+
         HStack(alignment: .top, spacing: 32) {
             gallery
                 .frame(width: 500)
@@ -65,18 +88,8 @@ private struct GigDetailContent: View {
             }
             .scrollIndicators(.hidden)
         }
-        .padding(32)
-        .overlay(alignment: .topTrailing) {
-            HStack(spacing: 4) {
-                CircleIconButton(systemName: session.isSaved(gig.id) ? "heart.fill" : "heart",
-                                 label: session.isSaved(gig.id) ? "Remove from saved" : "Save this service") {
-                    toggleSave()
-                }
-                .foregroundStyle(session.isSaved(gig.id) ? Color.red : Color.primary)
-                CircleIconButton(systemName: "xmark", label: "Close", action: onClose)
-            }
-            .padding(16)
         }
+        .padding(28)
         .task(id: gig.id) {
             store.trackView(gig.id)
             store.noteViewed(gig.id)
@@ -118,52 +131,69 @@ private struct GigDetailContent: View {
 
     // MARK: Gallery
 
+    /// Video first when the gig has one (website VideoGallery), photos one tap away
     private var gallery: some View {
         let images = gig.allImages
+        let videos = gig.videoIDs
+        let playing = showVideo && !videos.isEmpty
         return VStack(alignment: .leading, spacing: 14) {
+            if !videos.isEmpty && !images.isEmpty {
+                Picker("Media", selection: $showVideo.animation()) {
+                    Label("Video", systemImage: "play.rectangle.fill").tag(true)
+                    Label("Photos", systemImage: "photo.on.rectangle").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 280)
+            }
+
             ZStack {
-                if images.isEmpty {
+                if playing {
+                    YouTubePlayer(videoID: videos[min(selectedVideo, videos.count - 1)])
+                } else if images.isEmpty {
                     ShimmerBlock(cornerRadius: Radius.medium)
                 } else {
                     CachedImage(url: images[min(selectedImage, images.count - 1)])
                 }
             }
-            .frame(width: 500, height: 330)
+            .frame(width: 500, height: 282)
             .clipShape(RoundedRectangle(cornerRadius: Radius.medium))
-            .accessibilityLabel("Service image")
+            .accessibilityLabel(playing ? "Service video" : "Service image")
 
-            if images.count > 1 {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
-                        ForEach(Array(images.enumerated()), id: \.offset) { index, url in
-                            Button { withAnimation(.easeInOut) { selectedImage = index } } label: {
-                                CachedImage(url: url)
-                                    .frame(width: 96, height: 64)
-                                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 12)
-                                            .stroke(index == selectedImage ? Color.brandGreen : .clear, lineWidth: 3)
-                                    )
-                            }
-                            .buttonStyle(.plain)
-                            .hoverEffect(.highlight)
-                            .accessibilityLabel("Image \(index + 1)")
-                        }
+            // Thumbnails: more videos, or more photos
+            if playing && videos.count > 1 {
+                thumbnails(count: videos.count, selected: selectedVideo, label: "Video") { index in
+                    CachedImage(url: "https://img.youtube.com/vi/\(videos[index])/mqdefault.jpg")
+                        .overlay(Image(systemName: "play.circle.fill").font(.title2).foregroundStyle(.white))
+                } select: { selectedVideo = $0 }
+            } else if !playing && images.count > 1 {
+                thumbnails(count: images.count, selected: selectedImage, label: "Image") { index in
+                    CachedImage(url: images[index])
+                } select: { selectedImage = $0 }
+            }
+        }
+    }
+
+    private func thumbnails<Thumb: View>(count: Int, selected: Int, label: String,
+                                         @ViewBuilder thumb: @escaping (Int) -> Thumb,
+                                         select: @escaping (Int) -> Void) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 10) {
+                ForEach(0..<count, id: \.self) { index in
+                    Button { withAnimation(.easeInOut) { select(index) } } label: {
+                        thumb(index)
+                            .frame(width: 96, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(index == selected ? Color.brandGreen : .clear, lineWidth: 3)
+                            )
                     }
-                    .padding(4)
+                    .buttonStyle(.plain)
+                    .hoverEffect(.highlight)
+                    .accessibilityLabel("\(label) \(index + 1)")
                 }
             }
-
-            if let yt = gig.youtubeUrl, let url = URL(string: yt) {
-                Link(destination: url) {
-                    Label("Watch video", systemImage: "play.rectangle.fill")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity, minHeight: Hit.min)
-                        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.small))
-                }
-                .buttonStyle(.plain)
-                .hoverEffect(.highlight)
-            }
+            .padding(4)
         }
     }
 
@@ -183,7 +213,7 @@ private struct GigDetailContent: View {
             Text(gig.title)
                 .font(.largeTitle.weight(.bold))
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.trailing, 130) // room for heart + close buttons
+
 
             HStack(spacing: 14) {
                 // Seller → public profile window (website /user/[id])
