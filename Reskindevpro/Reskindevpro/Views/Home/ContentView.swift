@@ -17,7 +17,7 @@ struct ContentView: View {
     var body: some View {
         @Bindable var appModel = appModel
 
-        HStack(alignment: .center, spacing: 40) {
+        HStack(alignment: .center, spacing: 28) {
             // Panel A: Left Sidebar (angled inward)
             if appModel.sidebarDocked {
                 DraggablePanel(title: "Menu", offset: $appModel.sidebarOffset, yaw: Tilt.yaw, baseDepth: Tilt.depth,
@@ -29,11 +29,9 @@ struct ContentView: View {
                 .transition(.move(edge: .leading).combined(with: .opacity))
             }
 
-            // Panel B: Center Stage (search + 3D carousel), leaning back like a monitor
+            // Panel B: Center Stage (search + 3D carousel + category rows), upright
             CenterStageView()
                 .frame(width: 900)
-                .rotation3DEffect(.degrees(Tilt.pitch), axis: (x: 1, y: 0, z: 0), anchor: .bottom)
-                .offset(z: Tilt.centerDepth)
 
             // Panel C: Orders (angled inward)
             if appModel.ordersDocked {
@@ -86,23 +84,23 @@ struct ContentView: View {
     }
 }
 
-/// Cockpit layout: side panels turn in toward the viewer and everything leans back slightly
+/// Cockpit layout: side panels turn in toward the viewer.
 enum Tilt {
-    /// Side panels turn toward you
-    static let yaw: Double = 22
-    /// Top edge leans away
-    static let pitch: Double = 6
-    /// Pushes panels forward so their far edges stay in front of the window plane (anything behind it is clipped)
-    static let depth: Double = 140
-    static let centerDepth: Double = 40
+    /// Side panels swing toward you on their inner edge (next to the carousel), like open doors — reference design
+    static let yaw: Double = 34
+    /// No lean back: the panels stay upright
+    static let pitch: Double = 0
+    /// Small lift so the hinge edge sits just in front of the window plane
+    static let depth: Double = 24
+    static let centerDepth: Double = 0
 }
 
 extension View {
-    /// Turn (yaw) toward the viewer, then lean back (pitch) from the bottom edge
+    /// Swing toward the viewer around the inner edge (left panel hinges on its right edge, right panel on its left),
+    /// so the outer edge comes forward and nothing goes behind the window plane. No pitch tilt.
     func panelTilt(yaw: Double, pitch: Double = Tilt.pitch) -> some View {
         self
-            .rotation3DEffect(.degrees(yaw), axis: (x: 0, y: 1, z: 0))
-            .rotation3DEffect(.degrees(pitch), axis: (x: 1, y: 0, z: 0), anchor: .bottom)
+            .rotation3DEffect(.degrees(yaw), axis: (x: 0, y: 1, z: 0), anchor: yaw >= 0 ? .trailing : .leading)
     }
 }
 

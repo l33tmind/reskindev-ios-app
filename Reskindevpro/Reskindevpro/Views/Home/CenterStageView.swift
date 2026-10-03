@@ -54,41 +54,95 @@ struct CenterStageView: View {
             .glassBackgroundEffect(in: Capsule())
             .offset(z: 40)
 
-            // Curved 3D Gig Carousel
-            Group {
-                if store.isLoading {
-                    skeletonRow
-                } else if let error = store.errorMessage {
-                    ContentUnavailableView("Couldn't load services", systemImage: "wifi.exclamationmark",
-                                           description: Text(error))
-                } else if gigs.isEmpty {
-                    ContentUnavailableView.search(text: store.searchText)
-                } else {
-                    carousel(Self.fanned(store.spotlightGigs))
-                }
-            }
-            .frame(height: 430)
-
-            // Second row: compact service cards (same live, filtered gigs)
-            if !store.isLoading && !gigs.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 16) {
-                        ForEach(gigs) { gig in
-                            Button {
-                                openWindow(id: WindowID.gigDetail, value: gig.id)
-                            } label: {
-                                CompactGigCard(gig: gig)
-                            }
-                            .buttonStyle(.plain)
-                            .gazeLift(scale: 1.05, radius: Radius.medium)
+            // Below the search bar the home scrolls up/down: spotlight carousel, then a row per section.
+            // Every row scrolls left/right on its own.
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 30) {
+                    // Curved 3D Gig Carousel
+                    Group {
+                        if store.isLoading {
+                            skeletonRow
+                        } else if let error = store.errorMessage {
+                            ContentUnavailableView("Couldn't load services", systemImage: "wifi.exclamationmark",
+                                                   description: Text(error))
+                        } else if gigs.isEmpty {
+                            ContentUnavailableView.search(text: store.searchText)
+                        } else {
+                            carousel(Self.fanned(store.spotlightGigs))
                         }
                     }
-                    .padding(.vertical, 10)
-                    .padding(.horizontal, 4)
+                    .frame(height: 430)
+
+                    if !store.isLoading && !gigs.isEmpty {
+                        ForEach(sections(gigs), id: \.title) { section in
+                            gigRow(section)
+                        }
+                    }
                 }
-                .frame(height: 250)
-                .offset(z: 60)
+                .padding(.bottom, 30)
             }
+            .scrollIndicators(.hidden)
+            .frame(height: 690)
+        }
+    }
+
+    // MARK: Home rows
+
+    private struct GigSection {
+        let title: String
+        let icon: String
+        let gigs: [GigModel]
+    }
+
+    /// Searching / filtering: one results row. Otherwise: Recently Viewed, All Services, then one row per category.
+    private func sections(_ gigs: [GigModel]) -> [GigSection] {
+        let isFiltering = store.selectedCategory != nil || !store.searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        if isFiltering {
+            return [GigSection(title: "Results (\(gigs.count))", icon: "magnifyingglass", gigs: gigs)]
+        }
+        var rows: [GigSection] = []
+        let recent = store.recentIDs.compactMap { store.gig(id: $0) }
+        if !recent.isEmpty {
+            rows.append(GigSection(title: "Recently Viewed", icon: "clock.arrow.circlepath", gigs: recent))
+        }
+        rows.append(GigSection(title: "All Services", icon: "square.grid.2x2.fill", gigs: gigs))
+        for category in store.categories {
+            let inCategory = gigs.filter { $0.category == category }
+            if !inCategory.isEmpty {
+                rows.append(GigSection(title: category, icon: FilterPill.icon(for: category), gigs: inCategory))
+            }
+        }
+        return rows
+    }
+
+    private func gigRow(_ section: GigSection) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label(section.title, systemImage: section.icon)
+                    .font(.title3.weight(.bold))
+                Spacer()
+                Text("\(section.gigs.count)")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 8)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 16) {
+                    ForEach(section.gigs) { gig in
+                        Button {
+                            openWindow(id: WindowID.gigDetail, value: gig.id)
+                        } label: {
+                            CompactGigCard(gig: gig)
+                        }
+                        .buttonStyle(.plain)
+                        .gazeLift(scale: 1.05, radius: Radius.medium)
+                    }
+                }
+                .padding(.vertical, 10)
+                .padding(.horizontal, 4)
+            }
+            .frame(height: 250)
         }
     }
 
