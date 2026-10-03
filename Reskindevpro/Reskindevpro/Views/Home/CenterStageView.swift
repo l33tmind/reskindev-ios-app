@@ -83,6 +83,10 @@ struct CenterStageView: View {
             }
             .scrollIndicators(.hidden)
             .frame(height: 690)
+            // Fade the bottom edge so the next row reads as "scroll for more", not as cut off
+            .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.9),
+                                         .init(color: .clear, location: 1)],
+                                 startPoint: .top, endPoint: .bottom))
         }
     }
 
@@ -117,15 +121,18 @@ struct CenterStageView: View {
 
     private func gigRow(_ section: GigSection) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
+            HStack(spacing: 10) {
                 Label(section.title, systemImage: section.icon)
                     .font(.title3.weight(.bold))
-                Spacer()
                 Text("\(section.gigs.count)")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
+                    .font(.caption.weight(.bold))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3)
+                    .background(Color.white.opacity(0.14), in: Capsule())
+                    .accessibilityLabel("\(section.gigs.count) services")
+                Spacer()
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 12)
 
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: 16) {
@@ -140,9 +147,13 @@ struct CenterStageView: View {
                     }
                 }
                 .padding(.vertical, 10)
-                .padding(.horizontal, 4)
+                .padding(.horizontal, 12)
             }
             .frame(height: 250)
+            // Soft left/right edges: cards slide in and out instead of being chopped off
+            .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.04),
+                                         .init(color: .black, location: 0.94), .init(color: .clear, location: 1)],
+                                 startPoint: .leading, endPoint: .trailing))
         }
     }
 
@@ -162,7 +173,7 @@ struct CenterStageView: View {
         let centerIndex = gigs.firstIndex { $0.id == centeredID } ?? gigs.count / 2
 
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: -110) { // overlap like a fanned deck so all five fit
+            HStack(spacing: -150) { // coverflow: side cards tuck behind the focused one
                 ForEach(Array(gigs.enumerated()), id: \.element.id) { index, gig in
                     let offset = index - centerIndex
                     let distance = CGFloat(abs(offset))
@@ -178,10 +189,10 @@ struct CenterStageView: View {
                     }
                     .buttonStyle(.plain)
                     .gazeLift(scale: offset == 0 ? 1.04 : 1.06)
-                    .rotation3DEffect(.degrees(Double(offset) * -14), axis: (x: 0, y: 1, z: 0))
+                    .rotation3DEffect(.degrees(Double(offset.signum()) * -32), axis: (x: 0, y: 1, z: 0))
                     .offset(z: max(0, 3 - distance) * 30) // keep every card in front of the window plane, focused card closest
-                    .scaleEffect(max(0.72, 1.0 - distance * 0.1))
-                    .opacity(distance > 3 ? 0 : 1)
+                    .scaleEffect(distance == 0 ? 1 : (distance == 1 ? 0.86 : 0.74))
+                    .opacity(distance > 2 ? 0 : (distance == 2 ? 0.75 : 1))
                     .zIndex(Double(-abs(offset)))
                     .accessibilityHint(offset == 0 ? "Opens service details" : "Brings this service to the front")
                     .id(gig.id)

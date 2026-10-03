@@ -17,7 +17,7 @@ struct ContentView: View {
     var body: some View {
         @Bindable var appModel = appModel
 
-        HStack(alignment: .center, spacing: 28) {
+        HStack(alignment: .center, spacing: 56) {
             // Panel A: Left Sidebar (angled inward)
             if appModel.sidebarDocked {
                 DraggablePanel(title: "Menu", offset: $appModel.sidebarOffset, yaw: Tilt.yaw, baseDepth: Tilt.depth,

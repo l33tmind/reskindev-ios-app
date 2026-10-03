@@ -77,6 +77,8 @@ struct GigCardView: View {
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 20)
+            // Side cards in the carousel are mostly hidden behind the focused one: fade their text so it doesn't clash
+            .opacity(isFocused ? 1 : 0.35)
         }
         .frame(width: 300, height: 400)
         .background(Color.white.opacity(isFocused ? 0.16 : 0.04))
