@@ -10,7 +10,9 @@ import SwiftUI
 struct ContentView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(SessionStore.self) private var session
+    @Environment(ChatStore.self) private var chat
     @Environment(\.openWindow) private var openWindow
+    private let push = PushService.shared
 
     var body: some View {
         CenterStageView()
@@ -34,6 +36,13 @@ struct ContentView: View {
             .ornament(attachmentAnchor: .scene(.bottom), contentAlignment: .top) {
                 SpatialBottomDock()
                     .padding(.top, 20)
+            }
+            // Tapped a chat push → open that WorkStream
+            .onChange(of: push.pendingChatID) {
+                guard let chatID = push.pendingChatID else { return }
+                chat.activeChatID = chatID
+                openWindow(id: WindowID.inbox, value: WindowID.single)
+                push.pendingChatID = nil
             }
             .onAppear {
                 // Launch layout: menu on the left, orders on the right

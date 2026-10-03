@@ -106,7 +106,10 @@ final class SessionStore {
     }
 
     func signOut() {
-        if let uid { db.collection("users").document(uid).setData(["isOnline": false], merge: true) }
+        if let uid {
+            db.collection("users").document(uid).setData(["isOnline": false], merge: true)
+            PushService.shared.removeToken(for: uid)
+        }
         try? Auth.auth().signOut()
     }
 

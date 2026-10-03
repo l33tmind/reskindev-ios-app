@@ -3,6 +3,7 @@ import FirebaseCore
 
 @main
 struct ReskindevproApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var gigStore: GigStore
     @State private var session: SessionStore
     @State private var chat: ChatStore
@@ -24,6 +25,10 @@ struct ReskindevproApp: App {
                 .onChange(of: session.uid, initial: true) {
                     chat.bind(uid: session.uid, name: session.displayName)
                     seller.bind(uid: session.uid)
+                    if session.isSignedIn {
+                        PushService.shared.requestPermissionIfNeeded()
+                        PushService.shared.saveToken()
+                    }
                 }
                 .onChange(of: session.displayName) { chat.bind(uid: session.uid, name: session.displayName) }
                 .onChange(of: session.blockedUsers, initial: true) { chat.blockedByMe = session.blockedUsers }

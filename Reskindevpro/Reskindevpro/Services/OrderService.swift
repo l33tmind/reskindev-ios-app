@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseFirestore
+import FirebaseFunctions
 
 /// Order writes, ported 1:1 from the website so web, Flutter and Vision Pro stay in sync:
 /// checkout → app/order/[gigId]/[pkg]/page.js, order actions → app/profile/orders/page.js + app/inbox/page.js,
@@ -224,6 +225,8 @@ enum OrderService {
         try await db.collection("orders").document(order.id).updateData([
             "status": bySeller ? "cancel_requested_by_freelancer" : "cancel_requested_by_buyer",
             "cancelReason": reason,
+            // Lets the refund function skip orders that were never paid
+            "statusBeforeCancel": order.status,
             "updatedAt": FieldValue.serverTimestamp(),
         ])
         await notify(order, session: session, actionType: "cancel_requested", text: "Order Cancellation Requested",
@@ -243,18 +246,36 @@ enum OrderService {
     }
 
     /// The other side answers a cancel request.
-    /// The website refunds wallet payments with a server-side action (Admin SDK). Client rules can't write
-    /// another user's balance, so here accepting only cancels the order; the refund is done by the Reskindev team.
+    /// Accepting goes through the `processMutualCancellation` Cloud Function, which cancels and refunds the
+    /// buyer's wallet with the Admin SDK (client rules can't write another user's balance). If that function
+    /// isn't deployed yet, the order is only marked cancelled and the refund is left to the Reskindev team.
     static func respondToCancel(_ order: OrderModel, accept: Bool, session: SessionStore, messageID: String? = nil, chatID: String? = nil) async throws {
-        var update: [String: Any] = [
-            "status": accept ? "cancelled" : "processing",
-            "updatedAt": FieldValue.serverTimestamp(),
-        ]
-        if accept { update["cancelledAt"] = FieldValue.serverTimestamp() }
-        try await db.collection("orders").document(order.id).updateData(update)
+        var text = accept ? "Cancellation Accepted." : "Cancellation Declined."
+        if accept {
+            do {
+                let result = try await Functions.functions()
+                    .httpsCallable("processMutualCancellation")
+                    .call(["orderId": order.id])
+                let refunded = FS.double((result.data as? [String: Any])?["refunded"]) ?? 0
+                text = refunded > 0 ? "Cancellation Accepted. \(refunded.usd) refunded to buyer." : "Cancellation Accepted."
+            } catch let error as NSError where error.domain == FunctionsErrorDomain
+                        && [FunctionsErrorCode.notFound.rawValue, FunctionsErrorCode.unimplemented.rawValue].contains(error.code) {
+                // Function not deployed: same status change the website makes, no refund
+                try await db.collection("orders").document(order.id).updateData([
+                    "status": "cancelled",
+                    "cancelledAt": FieldValue.serverTimestamp(),
+                    "updatedAt": FieldValue.serverTimestamp(),
+                ])
+            }
+        } else {
+            try await db.collection("orders").document(order.id).updateData([
+                "status": "processing",
+                "updatedAt": FieldValue.serverTimestamp(),
+            ])
+        }
         await notify(order, session: session,
                      actionType: accept ? "cancel_accepted" : "cancel_declined",
-                     text: accept ? "Cancellation Accepted." : "Cancellation Declined.",
+                     text: text,
                      lastMessage: accept ? "Order Cancelled" : "Cancellation Declined")
         await resolve(messageID: messageID, chatID: chatID)
     }
