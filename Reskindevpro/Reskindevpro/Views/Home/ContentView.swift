@@ -20,28 +20,30 @@ struct ContentView: View {
         HStack(alignment: .center, spacing: 40) {
             // Panel A: Left Sidebar (angled inward)
             if appModel.sidebarDocked {
-                DraggablePanel(title: "Menu", offset: $appModel.sidebarOffset, baseDepth: 50,
+                DraggablePanel(title: "Menu", offset: $appModel.sidebarOffset, baseDepth: Tilt.depth,
                                onPopOut: { popOut(sidebar: true) },
                                onClose: { withAnimation { appModel.sidebarDocked = false } }) {
                     LeftSidebarView()
                         .frame(width: 320, height: 720)
-                        .rotation3DEffect(.degrees(12), axis: (x: 0, y: 1, z: 0))
+                        .panelTilt(yaw: Tilt.yaw)
                 }
                 .transition(.move(edge: .leading).combined(with: .opacity))
             }
 
-            // Panel B: Center Stage (search + 3D carousel)
+            // Panel B: Center Stage (search + 3D carousel), leaning back like a monitor
             CenterStageView()
                 .frame(width: 900)
+                .rotation3DEffect(.degrees(Tilt.pitch), axis: (x: 1, y: 0, z: 0), anchor: .bottom)
+                .offset(z: Tilt.centerDepth)
 
             // Panel C: Orders (angled inward)
             if appModel.ordersDocked {
-                DraggablePanel(title: "Orders", offset: $appModel.ordersOffset, baseDepth: 50,
+                DraggablePanel(title: "Orders", offset: $appModel.ordersOffset, baseDepth: Tilt.depth,
                                onPopOut: { popOut(sidebar: false) },
                                onClose: { withAnimation { appModel.ordersDocked = false } }) {
                     RightOrdersView()
                         .frame(width: 440, height: 720)
-                        .rotation3DEffect(.degrees(-12), axis: (x: 0, y: 1, z: 0))
+                        .panelTilt(yaw: -Tilt.yaw)
                 }
                 .transition(.move(edge: .trailing).combined(with: .opacity))
             }
@@ -83,6 +85,26 @@ struct ContentView: View {
             if sidebar { appModel.sidebarDocked = false } else { appModel.ordersDocked = false }
         }
         openWindow(id: sidebar ? WindowID.sidebar : WindowID.orders, value: WindowID.single)
+    }
+}
+
+/// Cockpit layout: side panels turn in toward the viewer and everything leans back slightly
+enum Tilt {
+    /// Side panels turn toward you
+    static let yaw: Double = 22
+    /// Top edge leans away
+    static let pitch: Double = 6
+    /// Pushes panels forward so their far edges stay in front of the window plane (anything behind it is clipped)
+    static let depth: Double = 140
+    static let centerDepth: Double = 40
+}
+
+extension View {
+    /// Turn (yaw) toward the viewer, then lean back (pitch) from the bottom edge
+    func panelTilt(yaw: Double) -> some View {
+        self
+            .rotation3DEffect(.degrees(yaw), axis: (x: 0, y: 1, z: 0))
+            .rotation3DEffect(.degrees(Tilt.pitch), axis: (x: 1, y: 0, z: 0), anchor: .bottom)
     }
 }
 
