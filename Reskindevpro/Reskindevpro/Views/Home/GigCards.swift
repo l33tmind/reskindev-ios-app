@@ -189,7 +189,10 @@ struct FilterPill: View {
     var action: () -> Void = {}
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            SoundFX.click.play()
+            action()
+        } label: {
             HStack(spacing: 8) {
                 Image(systemName: icon).font(.subheadline.weight(.semibold))
                 Text(title).font(.callout.weight(.medium))

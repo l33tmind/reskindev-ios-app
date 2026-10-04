@@ -98,7 +98,7 @@ struct CenterStageView: View {
                 .padding(.bottom, 30)
             }
             .scrollIndicators(.hidden)
-            .frame(height: 690)
+            .frame(maxHeight: .infinity)
             // Fade the bottom edge so the next row reads as "scroll for more", not as cut off
             .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.9),
                                          .init(color: .clear, location: 1)],
@@ -121,12 +121,12 @@ struct CenterStageView: View {
         if isFiltering {
             return [GigSection(title: "Results (\(gigs.count))", icon: "magnifyingglass", gigs: gigs)]
         }
-        var rows: [GigSection] = []
+        // All Services first, then what you looked at recently, then each category
+        var rows = [GigSection(title: "All Services", icon: "square.grid.2x2.fill", gigs: gigs)]
         let recent = store.recentIDs.compactMap { store.gig(id: $0) }
         if !recent.isEmpty {
             rows.append(GigSection(title: "Recently Viewed", icon: "clock.arrow.circlepath", gigs: recent))
         }
-        rows.append(GigSection(title: "All Services", icon: "square.grid.2x2.fill", gigs: gigs))
         for category in store.categories {
             let inCategory = gigs.filter { $0.category == category }
             if !inCategory.isEmpty {
@@ -155,6 +155,7 @@ struct CenterStageView: View {
                 LazyHStack(spacing: 16) {
                     ForEach(section.gigs) { gig in
                         Button {
+                            SoundFX.click.play()
                             openWindow(id: WindowID.gigDetail, value: gig.id)
                         } label: {
                             CompactGigCard(gig: gig)
@@ -196,6 +197,7 @@ struct CenterStageView: View {
                     let distance = CGFloat(abs(offset))
 
                     Button {
+                        SoundFX.click.play()
                         if offset == 0 {
                             openWindow(id: WindowID.gigDetail, value: gig.id)       // focused → open details
                         } else {
@@ -227,6 +229,10 @@ struct CenterStageView: View {
         .animation(.easeInOut(duration: 0.25), value: appModel.openSheets > 0)
         .animation(.easeInOut(duration: 0.25), value: searchFocused)
         .animation(.spring(duration: 0.45), value: centeredID)
+        // A tiny tick each time a new card comes to the front (swiping left/right or tapping a side card)
+        .onChange(of: centeredID) { old, new in
+            if old != nil, new != nil { SoundFX.tick.play() }
+        }
         .onAppear { recenter(gigs) }
         .onChange(of: gigs.map(\.id)) { recenter(gigs) }
     }

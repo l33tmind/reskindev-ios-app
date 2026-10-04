@@ -6,6 +6,10 @@ import RealityKit
 
 enum SoundFX: String {
     case alert, success, tap, perch
+    /// Soft click for buttons and cards
+    case click
+    /// Tiny tick as the top carousel moves card to card
+    case tick
 
     @MainActor private static var players: [SoundFX: AVAudioPlayer] = [:]
 
@@ -30,6 +34,13 @@ enum SoundFX: String {
             entity.components.set(SpatialAudioComponent(gain: -6))
         }
         entity.playAudio(resource)
+    }
+}
+
+extension View {
+    /// Plays a click when this is tapped, without taking the tap away from the button underneath
+    func clickSound(_ sound: SoundFX = .click) -> some View {
+        simultaneousGesture(TapGesture().onEnded { sound.play() })
     }
 }
 

@@ -95,7 +95,10 @@ struct SidebarNavItem: View {
     var action: () -> Void = {}
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            SoundFX.click.play()
+            action()
+        } label: {
             HStack(spacing: 16) {
                 Image(systemName: icon)
                     .font(.title3)

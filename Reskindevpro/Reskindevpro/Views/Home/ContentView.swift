@@ -51,6 +51,9 @@ struct ContentView: View {
             if args.contains("-OpenGigDemo"), let gig = gigStore.spotlightGigs.first {
                 openWindow(id: WindowID.gigDetail, value: gig.id)
             }
+            if args.contains("-PagesDemo") {
+                openWindow(id: WindowID.page, value: WindowID.single)
+            }
             if args.contains("-DeliveryDemo") {
                 openWindow(id: WindowID.deliveryBox)
             }
@@ -193,11 +196,15 @@ struct ExploreView: View {
     private var ordersOrnament: Bool { appModel.ordersPanelShown && !appModel.showOrders }
 
     var body: some View {
-        CenterStageView()
-            .frame(width: 900)
-            .padding(.horizontal, 40)
-            .padding(.top, 24)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Drag the window's corner and everything grows with it (designed for 1100 × 900)
+        GeometryReader { geo in
+            let scale = min(max(min(geo.size.width / 1100, geo.size.height / 900), 0.8), 2.5)
+            CenterStageView()
+                .frame(width: 900, height: max(geo.size.height / scale - 24, 400), alignment: .top)
+                .padding(.top, 24)
+                .scaleEffect(scale, anchor: .top)
+                .frame(width: geo.size.width, height: geo.size.height, alignment: .top)
+        }
             // Admin → Users → Block
             .overlay(alignment: .top) {
                 if session.isBlockedByAdmin {
