@@ -126,6 +126,18 @@ final class ChatStore {
         return blockedByMe.contains(other) || (otherUser?.blockedUsers.contains(uid) ?? false)
     }
 
+    /// I blocked the other person (only I can undo this)
+    var iBlockedThem: Bool {
+        guard let uid, let other = activeChat?.otherID(me: uid) else { return false }
+        return blockedByMe.contains(other)
+    }
+
+    /// The other person blocked me (only they can undo it)
+    var theyBlockedMe: Bool {
+        guard let uid else { return false }
+        return otherUser?.blockedUsers.contains(uid) ?? false
+    }
+
     /// Filled from users/{me}.blockedUsers by the session
     var blockedByMe: [String] = []
 
@@ -190,6 +202,8 @@ final class ChatStore {
         try await db.collection("users").document(uid).updateData([
             "blockedUsers": blocked ? FieldValue.arrayRemove([other]) : FieldValue.arrayUnion([other])
         ])
+        // Show the change right away; the profile listener confirms it
+        if blocked { blockedByMe.removeAll { $0 == other } } else if !blockedByMe.contains(other) { blockedByMe.append(other) }
     }
 
     func report(reason: String) async throws {

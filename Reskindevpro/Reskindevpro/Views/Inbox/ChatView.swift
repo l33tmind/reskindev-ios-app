@@ -25,8 +25,24 @@ struct ChatView: View {
                         .font(.callout)
                         .foregroundStyle(.red)
                         .padding(20)
-                } else if chat.isBlocked {
-                    Label("Messaging is unavailable: one of you has blocked the other.", systemImage: "hand.raised.fill")
+                } else if chat.iBlockedThem {
+                    // I blocked them: say so and let me undo it right here
+                    HStack(spacing: 16) {
+                        Label("You blocked \(chat.otherUser?.name ?? "this user"). They can't message you.", systemImage: "hand.raised.fill")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button {
+                            toggleBlock()
+                        } label: {
+                            Label("Unblock", systemImage: "hand.raised.slash")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.brandGreen)
+                    }
+                    .padding(20)
+                } else if chat.theyBlockedMe {
+                    Label("This user has blocked you, so you can't send messages.", systemImage: "hand.raised.fill")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .padding(20)
@@ -124,12 +140,10 @@ struct ChatView: View {
                     }
                 }
                 Button {
-                    Task {
-                        do { try await chat.toggleBlock() } catch { errorMessage = error.localizedDescription }
-                    }
+                    toggleBlock()
                 } label: {
-                    let blocked = conversation.otherID(me: me).map { chat.blockedByMe.contains($0) } ?? false
-                    Label(blocked ? "Unblock User" : "Block User", systemImage: "hand.raised")
+                    Label(chat.iBlockedThem ? "Unblock User" : "Block User",
+                          systemImage: chat.iBlockedThem ? "hand.raised.slash" : "hand.raised")
                 }
                 Button(role: .destructive) { showReport = true } label: { Label("Report User", systemImage: "flag") }
             } label: {
@@ -142,6 +156,18 @@ struct ChatView: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 16)
         .background(Color.white.opacity(0.05))
+    }
+
+    private func toggleBlock() {
+        let wasBlocked = chat.iBlockedThem
+        Task {
+            do {
+                try await chat.toggleBlock()
+                show(wasBlocked ? "User unblocked" : "User blocked")
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     // MARK: Messages
