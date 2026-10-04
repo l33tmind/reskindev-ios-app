@@ -4,6 +4,38 @@ struct GigCardView: View {
     let gig: GigModel
     var isFocused: Bool = false
 
+    /// Video still first, else the second photo
+    private var previewImage: (url: String, isVideo: Bool)? {
+        if let id = gig.videoIDs.first { return ("https://img.youtube.com/vi/\(id)/hqdefault.jpg", true) }
+        if gig.allImages.count > 1 { return (gig.allImages[1], false) }
+        return nil
+    }
+
+    @ViewBuilder
+    private var lookPreview: some View {
+        if let preview = previewImage {
+            CachedImage(url: preview.url)
+                .frame(height: 170)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: Radius.small))
+                .overlay(alignment: .bottomLeading) {
+                    Label(preview.isVideo ? "Video" : "More photos",
+                          systemImage: preview.isVideo ? "play.circle.fill" : "photo.on.rectangle")
+                        .font(.caption.weight(.bold))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.black.opacity(0.6), in: Capsule())
+                        .foregroundStyle(.white)
+                        .padding(10)
+                }
+                .allowsHitTesting(false)
+                .hoverEffect { effect, isActive, _ in
+                    effect.opacity(isActive ? 1 : 0)
+                }
+                .accessibilityHidden(true)
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Cover image (inset, rounded)
@@ -11,6 +43,8 @@ struct GigCardView: View {
                 .frame(height: 170)
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: Radius.small))
+                // Look at the card: the gig's video frame (or its next photo) fades in as a preview
+                .overlay { lookPreview }
                 .overlay(alignment: .topLeading) {
                     if gig.isFeatured {
                         Label("Featured", systemImage: "star.fill")

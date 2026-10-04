@@ -127,6 +127,7 @@ struct ReskindevproApp: App {
     /// Every window shares the same live Firestore stores
     private func stores<V: View>(_ view: V) -> some View {
         view
+            .celebrations(appModel.celebration)
             .environment(gigStore)
             .environment(session)
             .environment(chat)

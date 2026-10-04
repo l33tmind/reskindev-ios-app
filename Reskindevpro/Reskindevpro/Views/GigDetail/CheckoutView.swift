@@ -281,6 +281,7 @@ struct CheckoutView: View {
                 try? await session.updateProfile(displayName: session.displayName, username: session.username,
                                                   phone: form.phone.trimmed, country: session.country, bio: session.bio)
             }
+            appModel.celebrate()
             withAnimation { placedOrder = true }
         } catch {
             errorMessage = error.localizedDescription

@@ -114,6 +114,7 @@ struct ImmersiveView: View {
 
     /// Leave the Showroom and show just the gig's page
     private func open(_ gig: GigModel) {
+        SoundFX.tap.play()
         openWindow(id: WindowID.gigDetail, value: gig.id)
         Task { await dismissImmersiveSpace() }
     }

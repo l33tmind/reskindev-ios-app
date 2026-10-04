@@ -71,6 +71,13 @@ class AppModel {
     var searchFocusRequest = 0
     /// Order opened from the orders panel or a chat card
     var selectedOrderID: String?
+    /// Ticks to throw confetti (order placed, delivered, completed, reviews in)
+    var celebration = 0
+
+    @MainActor func celebrate() {
+        celebration += 1
+        SoundFX.success.play()
+    }
 }
 
 /// Fixed window values so each of these windows opens once and is reused

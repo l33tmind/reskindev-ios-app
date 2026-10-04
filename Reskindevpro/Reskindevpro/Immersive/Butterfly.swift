@@ -29,6 +29,8 @@ enum Butterfly {
         let extents = butterfly.visualBounds(relativeTo: nil).extents
         let largest = max(extents.x, extents.y, extents.z)
         if largest > 0 { butterfly.scale *= size / largest }
+        // A soft shadow on the cards, desk and floor below, so it sits in the real room
+        butterfly.components.set(GroundingShadowComponent(castsShadow: true))
         return butterfly
     }
 
@@ -58,6 +60,8 @@ enum Butterfly {
             let perch = SIMD3<Float>(bounds.center.x, bounds.max.y + 0.005, bounds.center.z)
             await hop(butterfly, to: perch + SIMD3(0, 0.12, 0) + towardViewer(perch) * 0.05, in: root)
             await hop(butterfly, to: perch, in: root, landing: true)
+            // A little chime from where it lands
+            SoundFX.perch.play(on: butterfly)
             // Rest with slow wing beats
             wings?.speed = 0.25
             try? await Task.sleep(for: .seconds(4))

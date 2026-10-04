@@ -21,6 +21,7 @@ struct ContentView: View {
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     private let push = PushService.shared
     private let siri = SiriBridge.shared
+    @State private var showWelcome = false
 
     var body: some View {
         @Bindable var appModel = appModel
@@ -59,6 +60,10 @@ struct ContentView: View {
             }
         }
         #endif
+        .liveAlerts()
+        // First launch: a short welcome tour with the butterfly
+        .sheet(isPresented: $showWelcome) { WelcomeView() }
+        .onAppear { showWelcome = WelcomeView.shouldShow }
         // Closing the main (home) window quits the whole app: take every other window with it,
         // so reopening the app never lands on a lone side panel or gig page
         .onAppear { appModel.isMainOpen = true }

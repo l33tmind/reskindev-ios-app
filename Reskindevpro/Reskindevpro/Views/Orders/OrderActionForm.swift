@@ -39,6 +39,7 @@ struct OrderActionForm: View {
     var onDone: (String) -> Void = { _ in }
 
     @Environment(SessionStore.self) private var session
+    @Environment(AppModel.self) private var appModel
     @State private var text = ""
     @State private var link = ""
     @State private var days = 1
@@ -141,6 +142,7 @@ struct OrderActionForm: View {
                 onDone("Requirements submitted! The countdown timer has started.")
             case .deliver:
                 try await OrderService.deliver(order, message: t, link: link.trimmed, session: session)
+                appModel.celebrate()
                 onDone("Order delivered successfully!")
             case .revision:
                 try await OrderService.requestRevision(order, note: t, session: session)
@@ -158,11 +160,13 @@ struct OrderActionForm: View {
                 var input = review
                 input.comment = review.comment.trimmed
                 try await OrderService.acceptDelivery(order, review: input, session: session)
+                appModel.celebrate()
                 onDone("Delivery accepted & review submitted!")
             case .reviewBuyer:
                 var input = review
                 input.comment = review.comment.trimmed
                 try await OrderService.submitSellerReview(order, review: input, session: session)
+                appModel.celebrate()
                 onDone("Review submitted. Both reviews are now public!")
             }
         } catch {
