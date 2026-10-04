@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseCore
+import AppIntents
 
 @main
 struct ReskindevproApp: App {
@@ -15,6 +16,8 @@ struct ReskindevproApp: App {
         _gigStore = State(initialValue: GigStore())
         _session = State(initialValue: SessionStore())
         _chat = State(initialValue: ChatStore())
+        // Tell Siri about the phrases and their values (service types, screens) on every launch
+        ReskindevShortcuts.updateAppShortcutParameters()
     }
 
     var body: some Scene {

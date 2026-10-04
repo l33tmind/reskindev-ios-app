@@ -2,6 +2,23 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDisplayName</key>
+	<string>Reskindev</string>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Reskin Dev</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>reskin dev</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Reskindev Pro</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>reskin dev pro</string>
+		</dict>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationPreferredDefaultSceneSessionRole</key>
