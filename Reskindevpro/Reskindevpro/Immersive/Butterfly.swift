@@ -19,8 +19,9 @@ enum Butterfly {
     private static let size: Float = 0.12
     /// Flight speed in metres per second
     private static let speed: Float = 0.45
-    /// Turn applied on top of "face the direction of travel" in case the model's nose isn't -Z
-    static var forwardYaw: Float = 0
+    /// Turn applied on top of "face the direction of travel": this model's head points +Z, so turn it
+    /// half way round or it flies tail first
+    static var forwardYaw: Float = .pi
 
     /// The three wing animations from butterfly.glb (one per file, same skeleton)
     enum Clip: CaseIterable {
