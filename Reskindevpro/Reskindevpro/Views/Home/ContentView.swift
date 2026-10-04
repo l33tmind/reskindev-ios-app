@@ -69,6 +69,18 @@ struct ContentView: View {
         .onChange(of: gigStore.isLoading) {
             if let request = siri.pending, !gigStore.isLoading { runSiri(request) }
         }
+        // Siri: "order a service" → that gig opens with checkout up (it picks up the pending id itself)
+        .onChange(of: siri.pendingCheckoutGigID, initial: true) {
+            guard let gigID = siri.pendingCheckoutGigID else { return }
+            appModel.selectedTab = .explore
+            openWindow(id: WindowID.gigDetail, value: gigID)
+        }
+        // Siri: "show my orders / messages / saved services…"
+        .onChange(of: siri.pendingScreen, initial: true) {
+            guard let screen = siri.pendingScreen else { return }
+            siri.pendingScreen = nil
+            open(screen)
+        }
         // Tapped a chat push → open that WorkStream
         .onChange(of: push.pendingChatID) {
             guard let chatID = push.pendingChatID else { return }
@@ -85,6 +97,32 @@ extension ContentView {
         appModel.selectedTab = .explore
         if let best = gigStore.apply(request) {
             openWindow(id: WindowID.gigDetail, value: best.id)
+        }
+    }
+
+    func open(_ screen: AppScreen) {
+        switch screen {
+        case .orders:
+            appModel.selectedTab = .explore
+            appModel.ordersPanelShown = true
+        case .messages:
+            appModel.selectedTab = .messages
+        case .saved:
+            appModel.profileTab = .saved
+            appModel.selectedTab = .profile
+        case .profile:
+            appModel.profileTab = .profile
+            appModel.selectedTab = .profile
+        case .explore:
+            appModel.selectedTab = .explore
+        case .showroom:
+            guard appModel.immersiveSpaceState == .closed else { return }
+            appModel.immersiveSpaceState = .inTransition
+            Task {
+                if case .opened = await openImmersiveSpace(id: appModel.immersiveSpaceID) {} else {
+                    appModel.immersiveSpaceState = .closed
+                }
+            }
         }
     }
 

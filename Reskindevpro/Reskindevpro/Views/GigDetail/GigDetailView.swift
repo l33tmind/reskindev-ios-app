@@ -102,6 +102,11 @@ private struct GigDetailContent: View {
         }
         .padding(28)
         .task(id: gig.id) {
+            // Siri "Order a service": arrive with checkout already open
+            if SiriBridge.shared.pendingCheckoutGigID == gig.id {
+                SiriBridge.shared.pendingCheckoutGigID = nil
+                sheet = .order
+            }
             store.trackView(gig.id)
             store.noteViewed(gig.id)
             reviews = await store.reviews(for: gig.id)
