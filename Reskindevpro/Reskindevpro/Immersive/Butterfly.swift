@@ -74,13 +74,24 @@ enum Butterfly {
         return butterfly
     }
 
-    /// Switches the wings to a clip, looping, with a short blend; falls back to the resting flap
+    /// Which wing animation is playing, so a speed change doesn't restart it
+    private struct WingState: Component {
+        var clip: Clip
+        var controller: AnimationPlaybackController
+    }
+
+    /// Switches the wings to a clip (looping, short blend), or just changes the beat if it's already playing
     @discardableResult
     static func play(_ clip: Clip, on butterfly: Entity, speed: Float = 1) -> AnimationPlaybackController? {
+        if let state = butterfly.components[WingState.self], state.clip == clip, state.controller.isPlaying {
+            state.controller.speed = speed
+            return state.controller
+        }
         let model = butterfly.findEntity(named: "model") ?? butterfly
         guard let animation = clips[clip] ?? clips[.flap] ?? model.availableAnimations.first else { return nil }
-        let controller = model.playAnimation(animation.repeat(), transitionDuration: 0.25, startsPaused: false)
+        let controller = model.playAnimation(animation.repeat(), transitionDuration: 0.2, startsPaused: false)
         controller.speed = speed
+        butterfly.components.set(WingState(clip: clip, controller: controller))
         return controller
     }
 
@@ -98,9 +109,8 @@ enum Butterfly {
         var next = 0
         while !Task.isCancelled {
             // Flutter around neighbouring gigs: beat the wings, glide now and then
-            for index in 0..<3 {
+            for _ in 0..<3 {
                 guard !Task.isCancelled else { return }
-                play(index == 1 ? .glide : .fly, on: butterfly)
                 await hop(butterfly, to: wanderPoint(near: root), in: root)
             }
             // Land on the next perch (newest saved gig, then 2nd recent gig, …)
@@ -112,9 +122,7 @@ enum Butterfly {
             // doesn't swallow it
             let edge = SIMD3<Float>(bounds.center.x, bounds.max.y, bounds.center.z)
             let perch = edge + SIMD3(0, perchClearance, 0) + towardViewer(edge) * 0.03
-            play(.fly, on: butterfly)
             await hop(butterfly, to: perch + SIMD3(0, 0.12, 0) + towardViewer(perch) * 0.05, in: root)
-            play(.glide, on: butterfly)
             await hop(butterfly, to: perch, in: root, landing: true)
             // A little chime from where it lands
             SoundFX.perch.play(on: butterfly)
@@ -122,7 +130,6 @@ enum Butterfly {
             play(.flap, on: butterfly, speed: 0.4)
             try? await Task.sleep(for: .seconds(2.5))
             guard !Task.isCancelled else { return }
-            play(.fly, on: butterfly)
             await hop(butterfly, to: perch + SIMD3(0, 0.05, 0) + towardViewer(perch) * 0.02, in: root)
             await hop(butterfly, to: perch, in: root, landing: true)
             play(.flap, on: butterfly, speed: 0.4)
@@ -132,17 +139,56 @@ enum Butterfly {
 
     // MARK: Moves
 
+    /// One flight between two points, the way a butterfly really goes: a wobbly path in short legs,
+    /// fast hard beats when climbing, slower beats on the level, wings spread to glide down,
+    /// and a gentle glide in to land
     private static func hop(_ butterfly: Entity, to target: SIMD3<Float>, in root: Entity, landing: Bool = false) async {
-        let from = butterfly.position(relativeTo: root)
-        let distance = simd_distance(from, target)
+        let start = butterfly.position(relativeTo: root)
+        let distance = simd_distance(start, target)
         guard distance > 0.01 else { return }
-        let duration = TimeInterval(max(0.6, distance / (landing ? speed * 0.5 : speed)))
 
-        var transform = butterfly.transform
-        transform.translation = target
-        transform.rotation = facing(from: from, to: target)
-        butterfly.move(to: transform, relativeTo: root, duration: duration, timingFunction: landing ? .easeOut : .easeInOut)
-        try? await Task.sleep(for: .seconds(duration))
+        // ~12 cm legs, each nudged up/down and sideways (not the last one: it has to arrive exactly)
+        let legs = max(2, Int((distance / 0.12).rounded()))
+        let side = simd_normalize(simd_cross(target - start, [0, 1, 0]) + [0.0001, 0, 0])
+        var current = start
+        for leg in 1...legs {
+            guard !Task.isCancelled else { return }
+            let t = Float(leg) / Float(legs)
+            var next = start + (target - start) * t
+            if leg < legs {
+                next.y += Float.random(in: -0.035...0.04)
+                next += side * Float.random(in: -0.03...0.03)
+            }
+
+            let lastLeg = leg == legs
+            let rise = next.y - current.y
+            // Wings and flight speed (m/s) for this leg
+            let clip: Clip
+            let beat: Float
+            var metresPerSecond: Float
+            if landing && lastLeg {
+                clip = .glide; beat = 0.7; metresPerSecond = speed * 0.45
+            } else if rise > 0.012 {
+                clip = .fly; beat = .random(in: 1.4...1.75); metresPerSecond = speed * 0.8     // climbing: hard work
+            } else if rise < -0.02 {
+                clip = .glide; beat = .random(in: 0.8...1.0); metresPerSecond = speed * 1.15  // sliding down
+            } else if Float.random(in: 0...1) < 0.22 {
+                clip = .glide; beat = 0.9; metresPerSecond = speed * 1.05                    // a short glide
+            } else {
+                clip = .fly; beat = .random(in: 0.9...1.3); metresPerSecond = speed           // cruising
+            }
+            if landing { metresPerSecond *= 0.7 }
+            play(clip, on: butterfly, speed: beat)
+
+            let duration = TimeInterval(max(0.18, simd_distance(current, next) / metresPerSecond))
+            var transform = butterfly.transform
+            transform.translation = next
+            transform.rotation = facing(from: current, to: next)
+            butterfly.move(to: transform, relativeTo: root, duration: duration,
+                           timingFunction: lastLeg ? .easeOut : leg == 1 ? .easeIn : .linear)
+            try? await Task.sleep(for: .seconds(duration))
+            current = next
+        }
     }
 
     /// Yaw toward the direction of travel (level flight)
