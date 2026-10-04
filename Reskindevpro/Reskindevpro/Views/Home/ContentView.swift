@@ -61,6 +61,14 @@ struct ContentView: View {
         }
         #endif
         .liveAlerts()
+        // Widgets: reskindev://orders, reskindev://messages
+        .onOpenURL { url in
+            guard url.scheme == "reskindev" else { return }
+            switch url.host() {
+            case "messages": open(.messages)
+            default: open(.orders)
+            }
+        }
         // First launch: a short welcome tour with the butterfly
         .sheet(isPresented: $showWelcome) { WelcomeView() }
         .onAppear { showWelcome = WelcomeView.shouldShow }

@@ -35,6 +35,11 @@ struct ReskindevproApp: App {
                 }
                 .onChange(of: session.displayName) { chat.bind(uid: session.uid, name: session.displayName) }
                 .onChange(of: session.blockedUsers, initial: true) { chat.blockedByMe = session.blockedUsers }
+                // Order Board / Desk widgets follow orders, chats and sign-in
+                .task(id: widgetKey) {
+                    try? await Task.sleep(for: .seconds(2))   // let bursts of updates settle
+                    await WidgetSync.refresh(session: session, chat: chat, seller: seller)
+                }
         }
         .defaultSize(width: 1100, height: 900)
         // The app always opens on the main window, even if another window was the last one open
@@ -133,6 +138,13 @@ struct ReskindevproApp: App {
     }
 
     /// Every window shares the same live Firestore stores
+    /// Changes whenever something the widgets show may have changed
+    private var widgetKey: String {
+        let orders = session.orders.map { "\($0.id)\($0.status)" }.joined()
+        let lastChat = chat.conversations.compactMap(\.updatedAt).max()?.timeIntervalSince1970 ?? 0
+        return "\(session.uid ?? "-")|\(orders)|\(chat.unreadTotal)|\(lastChat)"
+    }
+
     private func stores<V: View>(_ view: V) -> some View {
         view
             .celebrations(appModel.celebration)
