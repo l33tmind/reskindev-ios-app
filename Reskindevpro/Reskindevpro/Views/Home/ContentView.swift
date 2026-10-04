@@ -39,6 +39,10 @@ struct ContentView: View {
             }
         }
         #if DEBUG
+        // `-GigEditorDemo`: the seller's gig editor as a sheet (layout checks; saving needs a signed-in seller)
+        .sheet(isPresented: .constant(ProcessInfo.processInfo.arguments.contains("-GigEditorDemo"))) {
+            GigEditorView(gigID: nil)
+        }
         // `-ShowroomDemo` launch argument: open the Showroom right away (simulator screenshots)
         // `-OpenGigDemo` / `-DeliveryDemo`: open a gig page / the delivery box once data is in (screenshots)
         .onChange(of: gigStore.isLoading, initial: true) {

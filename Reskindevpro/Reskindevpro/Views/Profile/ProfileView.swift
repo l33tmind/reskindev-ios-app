@@ -7,6 +7,13 @@ struct ProfileView: View {
     @Environment(\.openWindow) private var openWindow
     @State private var showSignIn = false
 
+    /// Same menus as the website profile: sellers get My Gigs + Earnings, buyers get Saved
+    private func isVisible(_ tab: AppModel.ProfileTab) -> Bool {
+        if session.isAdmin { return true }
+        if session.isFreelancer { return tab != .saved }
+        return !tab.sellerOnly
+    }
+
     var body: some View {
         @Bindable var appModel = appModel
 
@@ -15,7 +22,7 @@ struct ProfileView: View {
                 NavigationSplitView {
                     List(selection: Binding($appModel.profileTab)) {
                         Section {
-                            ForEach(AppModel.ProfileTab.allCases.filter { session.canSell || !$0.sellerOnly }) { tab in
+                            ForEach(AppModel.ProfileTab.allCases.filter(isVisible)) { tab in
                                 Label(tab.rawValue, systemImage: tab.icon).tag(tab)
                             }
                         }
@@ -63,17 +70,16 @@ private struct ProfileOverview: View {
     @Environment(SessionStore.self) private var session
     @Environment(AppModel.self) private var appModel
     @Environment(\.openWindow) private var openWindow
-    @State private var confirmSelling = false
-    @State private var becomingSeller = false
+    @State private var confirmSwitch = false
+    @State private var switching = false
     @State private var errorMessage: String?
 
-    private func becomeSeller() async {
-        becomingSeller = true
-        defer { becomingSeller = false }
+    private func switchRole() async {
+        switching = true
+        defer { switching = false }
         do {
-            try await session.becomeSeller()
-            appModel.celebrate()
-            appModel.profileTab = .myGigs
+            try await session.switchRole()
+            appModel.profileTab = .profile
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -120,37 +126,41 @@ private struct ProfileOverview: View {
                     .frame(width: 360)
                 }
 
-                // Buyers (e.g. signed up with Google as a buyer) can switch to selling any time
-                if !session.canSell {
+                // Website "Switch to Seller / Buyer" (not for admins)
+                if !session.isAdmin {
+                    let toSeller = !session.isFreelancer
                     HStack(spacing: 18) {
-                        Image(systemName: "briefcase.fill")
+                        Image(systemName: toSeller ? "briefcase.fill" : "cart.fill")
                             .font(.title)
                             .foregroundStyle(Color.brandGreen)
                             .frame(width: 60, height: 60)
                             .background(Color.brandGreen.opacity(0.15), in: Circle())
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Start selling on Reskindev").font(.title3.weight(.bold))
-                            Text("Post your own gigs, take orders and get paid. Your buyer account and orders stay as they are.")
+                            Text(toSeller ? "Start selling on Reskindev" : "Hire on Reskindev")
+                                .font(.title3.weight(.bold))
+                            Text(toSeller ? "Post gigs, take orders and get paid. Switch back any time."
+                                          : "Switch to your buyer profile to order services and see your purchases.")
                                 .font(.callout).foregroundStyle(.secondary)
                         }
                         Spacer()
                         Button {
-                            confirmSelling = true
+                            confirmSwitch = true
                         } label: {
-                            if becomingSeller { ProgressView() } else { Text("Become a Seller") }
+                            if switching { ProgressView() } else { Text(toSeller ? "Switch to Seller" : "Switch to Buyer") }
                         }
                         .buttonStyle(.borderedProminent)
                         .tint(Color.brandGreen)
-                        .disabled(becomingSeller)
+                        .disabled(switching)
                     }
                     .padding(20)
                     .background(Color.brandGreen.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.medium))
-                    .errorAlert("Couldn't switch to selling", message: $errorMessage)
-                    .confirmationDialog("Become a seller?", isPresented: $confirmSelling) {
-                        Button("Become a Seller") { Task { await becomeSeller() } }
+                    .errorAlert("Failed to switch role", message: $errorMessage)
+                    .confirmationDialog(toSeller ? "Switch to Seller Account" : "Switch to Buyer Account",
+                                        isPresented: $confirmSwitch, titleVisibility: .visible) {
+                        Button(toSeller ? "Switch to Seller" : "Switch to Buyer") { Task { await switchRole() } }
                         Button("Cancel", role: .cancel) {}
                     } message: {
-                        Text("My Gigs and Earnings will appear in your profile.")
+                        Text("You will be taken to your \(toSeller ? "freelancer dashboard" : "buyer profile").")
                     }
                 }
 

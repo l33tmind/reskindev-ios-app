@@ -21,6 +21,15 @@ struct GigEditorView: View {
     @State private var keywordInput = ""
     @State private var featureInput = ""
     @State private var errorMessage: String?
+    @State private var agreedToTerms = false
+
+    /// The iOS app's declaration, word for word
+    static let ugcDeclaration = "I confirm this video is uploaded as \"Unlisted\" on YouTube. I acknowledge that I am submitting User-Generated Content (UGC) and warrant that I own all intellectual property rights to this video. I agree not to submit any copyrighted, objectionable, or abusive material. I grant Reskindev permission to embed this video and assume full legal liability for its content."
+    static let termsText = "I agree to the Terms of Service and confirm this service contains no abusive, copyright-infringing, or objectionable content."
+
+    private var hasMedia: Bool {
+        newImage != nil || !draft.imageUrl.isEmpty || !draft.youtubeUrl.trimmed.isEmpty
+    }
 
     private static let defaultCategories = ["Service", "Design", "Development", "Writing", "Video & Animation", "Others"]
     private var categories: [String] {
@@ -42,7 +51,8 @@ struct GigEditorView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Color.brandGreen)
-                .disabled(saving || loading)
+                .disabled(saving || loading || !agreedToTerms)
+                .help(agreedToTerms ? "Send for admin approval" : "Accept the Terms of Service below first")
             }
             .padding(28)
 
@@ -53,6 +63,8 @@ struct GigEditorView: View {
             }
         }
         .frame(width: 1000, height: 820)
+        // Flattens Explore's floating cards so they stay behind this sheet
+        .sheetPresence()
         .task { await load() }
         .onChange(of: photoItem) { Task { await loadPhoto() } }
         .fileImporter(isPresented: $pickingModel, allowedContentTypes: [.usdz]) { result in
@@ -77,7 +89,9 @@ struct GigEditorView: View {
                 keywordsEditor
             }
 
-            section("Cover Image") {
+            section("Media") {
+                Text("Add a picture, a YouTube video, or both. With only a video, its YouTube thumbnail becomes the cover.")
+                    .font(.subheadline).foregroundStyle(.secondary)
                 HStack(spacing: 18) {
                     Group {
                         if let newImage {
@@ -98,9 +112,34 @@ struct GigEditorView: View {
                             Label(draft.imageUrl.isEmpty && newImage == nil ? "Choose Image" : "Change Image", systemImage: "photo.on.rectangle")
                         }
                         .buttonStyle(.bordered)
-                        Text("Compressed to under 1 MB and uploaded to Firebase Storage.")
+                        Text("Up to 5 MB. Bigger photos are compressed automatically.")
                             .font(.caption).foregroundStyle(.secondary)
+                        if newImage != nil || !draft.imageUrl.isEmpty {
+                            Button(role: .destructive) {
+                                newImage = nil
+                                photoItem = nil
+                                draft.imageUrl = ""
+                            } label: {
+                                Label("Remove Picture", systemImage: "trash")
+                            }
+                            .buttonStyle(.bordered)
+                        }
                     }
+                }
+                GlassField(title: "YouTube Video URL (Optional)", text: $draft.youtubeUrl, prompt: "e.g. https://youtu.be/...")
+                // Same declaration as the iOS app, required whenever there's a picture or a video
+                if hasMedia {
+                    Toggle(isOn: $draft.videoConsent) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text("Mandatory UGC & Copyright Declaration")
+                                .font(.headline).foregroundStyle(.red)
+                            Text(Self.ugcDeclaration).font(.callout)
+                        }
+                    }
+                    .toggleStyle(CheckboxToggle())
+                    .padding(14)
+                    .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.small))
+                    .overlay(RoundedRectangle(cornerRadius: Radius.small).stroke(Color.red.opacity(0.3)))
                 }
             }
 
@@ -137,18 +176,35 @@ struct GigEditorView: View {
                 }
             }
 
-            section("Video (optional)") {
-                GlassField(title: "YouTube URL", text: $draft.youtubeUrl, prompt: "https://youtube.com/watch?v=…")
-                if !draft.youtubeUrl.trimmed.isEmpty {
-                    Toggle("I own this video or have permission to use it (Video Copyright Declaration)", isOn: $draft.videoConsent)
-                }
-            }
-
             section("Packages") {
+                // One, two or three packages (iOS app: at least one, at most three)
+                HStack {
+                    Text("\(draft.packages.count) of 3 packages").font(.subheadline).foregroundStyle(.secondary)
+                    Spacer()
+                    if draft.packages.count < 3 {
+                        Button {
+                            withAnimation { draft.addPackage() }
+                        } label: {
+                            Label("Add Package", systemImage: "plus")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
                 HStack(alignment: .top, spacing: 16) {
                     ForEach($draft.packages) { $pkg in
                         VStack(alignment: .leading, spacing: 10) {
-                            TextField("Name", text: $pkg.name).font(.headline).textFieldStyle(.roundedBorder)
+                            HStack {
+                                TextField("Name", text: $pkg.name).font(.headline).textFieldStyle(.roundedBorder)
+                                if draft.packages.count > 1 {
+                                    Button(role: .destructive) {
+                                        withAnimation { draft.removePackage(id: pkg.id) }
+                                    } label: {
+                                        Image(systemName: "trash")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .help("Remove this package")
+                                }
+                            }
                             HStack {
                                 Text("$")
                                 TextField("Price", value: $pkg.price, format: .number).textFieldStyle(.roundedBorder)
@@ -197,6 +253,34 @@ struct GigEditorView: View {
                     }
                 }
             }
+
+            // Terms of Service, required before submitting (iOS app)
+            Toggle(isOn: $agreedToTerms) {
+                Text(Self.termsText).font(.callout)
+            }
+            .toggleStyle(CheckboxToggle())
+            .padding(16)
+            .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.small))
+        }
+    }
+
+    /// A tick box with the text beside it
+    struct CheckboxToggle: ToggleStyle {
+        func makeBody(configuration: Configuration) -> some View {
+            Button {
+                configuration.isOn.toggle()
+            } label: {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: configuration.isOn ? "checkmark.square.fill" : "square")
+                        .font(.title2)
+                        .foregroundStyle(configuration.isOn ? Color.brandGreen : .secondary)
+                    configuration.label
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityValue(configuration.isOn ? "Checked" : "Unchecked")
         }
     }
 
@@ -257,6 +341,14 @@ struct GigEditorView: View {
     }
 
     private func save() async {
+        guard hasMedia else {
+            errorMessage = "Add a picture or a YouTube video."
+            return
+        }
+        guard draft.videoConsent else {
+            errorMessage = "You must accept the Mandatory UGC & Copyright Declaration."
+            return
+        }
         saving = true
         do {
             try await seller.save(draft, newImage: newImage, newModel: newModel, session: session)

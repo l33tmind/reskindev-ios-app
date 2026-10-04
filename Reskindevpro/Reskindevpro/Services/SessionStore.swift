@@ -120,11 +120,18 @@ final class SessionStore {
         photoUrl = avatar
     }
 
-    /// Buyer → seller: unlocks My Gigs and Earnings (admins stay admins)
-    func becomeSeller() async throws {
+    var isAdmin: Bool { role == "admin" }
+    var isFreelancer: Bool { role == "freelancer" }
+
+    /// Website "Switch to Seller / Switch to Buyer": flips users/{uid}.role between buyer and freelancer
+    /// (admins don't switch). My Orders follows the new side.
+    func switchRole() async throws {
         guard let uid else { throw SessionError.signInRequired }
-        try await db.collection("users").document(uid).updateData(["role": "freelancer"])
-        role = "freelancer"
+        guard !isAdmin else { return }
+        let newRole = isFreelancer ? "buyer" : "freelancer"
+        try await db.collection("users").document(uid).updateData(["role": newRole])
+        role = newRole
+        mode = newRole == "freelancer" ? .seller : .buyer
     }
 
     func signOut() {
@@ -220,7 +227,12 @@ final class SessionStore {
             if let name = FS.string(d["displayName"]) ?? FS.string(d["name"]) { self.displayName = name }
             // Website writes photoURL, Flutter wrote photoUrl
             if let photo = FS.string(d["photoURL"]) ?? FS.string(d["photoUrl"]) { self.photoUrl = photo }
-            self.role = d["role"] as? String
+            // Role changed (sign-in, or switched on the website): My Orders shows that side
+            let newRole = d["role"] as? String
+            if newRole != self.role {
+                self.role = newRole
+                self.mode = newRole == "freelancer" ? .seller : .buyer
+            }
             self.username = d["username"] as? String ?? ""
             self.phone = d["phone"] as? String ?? ""
             self.country = d["country"] as? String ?? ""

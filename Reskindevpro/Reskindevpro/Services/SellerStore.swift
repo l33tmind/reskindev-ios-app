@@ -71,6 +71,20 @@ struct GigDraft {
         ]
     }
 
+    /// 1 to 3 packages, like the iOS app
+    mutating func addPackage() {
+        guard packages.count < 3 else { return }
+        let names = ["Basic", "Standard", "Premium"]
+        let name = names.first { n in !packages.contains { $0.name == n } } ?? "Package \(packages.count + 1)"
+        packages.append(.init(name: name, price: 0, description: "", deliveryDays: 3,
+                              featureChecks: Array(repeating: false, count: masterFeatures.count)))
+    }
+
+    mutating func removePackage(id: UUID) {
+        guard packages.count > 1 else { return }
+        packages.removeAll { $0.id == id }
+    }
+
     mutating func addFeature(_ name: String) {
         let clean = name.trimmingCharacters(in: .whitespaces)
         guard !clean.isEmpty else { return }
@@ -205,14 +219,20 @@ final class SellerStore {
     func save(_ draft: GigDraft, newImage: UIImage?, newModel: URL? = nil, session: SessionStore) async throws {
         guard let uid = session.uid else { throw SessionError.signInRequired }
         guard !draft.title.trimmed.isEmpty else { throw SellerError.titleRequired }
-        if !draft.youtubeUrl.trimmed.isEmpty && !draft.videoConsent { throw SellerError.videoConsent }
+        let youtube = draft.youtubeUrl.trimmed
+        let hasMedia = newImage != nil || !draft.imageUrl.isEmpty || !youtube.isEmpty
+        guard hasMedia else { throw SellerError.mediaRequired }
+        if !draft.videoConsent { throw SellerError.videoConsent }
 
         var imageUrl = draft.imageUrl
         if let newImage { imageUrl = try await upload(newImage, uid: uid) }
+        // Video only: its YouTube thumbnail is the cover (iOS app)
+        if imageUrl.isEmpty, let id = GigModel.youtubeID(from: youtube) {
+            imageUrl = "https://img.youtube.com/vi/\(id)/maxresdefault.jpg"
+        }
         var model3dUrl = draft.model3dUrl
         if let newModel { model3dUrl = try await uploadModel(newModel, uid: uid) }
 
-        let youtube = draft.youtubeUrl.trimmed
         var payload: [String: Any] = [
             "title": draft.title.trimmed,
             "description": draft.descriptionHTML,
@@ -223,6 +243,7 @@ final class SellerStore {
             "videoConsent": draft.videoConsent,
             "videoConsentTimestamp": (!youtube.isEmpty && draft.videoConsent) ? Date() : NSNull(),
             "imageUrl": imageUrl,
+            "images": imageUrl.isEmpty ? [] : [imageUrl],
             "model3dUrl": model3dUrl,
             "masterFeatures": draft.masterFeatures,
             "packages": draft.packages.map { p in
@@ -261,12 +282,12 @@ final class SellerStore {
         try await db.collection("services").document(gigID).delete()
     }
 
-    /// gigs/{uid}/{timestamp}_{random}.jpg, kept under the website's 1 MB limit
+    /// gigs/{uid}/{timestamp}_{random}.jpg, at most 5 MB (compressed only when bigger)
     private func upload(_ image: UIImage, uid: String) async throws -> String {
         var quality: CGFloat = 0.85
         var data = image.jpegData(compressionQuality: quality)
         var working = image
-        while let d = data, d.count > 1_000_000 {
+        while let d = data, d.count > 5_000_000 {
             if quality > 0.4 {
                 quality -= 0.15
             } else {
@@ -373,12 +394,13 @@ final class SellerStore {
 }
 
 enum SellerError: LocalizedError {
-    case titleRequired, videoConsent, imageUnreadable, modelTooLarge, minimumWithdrawal, insufficientFunds
+    case titleRequired, videoConsent, mediaRequired, imageUnreadable, modelTooLarge, minimumWithdrawal, insufficientFunds
 
     var errorDescription: String? {
         switch self {
         case .titleRequired: "Title is required!"
-        case .videoConsent: "Please accept the Video Copyright Declaration to proceed."
+        case .videoConsent: "You must accept the Mandatory UGC & Copyright Declaration."
+        case .mediaRequired: "Add a picture or a YouTube video."
         case .imageUnreadable: "Couldn't read that image."
         case .modelTooLarge: "The 3D model must be 50 MB or smaller."
         case .minimumWithdrawal: "Minimum withdrawal is $20."
