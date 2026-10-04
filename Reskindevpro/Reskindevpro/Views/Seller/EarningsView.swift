@@ -62,7 +62,7 @@ struct EarningsView: View {
         .overlay { if seller.earningsLoading { ProgressView() } }
         .navigationTitle("Earnings")
         .task { await seller.loadEarnings(session: session) }
-        .sheet(isPresented: $showWithdraw) { WithdrawSheet() }
+        .sheet(isPresented: $showWithdraw) { WithdrawSheet().sheetPresence() }
     }
 
     private func tile(_ title: String, _ value: String, _ icon: String, highlight: Bool = false) -> some View {

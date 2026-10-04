@@ -8,8 +8,14 @@ struct CenterStageView: View {
     @State private var centeredID: String?
     @FocusState private var searchFocused: Bool
 
-    /// 1 normally; 0 while a sheet is open so the floating cards lie flat and don't poke through it
-    private var depth: CGFloat { appModel.openSheets > 0 ? 0 : 1 }
+    /// 1 normally; 0 while a sheet is open or you're typing a search (the keyboard floats in front),
+    /// so the floating cards lie flat and don't poke through anything
+    private var depth: CGFloat { appModel.openSheets > 0 || searchFocused ? 0 : 1 }
+
+    /// How far the cards float in front of the window (points). The search bar floats further, so cards
+    /// scrolled up under it pass behind it, never through it.
+    private static let cardLift: CGFloat = 16
+    private static let searchBarLift: CGFloat = 64
 
     var body: some View {
         @Bindable var store = store
@@ -62,7 +68,7 @@ struct CenterStageView: View {
             }
             .padding(8)
             .glassBackgroundEffect(in: Capsule())
-            .offset(z: 40 * depth)
+            .offset(z: Self.searchBarLift * depth)
 
             // Below the search bar the home scrolls up/down: spotlight carousel, then a row per section.
             // Every row scrolls left/right on its own.
@@ -202,7 +208,7 @@ struct CenterStageView: View {
                     .gazeLift(scale: offset == 0 ? 1.08 : 1.15)
                     .rotation3DEffect(.degrees(Double(offset.signum()) * -32 * depth), axis: (x: 0, y: 1, z: 0))
                     // keep every card in front of the window plane, focused card closest — flat while a sheet is up
-                    .offset(z: max(0, 3 - distance) * 30 * depth)
+                    .offset(z: max(0, 3 - distance) * Self.cardLift * depth)
                     .scaleEffect(distance == 0 ? 1 : (distance == 1 ? 0.86 : 0.74))
                     .opacity(distance > 2 ? 0 : (distance == 2 ? 0.75 : 1))
                     .zIndex(Double(-abs(offset)))
@@ -219,6 +225,7 @@ struct CenterStageView: View {
         // Hidden while a sheet is up: turned side cards would otherwise show through its glass
         .opacity(appModel.openSheets > 0 ? 0 : 1)
         .animation(.easeInOut(duration: 0.25), value: appModel.openSheets > 0)
+        .animation(.easeInOut(duration: 0.25), value: searchFocused)
         .animation(.spring(duration: 0.45), value: centeredID)
         .onAppear { recenter(gigs) }
         .onChange(of: gigs.map(\.id)) { recenter(gigs) }

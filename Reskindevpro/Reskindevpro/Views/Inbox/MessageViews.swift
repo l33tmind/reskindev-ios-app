@@ -332,7 +332,7 @@ private struct OfferCard: View {
             if !isMine { Spacer(minLength: 120) }
         }
         // Same as the website: Accept Offer opens a checkout (fee, payment, contact, requirements)
-        .sheet(isPresented: $showCheckout) { CheckoutView(offer: message, in: conversation) }
+        .sheet(isPresented: $showCheckout) { CheckoutView(offer: message, in: conversation).sheetPresence() }
     }
 
     private func accept() { showCheckout = true }

@@ -73,7 +73,7 @@ struct ChatView: View {
                     OrderActionSheet(order: order, action: action) { show($0) }
                 }
             }
-            .sheet(isPresented: $showOffer) { OfferComposer() }
+            .sheet(isPresented: $showOffer) { OfferComposer().sheetPresence() }
             .alert("Report user", isPresented: $showReport) {
                 ReportButtons { reason in
                     Task {

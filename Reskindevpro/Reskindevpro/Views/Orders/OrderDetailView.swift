@@ -89,7 +89,7 @@ struct OrderDetailView: View {
         }
         .frame(width: 720, height: 780)
         .animation(.snappy, value: action)
-        .sheet(item: $invoiceOrder) { InvoiceView(order: $0) }
+        .sheet(item: $invoiceOrder) { InvoiceView(order: $0).sheetPresence() }
     }
 
     private func header(_ order: OrderModel, isBuyer: Bool) -> some View {
