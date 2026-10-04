@@ -30,6 +30,8 @@
 			<string>reskin dev pro</string>
 		</dict>
 	</array>
+	<key>NSSupportsGroupActivities</key>
+	<true/>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationPreferredDefaultSceneSessionRole</key>

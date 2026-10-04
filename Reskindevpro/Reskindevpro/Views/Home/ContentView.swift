@@ -61,6 +61,13 @@ struct ContentView: View {
         }
         #endif
         .liveAlerts()
+        // SharePlay: a Watch Together session opens that delivery in the Theater
+        .task { await SharePlayCenter.shared.observe() }
+        .onChange(of: SharePlayCenter.shared.pendingItem) {
+            guard let item = SharePlayCenter.shared.pendingItem else { return }
+            SharePlayCenter.shared.pendingItem = nil
+            openWindow(id: WindowID.theater, value: item)
+        }
         // Widgets: reskindev://orders, reskindev://messages
         .onOpenURL { url in
             guard url.scheme == "reskindev" else { return }

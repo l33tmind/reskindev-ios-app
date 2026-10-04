@@ -1,6 +1,7 @@
 import SwiftUI
 import AVKit
 import WebKit
+import GroupActivities
 
 // MARK: - Delivery Theater: the seller's delivered work on a big screen in your room
 // Reads the delivery link and shows it the best way: YouTube or video files play, images fill the screen,
@@ -69,6 +70,9 @@ struct DeliveryTheaterView: View {
     @Environment(\.dismissWindow) private var dismissWindow
 
     private var content: DeliveryContent? { DeliveryContent(link: item.link) }
+    /// Kept across redraws so SharePlay can sync it
+    @State private var player: AVPlayer?
+    private let sharePlay = SharePlayCenter.shared
 
     /// Live order (from My Orders or the open chat) so the buttons follow its status
     private var order: OrderModel? {
@@ -117,7 +121,13 @@ struct DeliveryTheaterView: View {
         case .youtube(let id):
             YouTubePlayer(videoID: id)
         case .video(let url):
-            VideoPlayer(player: AVPlayer(url: url))
+            VideoPlayer(player: player)
+                .task(id: url) {
+                    let player = AVPlayer(url: url)
+                    self.player = player
+                    syncPlayer()
+                }
+                .onChange(of: sharePlay.isSharing(item)) { syncPlayer() }
         case .image(let url):
             AsyncImage(url: url) { phase in
                 if let image = phase.image {
@@ -148,6 +158,12 @@ struct DeliveryTheaterView: View {
         }
     }
 
+    /// Play, pause and scrubbing follow everyone in the SharePlay session
+    private func syncPlayer() {
+        guard let player, let session = sharePlay.session, sharePlay.isSharing(item) else { return }
+        player.playbackCoordinator.coordinateWithSession(session)
+    }
+
     private var footer: some View {
         HStack(alignment: .center, spacing: 16) {
             if !item.message.isEmpty {
@@ -162,6 +178,20 @@ struct DeliveryTheaterView: View {
             if let url = URL(string: item.link), !item.link.isEmpty {
                 Link(destination: url) { Label("Open in Safari", systemImage: "safari") }
                     .buttonStyle(.bordered)
+            }
+            // Review it together on a FaceTime call
+            if sharePlay.isSharing(item) {
+                Label("Watching together", systemImage: "shareplay")
+                    .font(.headline)
+                    .foregroundStyle(Color.brandGreen)
+            } else {
+                Button {
+                    Task { await sharePlay.start(item) }
+                } label: {
+                    Label("Watch Together", systemImage: "shareplay")
+                }
+                .buttonStyle(.bordered)
+                .help("Review this delivery together on FaceTime with SharePlay")
             }
             // Buyer, still waiting on them: straight to accept / ask for changes
             if let order, order.isDelivered, order.isBuyer(session.uid) {
