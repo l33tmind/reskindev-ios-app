@@ -306,12 +306,12 @@ final class SellerStore {
         return try await ref.downloadURL().absoluteString
     }
 
-    /// gig_models/{uid}/{timestamp}.usdz (up to 50 MB)
+    /// gig_models/{uid}/{timestamp}.usdz (under 25 MB, the Storage rules limit)
     private func uploadModel(_ file: URL, uid: String) async throws -> String {
         let scoped = file.startAccessingSecurityScopedResource()
         defer { if scoped { file.stopAccessingSecurityScopedResource() } }
         let data = try Data(contentsOf: file)
-        guard data.count <= 50_000_000 else { throw SellerError.modelTooLarge }
+        guard data.count < 25 * 1024 * 1024 else { throw SellerError.modelTooLarge }
         let ref = Storage.storage().reference().child("gig_models/\(uid)/\(Int(Date().timeIntervalSince1970 * 1000)).usdz")
         let metadata = StorageMetadata()
         metadata.contentType = "model/vnd.usdz+zip"
@@ -402,7 +402,7 @@ enum SellerError: LocalizedError {
         case .videoConsent: "You must accept the Mandatory UGC & Copyright Declaration."
         case .mediaRequired: "Add a picture or a YouTube video."
         case .imageUnreadable: "Couldn't read that image."
-        case .modelTooLarge: "The 3D model must be 50 MB or smaller."
+        case .modelTooLarge: "The 3D model must be smaller than 25 MB."
         case .minimumWithdrawal: "Minimum withdrawal is $20."
         case .insufficientFunds: "Insufficient available funds."
         }

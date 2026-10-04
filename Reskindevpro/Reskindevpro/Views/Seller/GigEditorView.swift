@@ -153,7 +153,7 @@ struct GigEditorView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text(newModel?.lastPathComponent ?? (draft.model3dUrl.isEmpty ? "No model yet" : "3D model attached"))
                             .font(.headline)
-                        Text("Upload a .usdz (up to 50 MB). Buyers on Apple Vision Pro can place it in their room.")
+                        Text("Upload a .usdz (under 25 MB). Buyers on Apple Vision Pro can place it in their room.")
                             .font(.caption).foregroundStyle(.secondary)
                         HStack {
                             Button {
