@@ -18,6 +18,10 @@ struct ImmersiveView: View {
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @State private var perches = ButterflyPerches()
     @State private var flight: Task<Void, Never>?
+    /// Showroom root, so cards can be dragged from SwiftUI
+    @State private var showroomRoot: Entity?
+    /// A card is being held close to the Save basket
+    @State private var overBasket = false
 
     /// One arc of cards
     struct Shelf {
@@ -29,6 +33,15 @@ struct ImmersiveView: View {
 
     private static let perShelf = 5
     private static let titleID = "showroom-title"
+    private static let basketID = "save-basket"
+    /// Beside the Showroom title, above the windows, where it's always in view
+    private static let basketPosition: SIMD3<Float> = [0.95, 2.3, -2.2]
+    private static let dropDistance: Float = 0.5
+    /// Immersive-space points → metres
+    private static let metresPerPoint: Float = 1 / 1360
+
+    /// Where a card was when the drag began
+    private struct DragOrigin: Component { var position: SIMD3<Float> }
 
     /// Top arc: recently viewed. Bottom arc: saved. Neither yet → the spotlight picks.
     private var shelves: [Shelf] {
@@ -53,6 +66,7 @@ struct ImmersiveView: View {
             let root = Entity()
             root.name = "showroom"
             content.add(root)
+            showroomRoot = root
             Self.layout(root: root, shelves: shelves, attachments: attachments)
             perches.names = Self.perchNames(shelves)
 
@@ -69,6 +83,7 @@ struct ImmersiveView: View {
             perches.names = Self.perchNames(shelves)
         } attachments: {
             Attachment(id: Self.titleID) { header }
+            Attachment(id: Self.basketID) { basket }
             ForEach(shelves, id: \.key) { shelf in
                 Attachment(id: Self.labelID(shelf)) {
                     Label(shelf.title, systemImage: shelf.icon)
@@ -86,7 +101,8 @@ struct ImmersiveView: View {
                         }
                         .buttonStyle(.plain)
                         .gazeLift(scale: 1.06)
-                        .accessibilityHint("Closes the Showroom and opens this service")
+                        .gesture(dragToSave(cardID: Self.cardID(shelf, gig), gig: gig))
+                        .accessibilityHint("Closes the Showroom and opens this service. Drag it to the heart to save it.")
                     }
                 }
             }
@@ -110,6 +126,54 @@ struct ImmersiveView: View {
             names = shelf.gigs.prefix(2).map { cardID(shelf, $0) }
         }
         return names
+    }
+
+    /// The heart basket: drop a card here to save it
+    private var basket: some View {
+        VStack(spacing: 8) {
+            Image(systemName: overBasket ? "heart.fill" : "heart")
+                .font(.system(size: 54, weight: .bold))
+                .foregroundStyle(overBasket ? .pink : .white)
+                .symbolEffect(.bounce, value: overBasket)
+            Text(session.isSignedIn ? "Drop a card here to save it" : "Sign in to save services")
+                .font(.headline)
+        }
+        .padding(.horizontal, 30)
+        .padding(.vertical, 20)
+        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large))
+        .scaleEffect(overBasket ? 1.15 : 1)
+        .animation(.spring, value: overBasket)
+    }
+
+    /// Pick a card up and carry it to the heart; let go anywhere else and it floats back
+    private func dragToSave(cardID: String, gig: GigModel) -> some Gesture {
+        DragGesture(minimumDistance: 24, coordinateSpace: .immersiveSpace)
+            .onChanged { value in
+                guard let card = showroomRoot?.findEntity(named: cardID) else { return }
+                if card.components[DragOrigin.self] == nil {
+                    card.components.set(DragOrigin(position: card.position))
+                }
+                let origin = card.components[DragOrigin.self]!.position
+                let t = value.translation3D
+                card.position = origin + SIMD3(Float(t.x), Float(-t.y), Float(t.z)) * Self.metresPerPoint
+                overBasket = distance(card.position, Self.basketPosition) < Self.dropDistance
+            }
+            .onEnded { _ in
+                guard let card = showroomRoot?.findEntity(named: cardID),
+                      let origin = card.components[DragOrigin.self]?.position else { return }
+                card.components.remove(DragOrigin.self)
+                let dropped = distance(card.position, Self.basketPosition) < Self.dropDistance
+                overBasket = false
+                if dropped, session.isSignedIn {
+                    SoundFX.success.play(on: card)
+                    if !session.isSaved(gig.id) {
+                        Task { try? await session.toggleSave(gig.id) }
+                    }
+                }
+                var back = card.transform
+                back.translation = origin
+                card.move(to: back, relativeTo: card.parent, duration: 0.5, timingFunction: .easeOut)
+            }
     }
 
     /// Leave the Showroom and show just the gig's page
@@ -139,7 +203,7 @@ struct ImmersiveView: View {
     /// Each shelf is two arcs 2.1 m away on your left and right (the middle stays clear for the windows),
     /// turned to face you; first shelf at eye level, second below
     private static func layout(root: Entity, shelves: [Shelf], attachments: RealityViewAttachments) {
-        var wanted: Set<String> = [titleID]
+        var wanted: Set<String> = [titleID, basketID]
         for shelf in shelves {
             wanted.insert(labelID(shelf))
             shelf.gigs.forEach { wanted.insert(cardID(shelf, $0)) }
@@ -151,6 +215,14 @@ struct ImmersiveView: View {
         let radius: Float = 2.1
         let shelfHeights: [Float] = [1.55, 0.8]    // card centres (metres from the floor)
         let cardScale: Float = 2.3                  // ≈ 50 cm wide cards
+
+        if let basket = attachments.entity(for: basketID) {
+            basket.name = basketID
+            if basket.parent == nil { root.addChild(basket) }
+            basket.position = basketPosition
+            basket.orientation = simd_quatf(angle: -0.4, axis: [0, 1, 0])
+            basket.scale = [1.6, 1.6, 1.6]
+        }
 
         if let title = attachments.entity(for: titleID) {
             title.name = titleID
@@ -185,6 +257,8 @@ struct ImmersiveView: View {
                 card.name = cardID(shelf, gig)
                 if card.parent == nil { root.addChild(card) }
 
+                // Leave a card alone while it's being carried
+                guard card.components[DragOrigin.self] == nil else { continue }
                 let a = angle(index)
                 card.position = [radius * sin(a), y, -radius * cos(a)]
                 card.orientation = simd_quatf(angle: -a, axis: [0, 1, 0])

@@ -5,6 +5,7 @@ struct EarningsView: View {
     @Environment(SellerStore.self) private var seller
     @Environment(SessionStore.self) private var session
     @State private var showWithdraw = false
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         let e = seller.earnings
@@ -23,6 +24,13 @@ struct EarningsView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Spacer()
+                    Button {
+                        openWindow(id: WindowID.earnings3D)
+                    } label: {
+                        Label("3D Chart", systemImage: "chart.bar.xaxis")
+                    }
+                    .buttonStyle(.bordered)
+                    .help("Your last 6 months as 3D bars you can turn around")
                     Button("Withdraw Funds") { showWithdraw = true }
                         .buttonStyle(GlassOutlineButtonStyle(prominent: true))
                         .frame(width: 220)

@@ -151,6 +151,8 @@ struct EarningsSummary {
     var platformFee: Double = 10
     var pending: [(title: String, amount: Double, clearsAt: Date)] = []
     var withdrawals: [(amount: Double, status: String, date: Date?)] = []
+    /// Seller's share per month, last 6 months, oldest first (3D chart)
+    var monthly: [(month: Date, amount: Double)] = []
 }
 
 @Observable
@@ -310,6 +312,10 @@ final class SellerStore {
         var summary = EarningsSummary(platformFee: fee)
         let clearance: TimeInterval = 15 * 86_400
         var available: Double = 0
+        let calendar = Calendar.current
+        let thisMonth = calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+        let months = (0..<6).reversed().compactMap { calendar.date(byAdding: .month, value: -$0, to: thisMonth) }
+        var byMonth = Dictionary(uniqueKeysWithValues: months.map { ($0, 0.0) })
         for doc in orders {
             let d = doc.data()
             guard d["status"] as? String == "completed" else { continue }
@@ -317,6 +323,10 @@ final class SellerStore {
             let price = FS.double(d["price"]) ?? 0
             let share = price - price * fee / 100
             summary.totalEarnings += share
+            if let date = FS.date(d["completedAt"]) ?? FS.date(d["createdAt"]),
+               let month = calendar.dateInterval(of: .month, for: date)?.start, byMonth[month] != nil {
+                byMonth[month, default: 0] += share
+            }
             if let completed = FS.date(d["completedAt"]), Date().timeIntervalSince(completed) < clearance {
                 summary.pendingClearance += share
                 summary.pending.append((FS.string(d["gigTitle"]) ?? "Order", share, completed.addingTimeInterval(clearance)))
@@ -330,6 +340,7 @@ final class SellerStore {
             summary.withdrawals.append((FS.double(d["amount"]) ?? 0, FS.string(d["status"]) ?? "pending", FS.date(d["createdAt"])))
         }
         summary.available = available - summary.withdrawn + session.walletBalance
+        summary.monthly = months.map { ($0, byMonth[$0] ?? 0) }
         summary.pending.sort { $0.clearsAt < $1.clearsAt }
         summary.withdrawals.sort { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
         earnings = summary

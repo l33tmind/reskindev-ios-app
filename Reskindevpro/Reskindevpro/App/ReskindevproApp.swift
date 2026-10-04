@@ -115,6 +115,14 @@ struct ReskindevproApp: App {
         .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)
         .restorationBehavior(.disabled)
 
+        // Seller earnings as 3D bars on your desk
+        WindowGroup(id: WindowID.earnings3D) {
+            stores(Earnings3DView().needsHomeWindow())
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 0.7, height: 0.5, depth: 0.4, in: .meters)
+        .restorationBehavior(.disabled)
+
         // Delivery Theater: delivered work on a big screen
         WindowGroup(id: WindowID.theater, for: TheaterItem.self) { $item in
             if let item { stores(DeliveryTheaterView(item: item).needsHomeWindow()) }

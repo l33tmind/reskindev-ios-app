@@ -154,6 +154,7 @@ extension ContentView {
         for key in appModel.openSellerKeys { dismissWindow(id: WindowID.sellerProfile, value: key) }
         for url in appModel.openModelURLs { dismissWindow(id: WindowID.model3D, value: url) }
         for item in appModel.openTheaters { dismissWindow(id: WindowID.theater, value: item) }
+        if appModel.isEarnings3DOpen { dismissWindow(id: WindowID.earnings3D) }
         if appModel.immersiveSpaceState == .open {
             Task { await dismissImmersiveSpace() }
         }
