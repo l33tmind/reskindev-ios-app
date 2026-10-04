@@ -167,9 +167,6 @@ struct GlassOutlineButtonStyle: ButtonStyle {
             .contentShape(.hoverEffect, RoundedRectangle(cornerRadius: Radius.small))
             .hoverEffect(.highlight)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .onChange(of: configuration.isPressed) { wasPressed, isPressed in
-                if wasPressed && !isPressed { SoundFX.click.play() }
-            }
     }
 }
 

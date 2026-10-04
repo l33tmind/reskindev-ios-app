@@ -128,7 +128,7 @@ struct ImmersiveView: View {
         let saved = session.isSaved(gig.id)
         return Button {
             guard session.isSignedIn else { return }
-            if !saved { SoundFX.success.play() } else { SoundFX.click.play() }
+            if !saved { SoundFX.success.play() }
             Task { try? await session.toggleSave(gig.id) }
         } label: {
             Image(systemName: saved ? "heart.fill" : "heart")
@@ -147,7 +147,6 @@ struct ImmersiveView: View {
 
     /// Leave the Showroom and show just the gig's page
     private func open(_ gig: GigModel) {
-        SoundFX.tap.play()
         openWindow(id: WindowID.gigDetail, value: gig.id)
         Task { await dismissImmersiveSpace() }
     }

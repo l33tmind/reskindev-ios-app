@@ -7,6 +7,8 @@ struct CenterStageView: View {
     @Environment(AppModel.self) private var appModel
     @Environment(\.openWindow) private var openWindow
     @State private var centeredID: String?
+    /// The last centre change came from tapping a side card (not a swipe)
+    @State private var tappedToCenter = false
     @FocusState private var searchFocused: Bool
 
     /// 1 normally; 0 while a sheet is open or you're typing a search (the keyboard floats in front),
@@ -162,7 +164,6 @@ struct CenterStageView: View {
                 LazyHStack(spacing: 16) {
                     ForEach(section.gigs) { gig in
                         Button {
-                            SoundFX.click.play()
                             openWindow(id: WindowID.gigDetail, value: gig.id)
                         } label: {
                             CompactGigCard(gig: gig)
@@ -204,10 +205,10 @@ struct CenterStageView: View {
                     let distance = CGFloat(abs(offset))
 
                     Button {
-                        SoundFX.click.play()
                         if offset == 0 {
                             openWindow(id: WindowID.gigDetail, value: gig.id)       // focused → open details
                         } else {
+                            tappedToCenter = true   // the system tap sound covers this one, no tick
                             withAnimation(.spring(duration: 0.45)) { centeredID = gig.id } // side → bring forward
                         }
                     } label: {
@@ -238,7 +239,8 @@ struct CenterStageView: View {
         .animation(.spring(duration: 0.45), value: centeredID)
         // A tiny tick each time a new card comes to the front (swiping left/right or tapping a side card)
         .onChange(of: centeredID) { old, new in
-            if old != nil, new != nil { SoundFX.tick.play() }
+            defer { tappedToCenter = false }
+            if old != nil, new != nil, !tappedToCenter { SoundFX.tick.play() }
         }
         .onAppear { recenter(gigs) }
         .onChange(of: gigs.map(\.id)) { recenter(gigs) }

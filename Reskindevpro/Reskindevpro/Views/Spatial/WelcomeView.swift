@@ -72,7 +72,6 @@ struct WelcomeView: View {
                         .buttonStyle(.bordered)
                 }
                 Button {
-                    SoundFX.tap.play()
                     if page < pages.count - 1 {
                         withAnimation(.spring) { page += 1 }
                     } else {
