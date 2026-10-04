@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 // Models → Models/       Firestore stores + order/chat writes → Services/
 // Colors, radius, CachedImage, skeleton, buttons → DesignSystem/
@@ -19,6 +20,7 @@ struct ContentView: View {
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
+    @Environment(\.requestReview) private var requestReview
     private let push = PushService.shared
     private let siri = SiriBridge.shared
     @State private var showWelcome = false
@@ -68,6 +70,19 @@ struct ContentView: View {
         }
         #endif
         .liveAlerts()
+        // The 3rd time someone opens the 3D Showroom, ask for an App Store rating (once)
+        .onChange(of: appModel.immersiveSpaceState) {
+            guard appModel.immersiveSpaceState == .open else { return }
+            let key = "showroomVisits"
+            let visits = UserDefaults.standard.integer(forKey: key) + 1
+            UserDefaults.standard.set(visits, forKey: key)
+            guard visits == 3 else { return }
+            Task {
+                // Let them see the Showroom first
+                try? await Task.sleep(for: .seconds(4))
+                requestReview()
+            }
+        }
         // SharePlay: a Watch Together session opens that delivery in the Theater
         .task { await SharePlayCenter.shared.observe() }
         .onChange(of: SharePlayCenter.shared.pendingItem) {
