@@ -82,17 +82,19 @@ struct ImmersiveView: View {
                 }
                 ForEach(shelf.gigs) { gig in
                     Attachment(id: Self.cardID(shelf, gig)) {
-                        Button {
-                            open(gig)
-                        } label: {
-                            GigCardView(gig: gig, isFocused: true)
+                        // Save / unsave sits just outside the card's top-right corner
+                        HStack(alignment: .top, spacing: 10) {
+                            Button {
+                                open(gig)
+                            } label: {
+                                GigCardView(gig: gig, isFocused: true)
+                            }
+                            .buttonStyle(.plain)
+                            // Pops up from its top edge, so a butterfly sitting there stays sitting on it
+                            .gazeLift(scale: 1.06, anchor: .top)
+                            .accessibilityHint("Closes the Showroom and opens this service")
+                            saveButton(gig)
                         }
-                        .buttonStyle(.plain)
-                        // Pops up from its top edge, so a butterfly sitting there stays sitting on it
-                        .gazeLift(scale: 1.06, anchor: .top)
-                        .accessibilityHint("Closes the Showroom and opens this service")
-                        // Save / unsave right on the card
-                        .overlay(alignment: .topTrailing) { saveButton(gig) }
                     }
                 }
             }
@@ -135,7 +137,6 @@ struct ImmersiveView: View {
         }
         .buttonStyle(.plain)
         .hoverEffect(.lift)
-        .padding(18)
         .disabled(!session.isSignedIn)
         .accessibilityLabel(saved ? "Remove from saved" : "Save this service")
         .help(session.isSignedIn ? (saved ? "Remove from saved" : "Save") : "Sign in to save services")
@@ -199,18 +200,22 @@ struct ImmersiveView: View {
                 return side * (0.75 + Float(index / 2) * 0.38)
             }
 
-            // Shelf label sits just above the first (left) card's top edge, in the gap between shelves
+            // Shelf label sits just above the first (left) card's top edge, toward its left side —
+            // the butterfly lands on the right side of that edge, so the two never meet
             if let label = attachments.entity(for: labelID(shelf)) {
                 label.name = labelID(shelf)
                 if label.parent == nil { root.addChild(label) }
                 let a = angle(0)
-                var halfHeight: Float = 0.33
+                let turn = simd_quatf(angle: -a, axis: [0, 1, 0])
+                var halfHeight: Float = 0.33, halfWidth: Float = 0.24
                 if let first = shelf.gigs.first, let card = attachments.entity(for: cardID(shelf, first)) {
-                    let local = card.visualBounds(relativeTo: card).extents.y
-                    if local > 0 { halfHeight = local * cardScale / 2 }
+                    let local = card.visualBounds(relativeTo: card).extents
+                    if local.y > 0 { halfHeight = local.y * cardScale / 2 }
+                    if local.x > 0 { halfWidth = local.x * cardScale / 2 }
                 }
-                label.position = [radius * sin(a), y + halfHeight + 0.09, -radius * cos(a)]
-                label.orientation = simd_quatf(angle: -a, axis: [0, 1, 0])
+                let centre = SIMD3<Float>(radius * sin(a), y + halfHeight + 0.09, -radius * cos(a))
+                label.position = centre + turn.act([-halfWidth * 0.45, 0, 0])
+                label.orientation = turn
                 label.scale = [1.2, 1.2, 1.2]
             }
 

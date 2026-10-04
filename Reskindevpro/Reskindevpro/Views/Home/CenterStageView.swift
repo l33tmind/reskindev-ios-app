@@ -167,7 +167,7 @@ struct CenterStageView: View {
                 .padding(.vertical, 10)
                 .padding(.horizontal, 12)
             }
-            .frame(height: 250)
+            .frame(height: 280)
             // Soft left/right edges: cards slide in and out instead of being chopped off
             .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.04),
                                          .init(color: .black, location: 0.94), .init(color: .clear, location: 1)],

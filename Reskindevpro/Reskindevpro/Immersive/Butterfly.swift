@@ -119,9 +119,10 @@ enum Butterfly {
             let names = perches.names.filter { root.findEntity(named: $0) != nil }
             guard !names.isEmpty, let card = root.findEntity(named: names[next % names.count]) else { continue }
             next += 1
-            let bounds = card.visualBounds(relativeTo: root)
-            // Right on the top edge
-            let edge = SIMD3<Float>(bounds.center.x, bounds.max.y, bounds.center.z)
+            // On the top edge, toward the right side (the shelf label sits over the left side)
+            let local = card.visualBounds(relativeTo: card)
+            let spot = SIMD3<Float>(local.center.x + local.extents.x * 0.28, local.max.y, local.center.z)
+            let edge = card.convert(position: spot, to: root)
             let perch = edge + SIMD3(0, perchClearance, 0)
             await hop(butterfly, to: perch + SIMD3(0, 0.12, 0) + towardViewer(perch) * 0.05, in: root)
             await hop(butterfly, to: perch, in: root, landing: true)

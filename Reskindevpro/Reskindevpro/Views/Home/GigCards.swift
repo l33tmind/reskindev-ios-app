@@ -78,8 +78,7 @@ struct GigCardView: View {
                 // Title
                 Text(gig.title)
                     .font(.title3.weight(.semibold))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2, reservesSpace: true)
 
                 // Rating
                 HStack(spacing: 4) {
@@ -125,16 +124,29 @@ struct GigCardView: View {
     }
 }
 
-/// Smaller card used in the row under the carousel
+/// Smaller card used in the rows under the carousel:
+/// picture with its category, seller, a two-line title, then rating and price on one line
 struct CompactGigCard: View {
     let gig: GigModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             CachedImage(url: gig.imageUrl)
-                .frame(height: 100)
+                .frame(height: 110)
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
+                .overlay(alignment: .bottomLeading) {
+                    if !gig.category.isEmpty {
+                        Text(gig.category)
+                            .font(.caption2.weight(.bold))
+                            .lineLimit(1)
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.black.opacity(0.55), in: Capsule())
+                            .foregroundStyle(.white)
+                            .padding(6)
+                    }
+                }
 
             HStack(spacing: 6) {
                 Circle()
@@ -151,30 +163,26 @@ struct CompactGigCard: View {
                     .lineLimit(1)
             }
 
+            // Always two lines tall, so every card in a row lines up
             Text(gig.title)
-                .font(.headline)
-                .lineLimit(1)
-
-            HStack(spacing: 3) {
-                Image(systemName: gig.ratingIcon).foregroundStyle(Color.starYellow)
-                Text(gig.ratingText).foregroundStyle(.secondary)
-            }
-            .font(.caption2)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2, reservesSpace: true)
+                .multilineTextAlignment(.leading)
 
             Spacer(minLength: 0)
 
-            HStack {
-                Text(gig.category)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer()
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Image(systemName: gig.ratingIcon).foregroundStyle(Color.starYellow)
+                Text(gig.ratingShort).foregroundStyle(.secondary).lineLimit(1)
+                Spacer(minLength: 6)
                 Text("$\(String(format: "%.0f", gig.price))")
                     .font(.headline.weight(.bold))
+                    .foregroundStyle(Color.brandGreen)
             }
+            .font(.caption)
         }
         .padding(10)
-        .frame(width: 200, height: 225)
+        .frame(width: 210, height: 250)
         .background(Color.white.opacity(0.06))
         .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.medium))
         .overlay(RoundedRectangle(cornerRadius: Radius.medium).stroke(Color.white.opacity(0.14), lineWidth: 1))

@@ -47,6 +47,11 @@ struct GigModel: Identifiable, Hashable {
             : "Rising Talent"   // same label as the website for gigs without reviews yet
     }
 
+    /// Short form for small cards: "4.9 (14)" or "Rising Talent"
+    var ratingShort: String {
+        reviewCount > 0 ? String(format: "%.1f (%ld)", averageRating, reviewCount) : "Rising Talent"
+    }
+
     /// Star once there are reviews, sparkles for Rising Talent
     var ratingIcon: String { reviewCount > 0 ? "star.fill" : "sparkles" }
 
