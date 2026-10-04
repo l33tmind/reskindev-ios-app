@@ -42,9 +42,6 @@ struct RightOrdersView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Spacer()
-                CircleIconButton(systemName: "cube.transparent", label: "Unbox your latest delivery in 3D") {
-                    openWindow(id: WindowID.deliveryBox)
-                }
             }
 
             // Sellers switch here between orders they placed and orders on their gigs

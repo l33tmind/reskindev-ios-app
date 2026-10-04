@@ -49,6 +49,9 @@ class AppModel {
     /// Sheets currently shown; while any is up, Explore flattens its floating cards so nothing covers the sheet
     var openSheets = 0
 
+    /// The home (main) window is on screen
+    var isMainOpen = false
+
     /// Open gig / seller-profile windows, so closing the main window can close them too
     var openGigIDs = Set<String>()
     var openSellerKeys = Set<String>()

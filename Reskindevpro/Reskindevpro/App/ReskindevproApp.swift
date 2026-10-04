@@ -39,7 +39,7 @@ struct ReskindevproApp: App {
 
         // Menu: its own window on the main window's left (Home look)
         WindowGroup(id: WindowID.sidebar, for: String.self) { _ in
-            stores(PanelWindow(kind: .sidebar) { LeftSidebarView().frame(width: 320, height: 720) })
+            stores(PanelWindow(kind: .sidebar) { LeftSidebarView().frame(width: 320, height: 720) }.needsHomeWindow())
         }
         .windowStyle(.plain)
         .windowResizability(.contentSize)
@@ -53,7 +53,7 @@ struct ReskindevproApp: App {
 
         // My Orders / Orders Workspace: its own window, first opened beside the main window
         WindowGroup(id: WindowID.orders, for: String.self) { _ in
-            stores(PanelWindow(kind: .orders) { RightOrdersView().frame(width: 440, height: 720) })
+            stores(PanelWindow(kind: .orders) { RightOrdersView().frame(width: 440, height: 720) }.needsHomeWindow())
         }
         .windowStyle(.plain)
         .windowResizability(.contentSize)
@@ -68,7 +68,7 @@ struct ReskindevproApp: App {
         // Gig Detail Window (one per gig)
         WindowGroup(id: WindowID.gigDetail, for: String.self) { $gigID in
             if let gigID {
-                stores(GigDetailView(gigID: gigID))
+                stores(GigDetailView(gigID: gigID).needsHomeWindow())
             }
         }
         .windowStyle(.plain)
@@ -77,7 +77,7 @@ struct ReskindevproApp: App {
 
         // Seller public profile (one per seller)
         WindowGroup(id: WindowID.sellerProfile, for: String.self) { $userKey in
-            if let userKey { stores(SellerProfileView(userKey: userKey)) }
+            if let userKey { stores(SellerProfileView(userKey: userKey).needsHomeWindow()) }
         }
         .windowStyle(.plain)
         .defaultSize(width: 1000, height: 760)
@@ -85,7 +85,7 @@ struct ReskindevproApp: App {
 
         // Help & Policies (admin-managed pages)
         WindowGroup(id: WindowID.page, for: String.self) { _ in
-            stores(PagesView())
+            stores(PagesView().needsHomeWindow())
         }
         .defaultSize(width: 1000, height: 700)
         .restorationBehavior(.disabled)
@@ -98,7 +98,7 @@ struct ReskindevproApp: App {
 
         // 3D Delivery Box Window (Volumetric)
         WindowGroup(id: WindowID.deliveryBox) {
-            stores(Delivery3DView())
+            stores(Delivery3DView().needsHomeWindow())
         }
         .windowStyle(.volumetric)
         .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)

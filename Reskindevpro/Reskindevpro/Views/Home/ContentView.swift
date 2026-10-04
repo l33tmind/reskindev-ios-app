@@ -16,6 +16,7 @@ struct ContentView: View {
     @Environment(GigStore.self) private var gigStore
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
+    @Environment(\.scenePhase) private var scenePhase
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
     @Environment(\.openImmersiveSpace) private var openImmersiveSpace
     private let push = PushService.shared
@@ -60,7 +61,20 @@ struct ContentView: View {
         #endif
         // Closing the main (home) window quits the whole app: take every other window with it,
         // so reopening the app never lands on a lone side panel or gig page
-        .onDisappear(perform: closeEverything)
+        .onAppear { appModel.isMainOpen = true }
+        .onDisappear {
+            appModel.isMainOpen = false
+            closeEverything()
+        }
+        // Closing the window sends it to the background before (or instead of) onDisappear
+        .onChange(of: scenePhase) {
+            if scenePhase == .background {
+                appModel.isMainOpen = false
+                closeEverything()
+            } else if scenePhase == .active {
+                appModel.isMainOpen = true
+            }
+        }
         // Siri: "find video editing on Reskindev" → filter Explore and open the best match
         .onChange(of: siri.pending, initial: true) {
             guard let request = siri.pending, !gigStore.isLoading else { return }

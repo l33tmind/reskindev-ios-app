@@ -291,3 +291,33 @@ extension View {
     /// Put on the root of every sheet's content
     func sheetPresence() -> some View { modifier(SheetPresence()) }
 }
+
+// MARK: - Secondary windows never stand alone
+
+/// On every secondary window (orders, menu, gig pages…): if it shows up or comes forward while the home
+/// window is gone — e.g. the app was reopened after only home was closed — bring the home window back.
+private struct NeedsHomeWindow: ViewModifier {
+    @Environment(AppModel.self) private var appModel
+    @Environment(\.openWindow) private var openWindow
+    @Environment(\.scenePhase) private var scenePhase
+
+    func body(content: Content) -> some View {
+        content
+            .task {
+                // Give the home window a moment to register on a normal launch
+                try? await Task.sleep(for: .milliseconds(600))
+                ensureHome()
+            }
+            .onChange(of: scenePhase) {
+                if scenePhase == .active { ensureHome() }
+            }
+    }
+
+    private func ensureHome() {
+        if !appModel.isMainOpen { openWindow(id: WindowID.main) }
+    }
+}
+
+extension View {
+    func needsHomeWindow() -> some View { modifier(NeedsHomeWindow()) }
+}
