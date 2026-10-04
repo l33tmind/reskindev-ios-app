@@ -100,8 +100,8 @@ struct ImmersiveView: View {
                             GigCardView(gig: gig, isFocused: true)
                         }
                         .buttonStyle(.plain)
-                        // Gentle lift: these cards are big, and the butterfly may be sitting on top
-                        .gazeLift(scale: 1.03)
+                        // Pops up from its top edge, so a butterfly sitting there stays sitting on it
+                        .gazeLift(scale: 1.06, anchor: .top)
                         .gesture(dragToSave(cardID: Self.cardID(shelf, gig), gig: gig))
                         .accessibilityHint("Closes the Showroom and opens this service. Drag it to the heart to save it.")
                     }

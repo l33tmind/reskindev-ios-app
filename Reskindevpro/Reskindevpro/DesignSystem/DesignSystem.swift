@@ -24,11 +24,12 @@ enum Hit {
 // MARK: - Gaze hover: element grows and comes forward when you look at it
 
 extension View {
-    func gazeLift(scale: CGFloat = 1.05, radius: CGFloat = Radius.large) -> some View {
+    /// `anchor`: the point that stays put while the view grows (Showroom cards grow from their top edge)
+    func gazeLift(scale: CGFloat = 1.05, radius: CGFloat = Radius.large, anchor: UnitPoint = .center) -> some View {
         self
             .contentShape(.hoverEffect, RoundedRectangle(cornerRadius: radius))
             .hoverEffect { effect, isActive, _ in
-                effect.scaleEffect(isActive ? scale : 1.0)
+                effect.scaleEffect(isActive ? scale : 1.0, anchor: anchor)
             }
     }
 }

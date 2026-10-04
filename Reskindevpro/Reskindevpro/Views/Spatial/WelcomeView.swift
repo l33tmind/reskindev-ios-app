@@ -106,7 +106,7 @@ private struct ButterflyStage: View {
         RealityView { content in
             guard let loaded = await Butterfly.load() else { return }
             loaded.scale *= 1.4
-            loaded.position = [0, -0.02, 0.02]
+            loaded.position = [0, -0.09, 0.02]
             loaded.orientation = simd_quatf(angle: .pi / 7, axis: [1, 0, 0])
             content.add(loaded)
             Butterfly.flap(loaded)

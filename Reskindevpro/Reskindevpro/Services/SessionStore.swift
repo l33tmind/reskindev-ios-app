@@ -67,8 +67,23 @@ final class SessionStore {
 
     /// Apple / Google: same Firebase account as the iOS app. The users/{uid} doc is created by the
     /// listener below if this is the person's first sign-in anywhere.
-    func signIn(with credential: AuthCredential, fallbackName: String? = nil) async throws {
+    func signIn(with credential: AuthCredential, fallbackName: String? = nil, role: String = "buyer") async throws {
         let result = try await Auth.auth().signIn(with: credential)
+        // First time with Google / Apple: create the profile with the role picked (website loginWithGoogle(role))
+        if result.additionalUserInfo?.isNewUser == true {
+            let user = result.user
+            try? await db.collection("users").document(user.uid).setData([
+                "uid": user.uid,
+                "email": user.email ?? "",
+                "displayName": user.displayName ?? fallbackName ?? "",
+                "photoURL": user.photoURL?.absoluteString ?? "",
+                "role": role,
+                "username": Self.makeUsername(from: user.email ?? ""),
+                "createdAt": FieldValue.serverTimestamp(),
+                "lastLogin": FieldValue.serverTimestamp(),
+            ], merge: true)
+            self.role = role
+        }
         if let fallbackName, (result.user.displayName ?? "").isEmpty {
             let change = result.user.createProfileChangeRequest()
             change.displayName = fallbackName
@@ -103,6 +118,13 @@ final class SessionStore {
         ])
         displayName = cleanName
         photoUrl = avatar
+    }
+
+    /// Buyer → seller: unlocks My Gigs and Earnings (admins stay admins)
+    func becomeSeller() async throws {
+        guard let uid else { throw SessionError.signInRequired }
+        try await db.collection("users").document(uid).updateData(["role": "freelancer"])
+        role = "freelancer"
     }
 
     func signOut() {

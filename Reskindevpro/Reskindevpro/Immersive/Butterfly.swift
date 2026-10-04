@@ -45,8 +45,9 @@ enum Butterfly {
     /// The model's width in its own units while animating (measured in Blender). RealityKit's bounds can't be
     /// used: the skeleton's rest pose is scattered and only comes together once an animation plays.
     private static let modelUnitsAcross: Float = 100
-    /// Centre of the animated body in model units (Y-up), so the container's origin sits in the middle of it
-    private static let modelCentre: SIMD3<Float> = [-5, 47, -4]
+    /// Where the feet are in model units (Y-up; feet at y ≈ 0), so the container's origin is under the
+    /// butterfly and "perch at the card's edge" puts its feet on the edge
+    private static let modelCentre: SIMD3<Float> = [-5, 0, -4]
 
     static func load() async -> Entity? {
         guard let model = try? await Entity(named: Clip.flap.file, in: realityKitContentBundle) else { return nil }
@@ -101,8 +102,8 @@ enum Butterfly {
         play(.flap, on: butterfly)
     }
 
-    /// Height above a card's top edge to sit at: clears the card when you look at it and it pops up
-    private static let perchClearance: Float = 0.03
+    /// Feet on the card's top edge (cards grow downward from that edge when you look at them)
+    private static let perchClearance: Float = 0.004
 
     /// The flight loop; runs until the task is cancelled (Showroom closed)
     static func fly(_ butterfly: Entity, in root: Entity, perches: ButterflyPerches) async {
@@ -118,10 +119,9 @@ enum Butterfly {
             guard !names.isEmpty, let card = root.findEntity(named: names[next % names.count]) else { continue }
             next += 1
             let bounds = card.visualBounds(relativeTo: root)
-            // Sits just above the top edge and a touch in front, so a card that lifts under your gaze
-            // doesn't swallow it
+            // Right on the top edge
             let edge = SIMD3<Float>(bounds.center.x, bounds.max.y, bounds.center.z)
-            let perch = edge + SIMD3(0, perchClearance, 0) + towardViewer(edge) * 0.03
+            let perch = edge + SIMD3(0, perchClearance, 0)
             await hop(butterfly, to: perch + SIMD3(0, 0.12, 0) + towardViewer(perch) * 0.05, in: root)
             await hop(butterfly, to: perch, in: root, landing: true)
             // A little chime from where it lands

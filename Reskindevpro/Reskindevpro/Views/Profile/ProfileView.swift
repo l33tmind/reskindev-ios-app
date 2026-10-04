@@ -61,7 +61,23 @@ struct ProfileView: View {
 
 private struct ProfileOverview: View {
     @Environment(SessionStore.self) private var session
+    @Environment(AppModel.self) private var appModel
     @Environment(\.openWindow) private var openWindow
+    @State private var confirmSelling = false
+    @State private var becomingSeller = false
+    @State private var errorMessage: String?
+
+    private func becomeSeller() async {
+        becomingSeller = true
+        defer { becomingSeller = false }
+        do {
+            try await session.becomeSeller()
+            appModel.celebrate()
+            appModel.profileTab = .myGigs
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
 
     private var completedCount: Int { session.orders.filter(\.isCompleted).count }
     private var activeCount: Int { session.orders.filter { !$0.isCompleted && $0.status != "cancelled" }.count }
@@ -102,6 +118,40 @@ private struct ProfileOverview: View {
                     }
                     .buttonStyle(GlassOutlineButtonStyle())
                     .frame(width: 360)
+                }
+
+                // Buyers (e.g. signed up with Google as a buyer) can switch to selling any time
+                if !session.canSell {
+                    HStack(spacing: 18) {
+                        Image(systemName: "briefcase.fill")
+                            .font(.title)
+                            .foregroundStyle(Color.brandGreen)
+                            .frame(width: 60, height: 60)
+                            .background(Color.brandGreen.opacity(0.15), in: Circle())
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Start selling on Reskindev").font(.title3.weight(.bold))
+                            Text("Post your own gigs, take orders and get paid. Your buyer account and orders stay as they are.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button {
+                            confirmSelling = true
+                        } label: {
+                            if becomingSeller { ProgressView() } else { Text("Become a Seller") }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.brandGreen)
+                        .disabled(becomingSeller)
+                    }
+                    .padding(20)
+                    .background(Color.brandGreen.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.medium))
+                    .errorAlert("Couldn't switch to selling", message: $errorMessage)
+                    .confirmationDialog("Become a seller?", isPresented: $confirmSelling) {
+                        Button("Become a Seller") { Task { await becomeSeller() } }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("My Gigs and Earnings will appear in your profile.")
+                    }
                 }
 
                 VStack(alignment: .leading, spacing: 14) {

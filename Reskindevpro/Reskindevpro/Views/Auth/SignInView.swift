@@ -26,6 +26,16 @@ struct SignInView: View {
             Text(isSignUp ? "Join Reskindev" : "Sign in to Reskindev")
                 .font(.title.weight(.bold))
 
+            // New accounts (Apple, Google or email) start as what you pick here, like the website's signup
+            VStack(alignment: .leading, spacing: 8) {
+                Text("New to Reskindev? I want to").font(.subheadline).foregroundStyle(.secondary)
+                Picker("I want to", selection: $role) {
+                    Text("Hire (Buyer)").tag("buyer")
+                    Text("Sell (Freelancer)").tag("freelancer")
+                }
+                .pickerStyle(.segmented)
+            }
+
             // Same Apple / Google accounts as the iOS app
             SignInWithAppleButton(.continue) { request in
                 appleNonce = SocialSignIn.makeNonce()
@@ -64,12 +74,6 @@ struct SignInView: View {
                     .textContentType(.name)
                     .textFieldStyle(.roundedBorder)
 
-                // Same choice as the website's signup page
-                Picker("I want to", selection: $role) {
-                    Text("Hire (Buyer)").tag("buyer")
-                    Text("Sell (Freelancer)").tag("freelancer")
-                }
-                .pickerStyle(.segmented)
             }
 
             TextField("Email", text: $email)
@@ -121,7 +125,7 @@ struct SignInView: View {
         case .success(let authorization):
             await run {
                 let (credential, name) = try SocialSignIn.appleCredential(from: authorization, rawNonce: appleNonce)
-                try await session.signIn(with: credential, fallbackName: name)
+                try await session.signIn(with: credential, fallbackName: name, role: role)
             }
         }
     }
@@ -129,7 +133,7 @@ struct SignInView: View {
     private func signInWithGoogle() async {
         await run {
             let credential = try await SocialSignIn.googleCredential()
-            try await session.signIn(with: credential)
+            try await session.signIn(with: credential, role: role)
         }
     }
 
