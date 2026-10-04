@@ -35,6 +35,8 @@ struct GigModel: Identifiable, Hashable {
     let isFeatured: Bool
     let order: Int
     let packages: [GigPackage]
+    /// Optional .usdz the seller uploaded: "View in Your Room"
+    let model3dUrl: String
 
     /// Starting price = first package (same as Flutter `basePrice`)
     var price: Double { packages.first?.price ?? 0 }
@@ -42,8 +44,11 @@ struct GigModel: Identifiable, Hashable {
     var ratingText: String {
         reviewCount > 0
             ? String(format: "%.1f · %ld Reviews", averageRating, reviewCount)
-            : "New"
+            : "Rising Talent"   // same label as the website for gigs without reviews yet
     }
+
+    /// Star once there are reviews, sparkles for Rising Talent
+    var ratingIcon: String { reviewCount > 0 ? "star.fill" : "sparkles" }
 
     /// All images for the detail gallery, without duplicates
     var allImages: [String] {
@@ -93,6 +98,7 @@ struct GigModel: Identifiable, Hashable {
         self.isFeatured = data["isFeatured"] as? Bool ?? false
         self.isDeleted = data["isDeleted"] as? Bool ?? false
         self.order = Int(num("order") ?? 0)
+        self.model3dUrl = data["model3dUrl"] as? String ?? ""
         self.packages = (data["packages"] as? [[String: Any]] ?? []).enumerated().map { index, p in
             GigPackage(
                 id: (p["id"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "pkg\(index)",

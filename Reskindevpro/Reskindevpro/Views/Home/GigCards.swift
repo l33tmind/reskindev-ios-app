@@ -49,7 +49,7 @@ struct GigCardView: View {
 
                 // Rating
                 HStack(spacing: 4) {
-                    Image(systemName: "star.fill").foregroundStyle(Color.starYellow)
+                    Image(systemName: gig.ratingIcon).foregroundStyle(Color.starYellow)
                     Text(gig.ratingText).foregroundStyle(.secondary)
                 }
                 .font(.subheadline)
@@ -122,7 +122,7 @@ struct CompactGigCard: View {
                 .lineLimit(1)
 
             HStack(spacing: 3) {
-                Image(systemName: "star.fill").foregroundStyle(Color.starYellow)
+                Image(systemName: gig.ratingIcon).foregroundStyle(Color.starYellow)
                 Text(gig.ratingText).foregroundStyle(.secondary)
             }
             .font(.caption2)

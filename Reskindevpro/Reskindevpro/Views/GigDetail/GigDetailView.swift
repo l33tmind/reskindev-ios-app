@@ -182,6 +182,20 @@ private struct GigDetailContent: View {
             .clipShape(RoundedRectangle(cornerRadius: Radius.medium))
             .accessibilityLabel(playing ? "Service video" : "Service image")
 
+            if !gig.model3dUrl.isEmpty {
+                Button {
+                    openWindow(id: WindowID.model3D, value: gig.model3dUrl)
+                } label: {
+                    Label("View in Your Room", systemImage: "arkit")
+                        .font(.headline)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Color.brandGreen)
+                .frame(width: 500)
+                .help("See this seller's work in 3D, right in your space")
+            }
+
             // Thumbnails: more videos, or more photos
             if playing && videos.count > 1 {
                 thumbnails(count: videos.count, selected: selectedVideo, label: "Video") { index in
@@ -258,7 +272,7 @@ private struct GigDetailContent: View {
                 .disabled(gig.authorId.isEmpty)
                 .accessibilityHint("Opens the seller's profile")
                 HStack(spacing: 4) {
-                    Image(systemName: "star.fill").foregroundStyle(Color.starYellow)
+                    Image(systemName: gig.ratingIcon).foregroundStyle(Color.starYellow)
                     Text(gig.ratingText).foregroundStyle(.secondary)
                 }
                 .font(.subheadline)

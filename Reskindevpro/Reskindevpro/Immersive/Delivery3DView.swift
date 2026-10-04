@@ -80,6 +80,10 @@ struct Delivery3DView: View {
                 if !delivery.deliveryMessage.isEmpty {
                     Text(delivery.deliveryMessage).font(.callout).lineLimit(3).multilineTextAlignment(.center)
                 }
+                if !delivery.deliveryLink.isEmpty {
+                    TheaterButton(item: TheaterItem(orderID: delivery.id, title: delivery.gigTitle,
+                                                    link: delivery.deliveryLink, message: delivery.deliveryMessage))
+                }
                 Button {
                     appModel.selectedOrderID = delivery.id
                     openWindow(id: WindowID.orders, value: WindowID.single)

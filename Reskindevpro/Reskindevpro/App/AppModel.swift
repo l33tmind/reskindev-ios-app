@@ -54,6 +54,9 @@ class AppModel {
 
     /// Open gig / seller-profile windows, so closing the main window can close them too
     var openGigIDs = Set<String>()
+    /// "View in Your Room" volumes and Delivery Theater screens that are open
+    var openModelURLs = Set<String>()
+    var openTheaters = Set<TheaterItem>()
     var openSellerKeys = Set<String>()
     var isDeliveryBoxOpen = false
     var isPagesOpen = false
@@ -79,5 +82,7 @@ enum WindowID {
     static let sellerProfile = "SellerProfile"
     static let page = "Page"
     static let deliveryBox = "DeliveryBox"
+    static let model3D = "Model3D"
+    static let theater = "Theater"
     static let single = "main"
 }

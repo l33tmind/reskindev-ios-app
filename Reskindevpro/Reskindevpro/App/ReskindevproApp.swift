@@ -106,6 +106,22 @@ struct ReskindevproApp: App {
         .windowStyle(.volumetric)
         .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)
         .restorationBehavior(.disabled)
+
+        // "View in Your Room": a gig's or delivery's 3D model in a volume (set it on your desk)
+        WindowGroup(id: WindowID.model3D, for: String.self) { $url in
+            if let url { stores(ModelViewer3D(urlString: url).needsHomeWindow()) }
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)
+        .restorationBehavior(.disabled)
+
+        // Delivery Theater: delivered work on a big screen
+        WindowGroup(id: WindowID.theater, for: TheaterItem.self) { $item in
+            if let item { stores(DeliveryTheaterView(item: item).needsHomeWindow()) }
+        }
+        .windowStyle(.plain)
+        .defaultSize(width: 1500, height: 1000)
+        .restorationBehavior(.disabled)
     }
 
     /// Every window shares the same live Firestore stores

@@ -154,10 +154,17 @@ private struct SystemCard: View {
                 Text(message.deliveryMessage).textSelection(.enabled)
             }
             if let url = URL(string: message.deliveryLink), !message.deliveryLink.isEmpty {
-                Link(destination: url) {
-                    Label("Open delivered files", systemImage: "arrow.up.right.square")
+                HStack(spacing: 12) {
+                    if let orderID = message.orderId {
+                        TheaterButton(item: TheaterItem(orderID: orderID, title: message.gigTitle,
+                                                        link: message.deliveryLink, message: message.deliveryMessage),
+                                      prominent: true)
+                    }
+                    Link(destination: url) {
+                        Label("Open delivered files", systemImage: "arrow.up.right.square")
+                    }
+                    .font(.headline)
                 }
-                .font(.headline)
             }
             if !message.cancelReason.isEmpty {
                 Text("Reason: \(message.cancelReason)").foregroundStyle(.secondary)

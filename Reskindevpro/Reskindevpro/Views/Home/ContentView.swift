@@ -147,6 +147,8 @@ extension ContentView {
         if appModel.isDeliveryBoxOpen { dismissWindow(id: WindowID.deliveryBox) }
         for gigID in appModel.openGigIDs { dismissWindow(id: WindowID.gigDetail, value: gigID) }
         for key in appModel.openSellerKeys { dismissWindow(id: WindowID.sellerProfile, value: key) }
+        for url in appModel.openModelURLs { dismissWindow(id: WindowID.model3D, value: url) }
+        for item in appModel.openTheaters { dismissWindow(id: WindowID.theater, value: item) }
         if appModel.immersiveSpaceState == .open {
             Task { await dismissImmersiveSpace() }
         }

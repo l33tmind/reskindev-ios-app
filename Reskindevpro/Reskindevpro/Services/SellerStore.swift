@@ -28,6 +28,8 @@ struct GigDraft {
     var youtubeUrl = ""
     var videoConsent = false
     var imageUrl = ""
+    /// Optional .usdz shown with "View in Your Room"
+    var model3dUrl = ""
     var masterFeatures: [String] = []
     var status = "pending"
     var packages: [Package] = [
@@ -52,6 +54,7 @@ struct GigDraft {
         youtubeUrl = (data["youtubeUrls"] as? [String])?.first ?? data["youtubeUrl"] as? String ?? ""
         videoConsent = data["videoConsent"] as? Bool ?? false
         imageUrl = data["imageUrl"] as? String ?? ""
+        model3dUrl = data["model3dUrl"] as? String ?? ""
         masterFeatures = data["masterFeatures"] as? [String] ?? []
         status = FS.string(data["status"]) ?? "pending"
         let pkgs = (data["packages"] as? [[String: Any]] ?? []).map { p in
@@ -197,13 +200,15 @@ final class SellerStore {
     }
 
     /// Same payload as the website editor; every save goes back to "pending" for admin approval
-    func save(_ draft: GigDraft, newImage: UIImage?, session: SessionStore) async throws {
+    func save(_ draft: GigDraft, newImage: UIImage?, newModel: URL? = nil, session: SessionStore) async throws {
         guard let uid = session.uid else { throw SessionError.signInRequired }
         guard !draft.title.trimmed.isEmpty else { throw SellerError.titleRequired }
         if !draft.youtubeUrl.trimmed.isEmpty && !draft.videoConsent { throw SellerError.videoConsent }
 
         var imageUrl = draft.imageUrl
         if let newImage { imageUrl = try await upload(newImage, uid: uid) }
+        var model3dUrl = draft.model3dUrl
+        if let newModel { model3dUrl = try await uploadModel(newModel, uid: uid) }
 
         let youtube = draft.youtubeUrl.trimmed
         var payload: [String: Any] = [
@@ -216,6 +221,7 @@ final class SellerStore {
             "videoConsent": draft.videoConsent,
             "videoConsentTimestamp": (!youtube.isEmpty && draft.videoConsent) ? Date() : NSNull(),
             "imageUrl": imageUrl,
+            "model3dUrl": model3dUrl,
             "masterFeatures": draft.masterFeatures,
             "packages": draft.packages.map { p in
                 [
@@ -273,6 +279,19 @@ final class SellerStore {
         let ref = Storage.storage().reference().child("gigs/\(uid)/\(name)")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
+        _ = try await ref.putDataAsync(data, metadata: metadata)
+        return try await ref.downloadURL().absoluteString
+    }
+
+    /// gig_models/{uid}/{timestamp}.usdz (up to 50 MB)
+    private func uploadModel(_ file: URL, uid: String) async throws -> String {
+        let scoped = file.startAccessingSecurityScopedResource()
+        defer { if scoped { file.stopAccessingSecurityScopedResource() } }
+        let data = try Data(contentsOf: file)
+        guard data.count <= 50_000_000 else { throw SellerError.modelTooLarge }
+        let ref = Storage.storage().reference().child("gig_models/\(uid)/\(Int(Date().timeIntervalSince1970 * 1000)).usdz")
+        let metadata = StorageMetadata()
+        metadata.contentType = "model/vnd.usdz+zip"
         _ = try await ref.putDataAsync(data, metadata: metadata)
         return try await ref.downloadURL().absoluteString
     }
@@ -343,13 +362,14 @@ final class SellerStore {
 }
 
 enum SellerError: LocalizedError {
-    case titleRequired, videoConsent, imageUnreadable, minimumWithdrawal, insufficientFunds
+    case titleRequired, videoConsent, imageUnreadable, modelTooLarge, minimumWithdrawal, insufficientFunds
 
     var errorDescription: String? {
         switch self {
         case .titleRequired: "Title is required!"
         case .videoConsent: "Please accept the Video Copyright Declaration to proceed."
         case .imageUnreadable: "Couldn't read that image."
+        case .modelTooLarge: "The 3D model must be 50 MB or smaller."
         case .minimumWithdrawal: "Minimum withdrawal is $20."
         case .insufficientFunds: "Insufficient available funds."
         }

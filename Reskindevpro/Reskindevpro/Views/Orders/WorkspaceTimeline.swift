@@ -213,6 +213,8 @@ struct WorkspaceTimeline: View {
             box(tint: .brandGreen) {
                 if !order.deliveryMessage.isEmpty { Text(order.deliveryMessage).font(.callout).textSelection(.enabled) }
                 if let url = URL(string: order.deliveryLink), !order.deliveryLink.isEmpty {
+                    TheaterButton(item: TheaterItem(orderID: order.id, title: order.gigTitle,
+                                                    link: order.deliveryLink, message: order.deliveryMessage))
                     Link(destination: url) { Label("View Attachment", systemImage: "arrow.up.right.square") }
                         .font(.headline)
                 }

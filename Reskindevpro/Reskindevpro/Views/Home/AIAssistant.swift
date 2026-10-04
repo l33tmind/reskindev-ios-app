@@ -104,7 +104,7 @@ struct AIMiniResultCard: View {
                 Text(gig.title).font(.subheadline.weight(.bold)).lineLimit(1)
                 Text(gig.sellerName).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                 HStack(spacing: 3) {
-                    Image(systemName: "star.fill").foregroundStyle(Color.starYellow)
+                    Image(systemName: gig.ratingIcon).foregroundStyle(Color.starYellow)
                     Text(gig.ratingText).foregroundStyle(.secondary)
                 }
                 .font(.caption2)
