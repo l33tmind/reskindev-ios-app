@@ -35,7 +35,8 @@ struct ImmersiveView: View {
     /// Top arc: recently viewed. Bottom arc: saved. Neither yet → the spotlight picks.
     private var shelves: [Shelf] {
         let recent = store.recentIDs.compactMap { store.gig(id: $0) }.prefix(Self.perShelf)
-        let saved = session.savedGigIDs.compactMap { store.gig(id: $0) }.prefix(Self.perShelf)
+        // Newest saves are appended last: show them first
+        let saved = session.savedGigIDs.reversed().compactMap { store.gig(id: $0) }.prefix(Self.perShelf)
         var result: [Shelf] = []
         if !recent.isEmpty { result.append(Shelf(key: "recent", title: "Recently Viewed", icon: "clock.arrow.circlepath", gigs: Array(recent))) }
         if !saved.isEmpty { result.append(Shelf(key: "saved", title: "Saved", icon: "heart.fill", gigs: Array(saved))) }

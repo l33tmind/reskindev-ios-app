@@ -128,12 +128,14 @@ enum Butterfly {
             await hop(butterfly, to: perch, in: root, landing: true)
             // A little chime from where it lands
             SoundFX.perch.play(on: butterfly)
+            await settle(butterfly, at: perch, in: root)
             // Rest: slow wing beats, with a little hop up and back down halfway through
             play(.flap, on: butterfly, speed: 0.4)
             try? await Task.sleep(for: .seconds(2.5))
             guard !Task.isCancelled else { return }
             await hop(butterfly, to: perch + SIMD3(0, 0.05, 0) + towardViewer(perch) * 0.02, in: root)
             await hop(butterfly, to: perch, in: root, landing: true)
+            await settle(butterfly, at: perch, in: root)
             play(.flap, on: butterfly, speed: 0.4)
             try? await Task.sleep(for: .seconds(2.5))
         }
@@ -185,12 +187,26 @@ enum Butterfly {
             let duration = TimeInterval(max(0.18, simd_distance(current, next) / metresPerSecond))
             var transform = butterfly.transform
             transform.translation = next
-            transform.rotation = facing(from: current, to: next)
+            // Straight up/down (taking off, landing): keep the heading it has — a near-vertical move has no
+            // sensible direction and would spin it round
+            let level = SIMD2<Float>(next.x - current.x, next.z - current.z)
+            if simd_length(level) > 0.03 { transform.rotation = facing(from: current, to: next) }
             butterfly.move(to: transform, relativeTo: root, duration: duration,
                            timingFunction: lastLeg ? .easeOut : leg == 1 ? .easeIn : .linear)
             try? await Task.sleep(for: .seconds(duration))
             current = next
         }
+    }
+
+    /// Once down, turn on the spot to a resting pose: facing you, or turned a little or well to one side —
+    /// different every time, never with its back to you
+    private static func settle(_ butterfly: Entity, at perch: SIMD3<Float>, in root: Entity) async {
+        let towardYou = facing(from: perch, to: perch + towardViewer(perch))
+        let turn = simd_quatf(angle: Float.random(in: -1.3...1.3), axis: [0, 1, 0])
+        var transform = butterfly.transform
+        transform.rotation = turn * towardYou
+        butterfly.move(to: transform, relativeTo: root, duration: 0.6, timingFunction: .easeInOut)
+        try? await Task.sleep(for: .seconds(0.6))
     }
 
     /// Yaw toward the direction of travel (level flight)

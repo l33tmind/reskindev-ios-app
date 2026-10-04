@@ -125,7 +125,7 @@ struct GigCardView: View {
 }
 
 /// Smaller card used in the rows under the carousel:
-/// picture with its category, seller, a two-line title, then rating and price on one line
+/// picture, seller, a two-line title, then rating and price on one line
 struct CompactGigCard: View {
     let gig: GigModel
 
@@ -135,18 +135,6 @@ struct CompactGigCard: View {
                 .frame(height: 110)
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 14))
-                .overlay(alignment: .bottomLeading) {
-                    if !gig.category.isEmpty {
-                        Text(gig.category)
-                            .font(.caption2.weight(.bold))
-                            .lineLimit(1)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.black.opacity(0.55), in: Capsule())
-                            .foregroundStyle(.white)
-                            .padding(6)
-                    }
-                }
 
             HStack(spacing: 6) {
                 Circle()
