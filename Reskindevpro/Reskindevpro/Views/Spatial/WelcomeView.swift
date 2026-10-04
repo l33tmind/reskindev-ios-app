@@ -35,7 +35,7 @@ struct WelcomeView: View {
     var body: some View {
         VStack(spacing: 22) {
             ButterflyStage()
-                .frame(height: 150)
+                .frame(height: 110)
 
             let current = pages[page]
             VStack(spacing: 12) {
@@ -105,8 +105,9 @@ private struct ButterflyStage: View {
     var body: some View {
         RealityView { content in
             guard let loaded = await Butterfly.load() else { return }
-            loaded.scale *= 1.4
-            loaded.position = [0, -0.09, 0.02]
+            // Small and flush with the sheet, so the eye goes to the text, not the butterfly
+            loaded.scale *= 0.8
+            loaded.position = [0, -0.055, 0]
             loaded.orientation = simd_quatf(angle: .pi / 7, axis: [1, 0, 0])
             content.add(loaded)
             Butterfly.flap(loaded)
