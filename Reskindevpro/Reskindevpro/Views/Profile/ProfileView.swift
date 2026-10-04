@@ -255,6 +255,10 @@ private struct ProfileSettingsView: View {
     @State private var saved = false
     @State private var errorMessage: String?
     @State private var confirmDelete = false
+    @Environment(\.openURL) private var openURL
+
+    /// Reskindev on the App Store (same listing as the iOS app), straight to "Write a Review"
+    private static let reviewURL = URL(string: "https://apps.apple.com/app/id6802118085?action=write-review")!
 
     var body: some View {
         ScrollView {
@@ -283,6 +287,30 @@ private struct ProfileSettingsView: View {
 
                 Divider().padding(.vertical, 12)
 
+                // Rate Us
+                HStack(spacing: 16) {
+                    Image(systemName: "star.bubble.fill")
+                        .font(.title)
+                        .foregroundStyle(Color.starYellow)
+                        .frame(width: 56, height: 56)
+                        .background(Color.starYellow.opacity(0.15), in: Circle())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Enjoying Reskindev?").font(.headline)
+                        Text("A rating on the App Store helps other buyers and sellers find us.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        openURL(Self.reviewURL)
+                    } label: {
+                        Label("Rate Us", systemImage: "star.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.brandGreen)
+                }
+
+                Divider().padding(.vertical, 12)
+
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Danger Zone").font(.headline).foregroundStyle(.red)
                     Text("Deleting your account removes your login. Orders and chats stay on record for the other side.")
@@ -296,14 +324,9 @@ private struct ProfileSettingsView: View {
         .navigationTitle("Settings")
         .onAppear(perform: load)
         .errorAlert("Something went wrong", message: $errorMessage)
-        .confirmationDialog("Delete your account?", isPresented: $confirmDelete) {
-            Button("Delete Account", role: .destructive) {
-                Task {
-                    do { try await session.deleteAccount() } catch { errorMessage = error.localizedDescription }
-                }
-            }
-        } message: {
-            Text("This permanently removes your Reskindev account.")
+        .sheet(isPresented: $confirmDelete) {
+            DeleteAccountSheet { error in errorMessage = error }
+                .sheetPresence()
         }
     }
 
@@ -326,5 +349,63 @@ private struct ProfileSettingsView: View {
             errorMessage = error.localizedDescription
         }
         isSaving = false
+    }
+}
+
+/// Delete Account: the button only unlocks after typing DELETE
+private struct DeleteAccountSheet: View {
+    var onError: (String) -> Void
+    @Environment(SessionStore.self) private var session
+    @Environment(\.dismiss) private var dismiss
+    @State private var typed = ""
+    @State private var deleting = false
+
+    private static let word = "DELETE"
+    private var confirmed: Bool { typed.trimmingCharacters(in: .whitespaces) == Self.word }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label("Delete your account?", systemImage: "exclamationmark.triangle.fill")
+                .font(.title.weight(.bold))
+                .foregroundStyle(.red)
+            Text("This permanently removes your Reskindev login and profile. It can't be undone. Orders and chats stay on record for the other side.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Type \(Self.word) to confirm").font(.headline)
+            TextField(Self.word, text: $typed)
+                .textFieldStyle(.roundedBorder)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .onSubmit { if confirmed { delete() } }
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.bordered)
+                Spacer()
+                Button(role: .destructive) {
+                    delete()
+                } label: {
+                    if deleting { ProgressView() } else { Label("Delete Account", systemImage: "trash") }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .disabled(!confirmed || deleting)
+            }
+        }
+        .padding(32)
+        .frame(width: 560)
+    }
+
+    private func delete() {
+        deleting = true
+        Task {
+            do {
+                try await session.deleteAccount()
+                dismiss()
+            } catch {
+                deleting = false
+                dismiss()
+                onError(error.localizedDescription)
+            }
+        }
     }
 }
