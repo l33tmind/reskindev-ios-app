@@ -28,8 +28,6 @@ struct GigDraft {
     var youtubeUrl = ""
     var videoConsent = false
     var imageUrl = ""
-    /// Optional .usdz shown with "View in Your Room"
-    var model3dUrl = ""
     var masterFeatures: [String] = []
     var status = "pending"
     var packages: [Package] = [
@@ -54,7 +52,6 @@ struct GigDraft {
         youtubeUrl = (data["youtubeUrls"] as? [String])?.first ?? data["youtubeUrl"] as? String ?? ""
         videoConsent = data["videoConsent"] as? Bool ?? false
         imageUrl = data["imageUrl"] as? String ?? ""
-        model3dUrl = data["model3dUrl"] as? String ?? ""
         masterFeatures = data["masterFeatures"] as? [String] ?? []
         status = FS.string(data["status"]) ?? "pending"
         let pkgs = (data["packages"] as? [[String: Any]] ?? []).map { p in
@@ -216,7 +213,7 @@ final class SellerStore {
     }
 
     /// Same payload as the website editor; every save goes back to "pending" for admin approval
-    func save(_ draft: GigDraft, newImage: UIImage?, newModel: URL? = nil, session: SessionStore) async throws {
+    func save(_ draft: GigDraft, newImage: UIImage?, session: SessionStore) async throws {
         guard let uid = session.uid else { throw SessionError.signInRequired }
         guard !draft.title.trimmed.isEmpty else { throw SellerError.titleRequired }
         let youtube = draft.youtubeUrl.trimmed
@@ -230,8 +227,6 @@ final class SellerStore {
         if imageUrl.isEmpty, let id = GigModel.youtubeID(from: youtube) {
             imageUrl = "https://img.youtube.com/vi/\(id)/maxresdefault.jpg"
         }
-        var model3dUrl = draft.model3dUrl
-        if let newModel { model3dUrl = try await uploadModel(newModel, uid: uid) }
 
         var payload: [String: Any] = [
             "title": draft.title.trimmed,
@@ -244,7 +239,6 @@ final class SellerStore {
             "videoConsentTimestamp": (!youtube.isEmpty && draft.videoConsent) ? Date() : NSNull(),
             "imageUrl": imageUrl,
             "images": imageUrl.isEmpty ? [] : [imageUrl],
-            "model3dUrl": model3dUrl,
             "masterFeatures": draft.masterFeatures,
             "packages": draft.packages.map { p in
                 [
@@ -302,19 +296,6 @@ final class SellerStore {
         let ref = Storage.storage().reference().child("gigs/\(uid)/\(name)")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
-        _ = try await ref.putDataAsync(data, metadata: metadata)
-        return try await ref.downloadURL().absoluteString
-    }
-
-    /// gig_models/{uid}/{timestamp}.usdz (under 25 MB, the Storage rules limit)
-    private func uploadModel(_ file: URL, uid: String) async throws -> String {
-        let scoped = file.startAccessingSecurityScopedResource()
-        defer { if scoped { file.stopAccessingSecurityScopedResource() } }
-        let data = try Data(contentsOf: file)
-        guard data.count < 25 * 1024 * 1024 else { throw SellerError.modelTooLarge }
-        let ref = Storage.storage().reference().child("gig_models/\(uid)/\(Int(Date().timeIntervalSince1970 * 1000)).usdz")
-        let metadata = StorageMetadata()
-        metadata.contentType = "model/vnd.usdz+zip"
         _ = try await ref.putDataAsync(data, metadata: metadata)
         return try await ref.downloadURL().absoluteString
     }
@@ -394,7 +375,7 @@ final class SellerStore {
 }
 
 enum SellerError: LocalizedError {
-    case titleRequired, videoConsent, mediaRequired, imageUnreadable, modelTooLarge, minimumWithdrawal, insufficientFunds
+    case titleRequired, videoConsent, mediaRequired, imageUnreadable, minimumWithdrawal, insufficientFunds
 
     var errorDescription: String? {
         switch self {
@@ -402,7 +383,6 @@ enum SellerError: LocalizedError {
         case .videoConsent: "You must accept the Mandatory UGC & Copyright Declaration."
         case .mediaRequired: "Add a picture or a YouTube video."
         case .imageUnreadable: "Couldn't read that image."
-        case .modelTooLarge: "The 3D model must be smaller than 25 MB."
         case .minimumWithdrawal: "Minimum withdrawal is $20."
         case .insufficientFunds: "Insufficient available funds."
         }

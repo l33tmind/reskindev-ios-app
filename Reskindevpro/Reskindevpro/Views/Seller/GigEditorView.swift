@@ -1,6 +1,5 @@
 import SwiftUI
 import PhotosUI
-import UniformTypeIdentifiers
 
 /// Create / edit a service (website /profile/gigs/edit/[id])
 struct GigEditorView: View {
@@ -16,8 +15,6 @@ struct GigEditorView: View {
     @State private var saving = false
     @State private var photoItem: PhotosPickerItem?
     @State private var newImage: UIImage?
-    @State private var newModel: URL?
-    @State private var pickingModel = false
     @State private var keywordInput = ""
     @State private var featureInput = ""
     @State private var errorMessage: String?
@@ -67,9 +64,6 @@ struct GigEditorView: View {
         .sheetPresence()
         .task { await load() }
         .onChange(of: photoItem) { Task { await loadPhoto() } }
-        .fileImporter(isPresented: $pickingModel, allowedContentTypes: [.usdz]) { result in
-            if case .success(let url) = result { newModel = url }
-        }
         .errorAlert("Couldn't save gig", message: $errorMessage)
     }
 
@@ -140,39 +134,6 @@ struct GigEditorView: View {
                     .padding(14)
                     .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.small))
                     .overlay(RoundedRectangle(cornerRadius: Radius.small).stroke(Color.red.opacity(0.3)))
-                }
-            }
-
-            section("3D Model (optional)") {
-                HStack(spacing: 16) {
-                    Image(systemName: "cube.transparent.fill")
-                        .font(.system(size: 40))
-                        .foregroundStyle(Color.brandGreen)
-                        .frame(width: 80, height: 80)
-                        .background(Color.brandGreen.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.small))
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(newModel?.lastPathComponent ?? (draft.model3dUrl.isEmpty ? "No model yet" : "3D model attached"))
-                            .font(.headline)
-                        Text("Upload a .usdz (under 25 MB). Buyers on Apple Vision Pro can place it in their room.")
-                            .font(.caption).foregroundStyle(.secondary)
-                        HStack {
-                            Button {
-                                pickingModel = true
-                            } label: {
-                                Label(draft.model3dUrl.isEmpty && newModel == nil ? "Choose .usdz" : "Replace", systemImage: "square.and.arrow.up")
-                            }
-                            .buttonStyle(.bordered)
-                            if !draft.model3dUrl.isEmpty || newModel != nil {
-                                Button(role: .destructive) {
-                                    newModel = nil
-                                    draft.model3dUrl = ""
-                                } label: {
-                                    Label("Remove", systemImage: "trash")
-                                }
-                                .buttonStyle(.bordered)
-                            }
-                        }
-                    }
                 }
             }
 
@@ -351,7 +312,7 @@ struct GigEditorView: View {
         }
         saving = true
         do {
-            try await seller.save(draft, newImage: newImage, newModel: newModel, session: session)
+            try await seller.save(draft, newImage: newImage, session: session)
             dismiss()
         } catch {
             errorMessage = error.localizedDescription
