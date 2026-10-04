@@ -30,6 +30,8 @@
 	</array>
 	<key>NSSupportsGroupActivities</key>
 	<true/>
+	<key>NSWorldSensingUsageDescription</key>
+	<string>Lets the Showroom butterfly land on the tables and chairs in your room.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationPreferredDefaultSceneSessionRole</key>

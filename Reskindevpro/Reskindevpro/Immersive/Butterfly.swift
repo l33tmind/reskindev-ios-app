@@ -5,11 +5,13 @@ import Foundation
 // MARK: - Showroom butterfly
 // Three wing animations from butterfly.glb (flap, fly, glide) while it flutters around your room:
 // a few hops near other gig cards, lands on your newest saved gig, rests, flutters again,
-// then lands on your 2nd most recent gig — and repeats.
+// then lands on your 2nd most recent gig — and now and then on a table, desk or chair in your room.
 
-/// Which cards to land on, kept current by the Showroom as shelves change (entity names of the cards)
+/// Where to land, kept current by the Showroom: gig cards (entity names) and real surfaces in the room
 final class ButterflyPerches {
     var names: [String] = []
+    /// Spots on tables, desks and seats found by plane detection (world space = Showroom space)
+    var roomSpots: [SIMD3<Float>] = []
 }
 
 @MainActor
@@ -124,21 +126,66 @@ enum Butterfly {
             let spot = SIMD3<Float>(local.center.x + local.extents.x * 0.28, local.max.y, local.center.z)
             let edge = card.convert(position: spot, to: root)
             let perch = edge + SIMD3(0, perchClearance, 0)
-            await hop(butterfly, to: perch + SIMD3(0, 0.12, 0) + towardViewer(perch) * 0.05, in: root)
-            await hop(butterfly, to: perch, in: root, landing: true)
-            // A little chime from where it lands
-            SoundFX.perch.play(on: butterfly)
-            await settle(butterfly, at: perch, in: root)
-            // Rest: slow wing beats, with a little hop up and back down halfway through
-            play(.flap, on: butterfly, speed: 0.4)
-            try? await Task.sleep(for: .seconds(2.5))
-            guard !Task.isCancelled else { return }
-            await hop(butterfly, to: perch + SIMD3(0, 0.05, 0) + towardViewer(perch) * 0.02, in: root)
-            await hop(butterfly, to: perch, in: root, landing: true)
-            await settle(butterfly, at: perch, in: root)
-            play(.flap, on: butterfly, speed: 0.4)
-            try? await Task.sleep(for: .seconds(2.5))
+            await land(butterfly, at: perch, in: root)
+            await rest(butterfly, at: perch, in: root)
+
+            // Every so often, a visit to a real table, desk or chair nearby
+            if Bool.random(), let spot = perches.roomSpots.filter({ simd_length($0) < 3.5 }).randomElement() {
+                guard !Task.isCancelled else { return }
+                await hop(butterfly, to: wanderPoint(near: root), in: root)
+                await land(butterfly, at: spot, in: root)
+                await rest(butterfly, at: spot, in: root)
+            }
         }
+    }
+
+    /// Come in from above and a little in front, then glide down onto the spot
+    private static func land(_ butterfly: Entity, at perch: SIMD3<Float>, in root: Entity) async {
+        await hop(butterfly, to: perch + SIMD3(0, 0.12, 0) + towardViewer(perch) * 0.05, in: root)
+        await hop(butterfly, to: perch, in: root, landing: true)
+        // A little chime from where it lands
+        SoundFX.perch.play(on: butterfly)
+    }
+
+    /// How it sits: always facing you, in one of a few moods
+    private enum RestStyle: CaseIterable {
+        /// Straight at you, slow wing beats
+        case front
+        /// Head turned a little to its left / right
+        case lookLeft, lookRight
+        /// Wings spread wide, barely moving (sunning itself)
+        case wingsOpen
+        /// Leaning forward toward you, wings slow
+        case leanIn
+
+        var yaw: Float {
+            switch self {
+            case .lookLeft: 0.4
+            case .lookRight: -0.4
+            default: 0
+            }
+        }
+        var pitch: Float { self == .leanIn ? 0.3 : 0 }
+        var clip: Clip { self == .wingsOpen ? .glide : .flap }
+        var beat: Float {
+            switch self {
+            case .front: 0.4
+            case .lookLeft, .lookRight: 0.5
+            case .wingsOpen: 0.15
+            case .leanIn: 0.3
+            }
+        }
+    }
+
+    /// Sit for ~5 s in a random style, with a little hop and a new style halfway through
+    private static func rest(_ butterfly: Entity, at perch: SIMD3<Float>, in root: Entity) async {
+        await settle(butterfly, at: perch, in: root, style: .allCases.randomElement()!)
+        try? await Task.sleep(for: .seconds(2.5))
+        guard !Task.isCancelled else { return }
+        await hop(butterfly, to: perch + SIMD3(0, 0.05, 0) + towardViewer(perch) * 0.02, in: root)
+        await hop(butterfly, to: perch, in: root, landing: true)
+        await settle(butterfly, at: perch, in: root, style: .allCases.randomElement()!)
+        try? await Task.sleep(for: .seconds(2.5))
     }
 
     // MARK: Moves
@@ -198,13 +245,14 @@ enum Butterfly {
         }
     }
 
-    /// Once down, turn on the spot to a resting pose: facing you, or turned a little or well to one side —
-    /// different every time, never with its back to you
-    private static func settle(_ butterfly: Entity, at perch: SIMD3<Float>, in root: Entity) async {
+    /// Once down, turn on the spot to face you in the given style
+    private static func settle(_ butterfly: Entity, at perch: SIMD3<Float>, in root: Entity, style: RestStyle) async {
         let towardYou = facing(from: perch, to: perch + towardViewer(perch))
-        let turn = simd_quatf(angle: Float.random(in: -1.3...1.3), axis: [0, 1, 0])
+        let turn = simd_quatf(angle: style.yaw, axis: [0, 1, 0])
+        let lean = simd_quatf(angle: style.pitch, axis: [1, 0, 0])
+        play(style.clip, on: butterfly, speed: style.beat)
         var transform = butterfly.transform
-        transform.rotation = turn * towardYou
+        transform.rotation = turn * towardYou * lean
         butterfly.move(to: transform, relativeTo: root, duration: 0.6, timingFunction: .easeInOut)
         try? await Task.sleep(for: .seconds(0.6))
     }

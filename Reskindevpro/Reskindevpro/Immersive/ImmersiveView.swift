@@ -100,6 +100,8 @@ struct ImmersiveView: View {
                 }
             }
         }
+        // Tables and chairs in the room for the butterfly (asks for permission the first time)
+        .task { await RoomSurfaces().run(updating: perches) }
         .onAppear { appModel.immersiveSpaceState = .open }
         .onDisappear {
             flight?.cancel()
