@@ -8,7 +8,7 @@ struct CenterStageView: View {
     @State private var centeredID: String?
     @FocusState private var searchFocused: Bool
 
-    /// 1 normally; 0 while a sheet is open so the floating cards don't poke through it
+    /// 1 normally; 0 while a sheet is open so the floating cards lie flat and don't poke through it
     private var depth: CGFloat { appModel.openSheets > 0 ? 0 : 1 }
 
     var body: some View {
@@ -172,7 +172,7 @@ struct CenterStageView: View {
         HStack(spacing: -40) {
             ForEach(0..<3, id: \.self) { i in
                 SkeletonGigCard()
-                    .rotation3DEffect(.degrees(Double(i - 1) * -14), axis: (x: 0, y: 1, z: 0))
+                    .rotation3DEffect(.degrees(Double(i - 1) * -14 * depth), axis: (x: 0, y: 1, z: 0))
                     .scaleEffect(i == 1 ? 1 : 0.9)
                     .zIndex(i == 1 ? 1 : 0)
             }
@@ -200,7 +200,7 @@ struct CenterStageView: View {
                     }
                     .buttonStyle(.plain)
                     .gazeLift(scale: offset == 0 ? 1.08 : 1.15)
-                    .rotation3DEffect(.degrees(Double(offset.signum()) * -32), axis: (x: 0, y: 1, z: 0))
+                    .rotation3DEffect(.degrees(Double(offset.signum()) * -32 * depth), axis: (x: 0, y: 1, z: 0))
                     // keep every card in front of the window plane, focused card closest — flat while a sheet is up
                     .offset(z: max(0, 3 - distance) * 30 * depth)
                     .scaleEffect(distance == 0 ? 1 : (distance == 1 ? 0.86 : 0.74))
@@ -216,7 +216,8 @@ struct CenterStageView: View {
         .contentMargins(.horizontal, 300, for: .scrollContent)
         .scrollTargetBehavior(.viewAligned)
         .scrollPosition(id: $centeredID, anchor: .center)
-        .opacity(appModel.openSheets > 0 ? 0.35 : 1)
+        // Hidden while a sheet is up: turned side cards would otherwise show through its glass
+        .opacity(appModel.openSheets > 0 ? 0 : 1)
         .animation(.easeInOut(duration: 0.25), value: appModel.openSheets > 0)
         .animation(.spring(duration: 0.45), value: centeredID)
         .onAppear { recenter(gigs) }
