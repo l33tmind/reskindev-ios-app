@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Panel B: Center Stage (Carousel & AI)
 struct CenterStageView: View {
     @Environment(GigStore.self) private var store
+    @Environment(SessionStore.self) private var session
     @Environment(AppModel.self) private var appModel
     @Environment(\.openWindow) private var openWindow
     @State private var centeredID: String?
@@ -114,7 +115,8 @@ struct CenterStageView: View {
         let gigs: [GigModel]
     }
 
-    /// Searching / filtering: one results row. Otherwise: Recently Viewed, All Services, then one row per category.
+    /// Searching / filtering: one results row. Otherwise: All Services, Recently Viewed, one row per category,
+    /// then Saved.
     private func sections(_ gigs: [GigModel]) -> [GigSection] {
         let isFiltering = store.selectedCategory != nil || store.maxPrice != nil
             || !store.searchText.trimmingCharacters(in: .whitespaces).isEmpty
@@ -132,6 +134,11 @@ struct CenterStageView: View {
             if !inCategory.isEmpty {
                 rows.append(GigSection(title: category, icon: FilterPill.icon(for: category), gigs: inCategory))
             }
+        }
+        // Last row: everything on your wishlist, newest save first
+        let saved = session.savedGigIDs.reversed().compactMap { store.gig(id: $0) }
+        if !saved.isEmpty {
+            rows.append(GigSection(title: "Saved", icon: "heart.fill", gigs: saved))
         }
         return rows
     }
