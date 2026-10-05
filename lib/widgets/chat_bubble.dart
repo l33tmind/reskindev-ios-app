@@ -40,7 +40,7 @@ class ChatBubble extends StatelessWidget {
     }
     return _buildTextBubble(context);
   }
-  
+
   Widget _buildSystemNotificationBubble(BuildContext context) {
     IconData icon;
     Color iconColor = AppTheme.primary;
@@ -69,7 +69,9 @@ class ChatBubble extends StatelessWidget {
         margin: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: context.isDarkMode ? const Color(0xFF2D3748) : const Color(0xFFEDF2F7),
+          color: context.isDarkMode
+              ? const Color(0xFF2D3748)
+              : const Color(0xFFEDF2F7),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: context.themeBorder.withValues(alpha: 0.5)),
         ),
@@ -96,7 +98,7 @@ class ChatBubble extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
               ),
-            ]
+            ],
           ],
         ),
       ),
@@ -113,40 +115,67 @@ class ChatBubble extends StatelessWidget {
       width: double.infinity,
       margin: EdgeInsets.only(top: isFirstInGroup ? 8 : 2),
       child: Column(
-        crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment: isMe
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
         children: [
           Container(
-            constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.75,
+            ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
               color: isMe ? AppTheme.primary : context.themeSurface,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.04),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
+                  color: isMe
+                      ? AppTheme.primary.withValues(alpha: 0.25)
+                      : Colors.black.withValues(alpha: 0.04),
+                  blurRadius: isMe ? 12 : 3,
+                  spreadRadius: isMe ? -4 : 0,
+                  offset: Offset(0, isMe ? 5 : 1),
                 ),
               ],
               borderRadius: BorderRadius.only(
-                topLeft: const Radius.circular(18),
-                topRight: const Radius.circular(18),
-                bottomLeft: Radius.circular(isMe ? 18 : (isLastInGroup ? 4 : 18)),
-                bottomRight: Radius.circular(!isMe ? 18 : (isLastInGroup ? 4 : 18)),
+                topLeft: const Radius.circular(20),
+                topRight: const Radius.circular(20),
+                bottomLeft: Radius.circular(
+                  isMe ? 20 : (isLastInGroup ? 6 : 20),
+                ),
+                bottomRight: Radius.circular(
+                  !isMe ? 20 : (isLastInGroup ? 6 : 20),
+                ),
               ),
-              border: isMe ? null : Border.all(color: context.themeBorder.withValues(alpha: 0.6)),
+              border: isMe
+                  ? null
+                  : Border.all(
+                      color: context.themeTextDark.withValues(alpha: 0.06),
+                    ),
             ),
             child: Column(
-              crossAxisAlignment: isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+              crossAxisAlignment: isMe
+                  ? CrossAxisAlignment.end
+                  : CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (message.replyToText != null)
                   Container(
                     margin: const EdgeInsets.only(bottom: 4),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
-                      color: isMe ? Colors.white.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
+                      color: isMe
+                          ? Colors.white.withOpacity(0.2)
+                          : Colors.grey.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border(left: BorderSide(color: isMe ? Colors.white : AppTheme.primary, width: 3)),
+                      border: Border(
+                        left: BorderSide(
+                          color: isMe ? Colors.white : AppTheme.primary,
+                          width: 3,
+                        ),
+                      ),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -180,7 +209,9 @@ class ChatBubble extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: context.themeSurface,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: context.themeBorder.withValues(alpha: 0.5)),
+                          border: Border.all(
+                            color: context.themeBorder.withValues(alpha: 0.5),
+                          ),
                         ),
                         clipBehavior: Clip.antiAlias,
                         child: AnyLinkPreview(
@@ -209,41 +240,45 @@ class ChatBubble extends StatelessWidget {
                   alignment: WrapAlignment.end,
                   crossAxisAlignment: WrapCrossAlignment.end,
                   children: [
-                if (!isOnlyLink)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8, bottom: 2),
-                    child: Text(
-                      message.text,
-                      style: GoogleFonts.inter(
-                        color: isMe ? Colors.white : context.themeTextDark,
-                        fontSize: 15,
+                    if (!isOnlyLink)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8, bottom: 2),
+                        child: SelectableText(
+                          message.text,
+                          style: GoogleFonts.inter(
+                            color: isMe ? Colors.white : context.themeTextDark,
+                            fontSize: 15,
+                          ),
+                        ),
                       ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          message.createdAt != null
+                              ? DateFormat('hh:mm a').format(message.createdAt!)
+                              : 'Sending...',
+                          style: GoogleFonts.inter(
+                            color: isMe
+                                ? Colors.white.withOpacity(0.7)
+                                : context.themeTextLight,
+                            fontSize: 10,
+                          ),
+                        ),
+                        if (isMe) ...[
+                          const SizedBox(width: 4),
+                          Icon(
+                            message.createdAt == null
+                                ? Icons.access_time
+                                : (isRead ? Icons.done_all : Icons.check),
+                            size: 14,
+                            color: isRead
+                                ? Colors.blue.shade200
+                                : Colors.white.withOpacity(0.7),
+                          ),
+                        ],
+                      ],
                     ),
-                  ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      message.createdAt != null
-                          ? DateFormat('hh:mm a').format(message.createdAt!)
-                          : 'Sending...',
-                      style: GoogleFonts.inter(
-                        color: isMe ? Colors.white.withOpacity(0.7) : context.themeTextLight,
-                        fontSize: 10,
-                      ),
-                    ),
-                    if (isMe) ...[
-                      const SizedBox(width: 4),
-                      Icon(
-                        message.createdAt == null
-                            ? Icons.access_time
-                            : (isRead ? Icons.done_all : Icons.check),
-                        size: 14,
-                        color: isRead ? Colors.blue.shade200 : Colors.white.withOpacity(0.7),
-                      ),
-                    ]
-                  ],
-                ),
                   ],
                 ),
               ],
@@ -252,7 +287,9 @@ class ChatBubble extends StatelessWidget {
         ],
       ),
     );
-  }  Widget _buildImageBubble(BuildContext context) {
+  }
+
+  Widget _buildImageBubble(BuildContext context) {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -277,14 +314,22 @@ class ChatBubble extends StatelessWidget {
               CachedNetworkImage(
                 imageUrl: message.imageUrl ?? '',
                 fit: BoxFit.cover,
-                placeholder: (context, url) => Container(height: 200, color: Colors.grey.withOpacity(0.2)),
-                errorWidget: (context, url, error) => Container(height: 150, color: Colors.grey.withOpacity(0.2), child: const Icon(Icons.broken_image)),
+                placeholder: (context, url) =>
+                    Container(height: 200, color: Colors.grey.withOpacity(0.2)),
+                errorWidget: (context, url, error) => Container(
+                  height: 150,
+                  color: Colors.grey.withOpacity(0.2),
+                  child: const Icon(Icons.broken_image),
+                ),
               ),
               Positioned(
                 bottom: 8,
                 right: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black45,
                     borderRadius: BorderRadius.circular(12),
@@ -308,9 +353,11 @@ class ChatBubble extends StatelessWidget {
                               ? Icons.access_time
                               : (isRead ? Icons.done_all : Icons.check),
                           size: 14,
-                          color: isRead ? Colors.lightBlueAccent : Colors.white.withOpacity(0.7),
+                          color: isRead
+                              ? Colors.lightBlueAccent
+                              : Colors.white.withOpacity(0.7),
                         ),
-                      ]
+                      ],
                     ],
                   ),
                 ),
@@ -333,16 +380,24 @@ class ChatBubble extends StatelessWidget {
           left: 16,
           right: 16,
         ),
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           color: context.themeSurface,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppTheme.primary.withOpacity(0.3)),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: context.themeTextDark.withValues(alpha: 0.06),
+          ),
           boxShadow: [
             BoxShadow(
-              color: AppTheme.primary.withOpacity(0.05),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.08),
+              blurRadius: 28,
+              spreadRadius: -10,
+              offset: const Offset(0, 12),
             ),
           ],
         ),
@@ -351,14 +406,26 @@ class ChatBubble extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(Icons.local_offer_rounded, color: AppTheme.primary, size: 20),
-                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.local_offer_rounded,
+                    color: AppTheme.primary,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 10),
                 Text(
                   'Custom Offer',
                   style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.primary,
-                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
+                    color: context.themeTextDark,
+                    fontSize: 17,
                   ),
                 ),
               ],
@@ -366,7 +433,10 @@ class ChatBubble extends StatelessWidget {
             const SizedBox(height: 12),
             Text(
               message.offerDescription ?? message.text,
-              style: GoogleFonts.inter(color: context.themeTextDark, fontSize: 14),
+              style: GoogleFonts.inter(
+                color: context.themeTextDark,
+                fontSize: 14,
+              ),
             ),
             const SizedBox(height: 16),
             Row(
@@ -375,15 +445,42 @@ class ChatBubble extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Price', style: GoogleFonts.inter(fontSize: 12, color: context.themeTextLight)),
-                    Text('\$${message.offerPrice ?? 0}', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: context.themeTextDark)),
+                    Text(
+                      'Price',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: context.themeTextLight,
+                      ),
+                    ),
+                    Text(
+                      '\$${message.offerPrice ?? 0}',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 24,
+                        letterSpacing: -0.3,
+                        color: context.themeTextDark,
+                      ),
+                    ),
                   ],
                 ),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text('Delivery', style: GoogleFonts.inter(fontSize: 12, color: context.themeTextLight)),
-                    Text('${message.offerDays ?? 0} Days', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16, color: context.themeTextDark)),
+                    Text(
+                      'Delivery',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: context.themeTextLight,
+                      ),
+                    ),
+                    Text(
+                      '${message.offerDays ?? 0} Days',
+                      style: GoogleFonts.outfit(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 17,
+                        color: context.themeTextDark,
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -392,20 +489,30 @@ class ChatBubble extends StatelessWidget {
               const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
+                height: 48,
                 child: ElevatedButton(
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Proceeding to checkout... (UI pending)')),
+                      const SnackBar(
+                        content: Text('Proceeding to checkout... (UI pending)'),
+                      ),
                     );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                    shape: const StadiumBorder(),
                   ),
-                  child: Text('Accept Offer', style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    'Accept Offer',
+                    style: GoogleFonts.inter(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
-            ]
+            ],
           ],
         ),
       ),

@@ -212,8 +212,9 @@ struct ChatView: View {
                 HStack(spacing: 8) {
                     ForEach(chat.quickReplies, id: \.self) { reply in
                         Button(reply) { draft = reply; composerFocused = true }
-                            .font(.subheadline)
+                            .font(.subheadline.weight(.medium))
                             .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
                     }
                 }
             }
@@ -238,7 +239,7 @@ struct ChatView: View {
                     .focused($composerFocused)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 14)
-                    .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 22))
+                    .background(Color.white.opacity(0.08), in: Capsule())
                     .onChange(of: draft) { _, new in if !new.isEmpty { chat.userTyped() } }
                     .onSubmit(send)
                 Button(action: send) {
@@ -247,6 +248,7 @@ struct ChatView: View {
                         .foregroundStyle(.white)
                         .frame(width: Hit.min, height: Hit.min)
                         .background(Color.brandGreen, in: Circle())
+                        .shadow(color: Color.brandGreen.opacity(0.45), radius: 10, y: 4)
                 }
                 .buttonStyle(.plain)
                 .hoverEffect(.lift)
@@ -311,7 +313,7 @@ private struct WorkspacePanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Workspace Details").font(.title2.weight(.heavy))
+                Text("Workspace Details").font(.title3.weight(.semibold))
                 if let uid = session.uid, let conversation = chat.activeChat {
                     let name = chat.otherUser?.name ?? conversation.title(me: uid)
                     HStack(spacing: 12) {
@@ -319,7 +321,7 @@ private struct WorkspacePanel: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(name).font(.headline)
                             Text(chat.amISeller ? "BUYER" : "SELLER")
-                                .font(.caption.weight(.bold))
+                                .font(.caption2.weight(.semibold)).tracking(0.8)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -347,7 +349,7 @@ private struct WorkspacePanel: View {
             }
         }
         .frame(width: 400, height: 640)
-        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large))
+        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 32, style: .continuous))
     }
 }
 

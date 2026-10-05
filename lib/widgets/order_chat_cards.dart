@@ -1,3 +1,4 @@
+import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -13,11 +14,14 @@ class OrderChatCardBuilder extends StatelessWidget {
   final bool isCurrentUser;
   final bool isFreelancer;
 
+  final VoidCallback? onSubmitRequirements;
+
   const OrderChatCardBuilder({
     super.key,
     required this.message,
     required this.isCurrentUser,
     this.isFreelancer = false,
+    this.onSubmitRequirements,
   });
 
   @override
@@ -36,20 +40,39 @@ class OrderChatCardBuilder extends StatelessWidget {
     switch (action) {
       case 'payment_verified':
       case 'offer_accepted':
-        return _PaymentVerifiedCard(message: message, isFreelancer: isFreelancer);
+        return _PaymentVerifiedCard(
+          message: message,
+          isFreelancer: isFreelancer,
+          onSubmitRequirements: onSubmitRequirements,
+        );
       case 'order_placed':
         return _OrderPlacedCard(message: message, isFreelancer: isFreelancer);
       case 'requirements_submitted':
       case 'requirements':
-        return _RequirementsSubmittedCard(message: message, isFreelancer: isFreelancer);
+        return _RequirementsSubmittedCard(
+          message: message,
+          isFreelancer: isFreelancer,
+        );
       case 'order_delivered':
       case 'delivery':
-        return _OrderDeliveredCard(message: message, isCurrentUser: isCurrentUser, isFreelancer: isFreelancer);
+        return _OrderDeliveredCard(
+          message: message,
+          isCurrentUser: isCurrentUser,
+          isFreelancer: isFreelancer,
+        );
       case 'revision_requested':
-        return _RevisionRequestedCard(message: message, isFreelancer: isFreelancer);
+        return _RevisionRequestedCard(
+          message: message,
+          isFreelancer: isFreelancer,
+        );
       case 'order_completed':
       case 'review':
-        return _OrderCompletedCard(message: message, isFreelancer: isFreelancer);
+        return _OrderCompletedCard(
+          message: message,
+          isFreelancer: isFreelancer,
+        );
+      case 'reviews_published':
+        return _ReviewsPublishedCard(message: message);
       case 'custom_offer':
       case 'offer':
         return _CustomOfferCard(message: message, isCurrentUser: isCurrentUser);
@@ -129,25 +152,45 @@ class _TimelineWrapper extends StatelessWidget {
         children: [
           // Timeline indicator column
           SizedBox(
-            width: 40,
+            width: 44,
             child: Stack(
               alignment: Alignment.center,
               children: [
                 // Vertical Line
                 Container(
-                  width: 2,
-                  color: context.themeBorder.withValues(alpha: 0.5),
+                  width: 1.5,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        context.themeBorder,
+                        context.themeBorder.withValues(alpha: 0),
+                      ],
+                    ),
+                  ),
                 ),
                 // Icon Bubble
                 Positioned(
                   top: 24, // align with the top of the card roughly
                   child: Container(
-                    padding: const EdgeInsets.all(6),
+                    padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
                       color: iconColor,
                       shape: BoxShape.circle,
+                      border: Border.all(
+                        color: context.themeBackground,
+                        width: 4,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: iconColor.withValues(alpha: 0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: Icon(iconData, color: Colors.white, size: 16),
+                    child: Icon(iconData, color: Colors.white, size: 15),
                   ),
                 ),
               ],
@@ -189,14 +232,24 @@ class _WebStyleCard extends StatelessWidget {
         : orderId;
 
     return Container(
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
         color: context.themeSurface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: context.themeTextDark.withValues(alpha: 0.06),
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 2,
+            offset: const Offset(0, 1),
+          ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.08),
+            blurRadius: 28,
+            spreadRadius: -10,
+            offset: const Offset(0, 12),
           ),
         ],
       ),
@@ -204,7 +257,7 @@ class _WebStyleCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -216,25 +269,32 @@ class _WebStyleCard extends StatelessWidget {
                       timeStr,
                       style: GoogleFonts.inter(
                         fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w500,
                         color: context.themeTextLight,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                       ),
                     ),
-                    OutlinedButton.icon(
+                    TextButton.icon(
                       onPressed: () async {
-                        if (message.orderId == null || message.orderId!.isEmpty) return;
-                        
+                        if (message.orderId == null || message.orderId!.isEmpty)
+                          return;
+
                         // Show loading indicator
                         showDialog(
                           context: context,
                           barrierDismissible: false,
-                          builder: (_) => const Center(child: CircularProgressIndicator()),
+                          builder: (_) =>
+                              const Center(child: CircularProgressIndicator()),
                         );
-                        
+
                         try {
-                          final doc = await FirebaseFirestore.instance.collection('orders').doc(message.orderId).get();
-                          if (context.mounted) Navigator.pop(context); // pop loading
-                          
+                          final doc = await FirebaseFirestore.instance
+                              .collection('orders')
+                              .doc(message.orderId)
+                              .get();
+                          if (context.mounted)
+                            Navigator.pop(context); // pop loading
+
                           if (doc.exists && context.mounted) {
                             final order = OrderModel.fromFirestore(doc);
                             // We need to know if current user is seller.
@@ -243,19 +303,22 @@ class _WebStyleCard extends StatelessWidget {
                             // we can check if the current user ID matches the order's authorId.
                             final uid = FirebaseAuth.instance.currentUser?.uid;
                             final isSeller = uid == order.authorId;
-                            
+
                             showModalBottomSheet(
                               context: context,
                               isScrollControlled: true,
                               backgroundColor: Colors.transparent,
                               builder: (ctx) => WorkspaceDetailsSheet(
                                 orderId: order.id!,
-                                isSeller: isSeller,
-                                chatId: 'unknown', // We don't have chatId easily here, but that's okay for display
+
+                                chatId:
+                                    'unknown', // We don't have chatId easily here, but that's okay for display
                               ),
                             );
                           } else if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Order not found')));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text('Order not found')),
+                            );
                           }
                         } catch (e) {
                           if (context.mounted) Navigator.pop(context);
@@ -263,17 +326,20 @@ class _WebStyleCard extends StatelessWidget {
                       },
                       icon: const Icon(Icons.open_in_new_rounded, size: 14),
                       label: const Text('View Order'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF10B981),
-                        side: const BorderSide(color: Color(0xFF10B981)),
+                      style: TextButton.styleFrom(
+                        foregroundColor: context.themeTextDark,
+                        backgroundColor: context.themeTextDark.withValues(
+                          alpha: 0.06,
+                        ),
+                        shape: const StadiumBorder(),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
+                          horizontal: 14,
                           vertical: 0,
                         ),
-                        minimumSize: const Size(0, 28),
+                        minimumSize: const Size(0, 32),
                         textStyle: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                     ),
@@ -284,12 +350,13 @@ class _WebStyleCard extends StatelessWidget {
                 Text(
                   'for order #$displayId',
                   style: GoogleFonts.outfit(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w600,
+                    letterSpacing: -0.2,
                     color: context.themeTextDark,
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
                 // Custom Content
                 child,
               ],
@@ -301,7 +368,6 @@ class _WebStyleCard extends StatelessWidget {
     );
   }
 }
-
 
 class _OrderPlacedCard extends StatelessWidget {
   final MessageModel message;
@@ -318,20 +384,18 @@ class _OrderPlacedCard extends StatelessWidget {
           Text(
             isFreelancer ? 'New Order! ⏳' : 'Order Placed! ⏳',
             style: GoogleFonts.inter(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
               color: Colors.amber.shade800,
             ),
           ),
           const SizedBox(height: 8),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             decoration: BoxDecoration(
               color: Colors.amber.shade50,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: Colors.amber.shade200,
-              ),
+              borderRadius: BorderRadius.circular(18),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -346,7 +410,9 @@ class _OrderPlacedCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        isFreelancer ? 'Waiting for Admin Verification' : 'Pending Verification',
+                        isFreelancer
+                            ? 'Waiting for Admin Verification'
+                            : 'Pending Verification',
                         style: GoogleFonts.inter(
                           fontWeight: FontWeight.bold,
                           color: Colors.amber.shade800,
@@ -357,7 +423,7 @@ class _OrderPlacedCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  isFreelancer 
+                  isFreelancer
                       ? 'The buyer has placed a new order for "${message.gigTitle ?? 'your gig'}". The payment is currently pending verification by the Admin. Please wait for the payment to be secured before starting work.'
                       : 'Your order for "${message.gigTitle ?? 'the gig'}" has been created. Please wait while the Admin verifies your payment. Once verified, the funds will be secured in escrow.',
                   style: GoogleFonts.inter(
@@ -380,7 +446,12 @@ class _OrderPlacedCard extends StatelessWidget {
 class _PaymentVerifiedCard extends StatelessWidget {
   final MessageModel message;
   final bool isFreelancer;
-  const _PaymentVerifiedCard({required this.message, this.isFreelancer = false});
+  final VoidCallback? onSubmitRequirements;
+  const _PaymentVerifiedCard({
+    required this.message,
+    this.isFreelancer = false,
+    this.onSubmitRequirements,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -398,20 +469,18 @@ class _PaymentVerifiedCard extends StatelessWidget {
           Text(
             'Payment Secured!',
             style: GoogleFonts.inter(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
               color: const Color(0xFF10B981),
             ),
           ),
           const SizedBox(height: 8),
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             decoration: BoxDecoration(
               color: const Color(0xFF10B981).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: const Color(0xFF10B981).withValues(alpha: 0.3),
-              ),
+              borderRadius: BorderRadius.circular(18),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -446,7 +515,9 @@ class _PaymentVerifiedCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Buyer: Please submit your requirements.\nSeller: You may begin work once requirements are received.',
+                  isFreelancer
+                      ? 'You may begin work once the buyer submits their requirements.'
+                      : 'Please submit your requirements to start the order.',
                   style: GoogleFonts.inter(
                     fontSize: 12,
                     color: context.themeTextLight,
@@ -468,8 +539,9 @@ class _PaymentVerifiedCard extends StatelessWidget {
                   Text(
                     'ESCROW AMOUNT',
                     style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
                       color: context.themeTextLight,
                     ),
                   ),
@@ -477,7 +549,8 @@ class _PaymentVerifiedCard extends StatelessWidget {
                     '\$${price.toString()}',
                     style: GoogleFonts.outfit(
                       fontSize: 20,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                       color: context.themeTextDark,
                     ),
                   ),
@@ -490,7 +563,7 @@ class _PaymentVerifiedCard extends StatelessWidget {
                 ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF10B981).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: BorderRadius.circular(999),
                 ),
                 child: Text(
                   'HELD IN ESCROW',
@@ -506,32 +579,57 @@ class _PaymentVerifiedCard extends StatelessWidget {
         ],
       ),
       footer: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFF10B981).withValues(alpha: 0.1),
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(12),
-            bottomRight: Radius.circular(12),
+          color: context.themeTextDark.withValues(alpha: 0.035),
+          border: Border(
+            top: BorderSide(
+              color: context.themeTextDark.withValues(alpha: 0.06),
+            ),
           ),
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Column(
           children: [
-            const Icon(
-              Icons.info_outline_rounded,
-              size: 16,
-              color: Color(0xFF10B981),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.info_outline_rounded,
+                  size: 16,
+                  color: Color(0xFF10B981),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "What's next: Buyer needs to submit requirements to start the order.",
+                    style: GoogleFonts.inter(
+                      fontSize: 12.5,
+                      height: 1.4,
+                      color: context.themeTextLight,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                "What's next: Buyer needs to submit requirements to start the order.",
-                style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: context.themeTextDark,
+            if (!isFreelancer) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: ElevatedButton(
+                  onPressed: onSubmitRequirements,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                    shape: const StadiumBorder(),
+                  ),
+                  child: const Text(
+                    'Submit Requirements',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
               ),
-            ),
+            ],
           ],
         ),
       ),
@@ -542,7 +640,11 @@ class _PaymentVerifiedCard extends StatelessWidget {
 // 2. Requirements Submitted
 class _RequirementsSubmittedCard extends StatelessWidget {
   final MessageModel message;
-  const _RequirementsSubmittedCard({required this.message});
+  final bool isFreelancer;
+  const _RequirementsSubmittedCard({
+    required this.message,
+    this.isFreelancer = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -554,24 +656,24 @@ class _RequirementsSubmittedCard extends StatelessWidget {
           Text(
             'Requirements Submitted',
             style: GoogleFonts.inter(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
               color: Colors.blue,
             ),
           ),
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             decoration: BoxDecoration(
               color: Colors.blue.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.blue.withValues(alpha: 0.1)),
+              borderRadius: BorderRadius.circular(18),
             ),
-            child: Text(
-              message.text.isNotEmpty
-                  ? message.text
-                  : 'The buyer has submitted the required information.',
+            child: SelectableText(
+              isFreelancer
+                  ? 'The buyer has submitted the requirements.\n\n${message.text.replaceFirst('The buyer has submitted the requirements.\n\n', '')}'
+                  : 'You have submitted the requirements.\n\n${message.text.replaceFirst('The buyer has submitted the requirements.\n\n', '')}',
               style: GoogleFonts.inter(
                 fontSize: 14,
                 color: context.themeTextDark,
@@ -582,12 +684,13 @@ class _RequirementsSubmittedCard extends StatelessWidget {
         ],
       ),
       footer: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.blue.withValues(alpha: 0.05),
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(12),
-            bottomRight: Radius.circular(12),
+          color: context.themeTextDark.withValues(alpha: 0.035),
+          border: Border(
+            top: BorderSide(
+              color: context.themeTextDark.withValues(alpha: 0.06),
+            ),
           ),
         ),
         child: Row(
@@ -597,10 +700,13 @@ class _RequirementsSubmittedCard extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                "What's next: The countdown has started. Seller is working on it.",
+                isFreelancer
+                    ? "What's next: The countdown has started. You should start working on the order."
+                    : "What's next: The countdown has started. The seller is working on your order.",
                 style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: context.themeTextDark,
+                  fontSize: 12.5,
+                  height: 1.4,
+                  color: context.themeTextLight,
                 ),
               ),
             ),
@@ -633,21 +739,23 @@ class _OrderDeliveredCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            isFreelancer ? 'You Delivered the Final Work' : 'Seller Delivered the Final Work',
+            isFreelancer
+                ? 'You Delivered the Final Work'
+                : 'Seller Delivered the Final Work',
             style: GoogleFonts.inter(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
               color: Colors.purple,
             ),
           ),
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             decoration: BoxDecoration(
               color: Colors.purple.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.purple.withValues(alpha: 0.1)),
+              borderRadius: BorderRadius.circular(18),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -698,12 +806,13 @@ class _OrderDeliveredCard extends StatelessWidget {
         ],
       ),
       footer: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.purple.withValues(alpha: 0.05),
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(12),
-            bottomRight: Radius.circular(12),
+          color: context.themeTextDark.withValues(alpha: 0.035),
+          border: Border(
+            top: BorderSide(
+              color: context.themeTextDark.withValues(alpha: 0.06),
+            ),
           ),
         ),
         child: Row(
@@ -717,12 +826,13 @@ class _OrderDeliveredCard extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                isFreelancer 
-                  ? "What's next: The buyer has 3 days to review your delivery and accept it."
-                  : "What's next: You have 3 days to review the work and accept the delivery or request a revision.",
+                isFreelancer
+                    ? "What's next: The buyer has 3 days to review your delivery and accept it."
+                    : "What's next: You have 3 days to review the work and accept the delivery or request a revision.",
                 style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: context.themeTextDark,
+                  fontSize: 12.5,
+                  height: 1.4,
+                  color: context.themeTextLight,
                 ),
               ),
             ),
@@ -737,7 +847,10 @@ class _OrderDeliveredCard extends StatelessWidget {
 class _RevisionRequestedCard extends StatelessWidget {
   final MessageModel message;
   final bool isFreelancer;
-  const _RevisionRequestedCard({required this.message, this.isFreelancer = false});
+  const _RevisionRequestedCard({
+    required this.message,
+    this.isFreelancer = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -747,21 +860,23 @@ class _RevisionRequestedCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            isFreelancer ? 'Buyer Requested a Revision' : 'You Requested a Revision',
+            isFreelancer
+                ? 'Buyer Requested a Revision'
+                : 'You Requested a Revision',
             style: GoogleFonts.inter(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
               color: Colors.orange,
             ),
           ),
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
             decoration: BoxDecoration(
               color: Colors.orange.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
+              borderRadius: BorderRadius.circular(18),
             ),
             child: Text(
               message.text,
@@ -774,12 +889,13 @@ class _RevisionRequestedCard extends StatelessWidget {
         ],
       ),
       footer: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
-          color: Colors.orange.withValues(alpha: 0.05),
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(12),
-            bottomRight: Radius.circular(12),
+          color: context.themeTextDark.withValues(alpha: 0.035),
+          border: Border(
+            top: BorderSide(
+              color: context.themeTextDark.withValues(alpha: 0.06),
+            ),
           ),
         ),
         child: Row(
@@ -793,12 +909,13 @@ class _RevisionRequestedCard extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                isFreelancer 
-                  ? "What's next: Please review the buyer's notes and deliver the updated work."
-                  : "What's next: The seller will review your notes and deliver the updated work.",
+                isFreelancer
+                    ? "What's next: Please review the buyer's notes and deliver the updated work."
+                    : "What's next: The seller will review your notes and deliver the updated work.",
                 style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: context.themeTextDark,
+                  fontSize: 12.5,
+                  height: 1.4,
+                  color: context.themeTextLight,
                 ),
               ),
             ),
@@ -812,7 +929,8 @@ class _RevisionRequestedCard extends StatelessWidget {
 // 5. Order Completed (Success + Review) MATCHING WEB EXACTLY
 class _OrderCompletedCard extends StatelessWidget {
   final MessageModel message;
-  const _OrderCompletedCard({required this.message});
+  final bool isFreelancer;
+  const _OrderCompletedCard({required this.message, this.isFreelancer = false});
 
   @override
   Widget build(BuildContext context) {
@@ -845,11 +963,10 @@ class _OrderCompletedCard extends StatelessWidget {
           if (rating > 0) ...[
             const SizedBox(height: 16),
             Container(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
               decoration: BoxDecoration(
                 color: context.themeBackground,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: context.themeBorder),
+                borderRadius: BorderRadius.circular(18),
               ),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -926,8 +1043,9 @@ class _OrderCompletedCard extends StatelessWidget {
                     Text(
                       'FINAL AMOUNT PAID',
                       style: GoogleFonts.inter(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.8,
                         color: context.themeTextLight,
                       ),
                     ),
@@ -936,7 +1054,8 @@ class _OrderCompletedCard extends StatelessWidget {
                       '\$${price.toString()}',
                       style: GoogleFonts.outfit(
                         fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w600,
+                        fontFeatures: const [FontFeature.tabularFigures()],
                         color: context.themeTextDark,
                       ),
                     ),
@@ -948,23 +1067,23 @@ class _OrderCompletedCard extends StatelessWidget {
                     vertical: 10,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF10B981),
-                    borderRadius: BorderRadius.circular(4),
+                    color: const Color(0xFF10B981).withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                   child: Row(
                     children: [
                       const Icon(
-                        Icons.check_circle_outline_rounded,
-                        color: Colors.white,
+                        Icons.check_circle_rounded,
+                        color: Color(0xFF10B981),
                         size: 16,
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        'CLEARED',
+                        'Cleared',
                         style: GoogleFonts.inter(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF10B981),
                         ),
                       ),
                     ],
@@ -976,12 +1095,13 @@ class _OrderCompletedCard extends StatelessWidget {
         ],
       ),
       footer: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
-          color: const Color(0xFF10B981).withValues(alpha: 0.1),
-          borderRadius: const BorderRadius.only(
-            bottomLeft: Radius.circular(12),
-            bottomRight: Radius.circular(12),
+          color: context.themeTextDark.withValues(alpha: 0.035),
+          border: Border(
+            top: BorderSide(
+              color: context.themeTextDark.withValues(alpha: 0.06),
+            ),
           ),
         ),
         child: Row(
@@ -997,8 +1117,9 @@ class _OrderCompletedCard extends StatelessWidget {
               child: Text(
                 "What's next: Transaction closed. Thank you for using Reskindev! If you need further revisions, please request a new custom offer.",
                 style: GoogleFonts.inter(
-                  fontSize: 12,
-                  color: context.themeTextDark,
+                  fontSize: 12.5,
+                  height: 1.4,
+                  color: context.themeTextLight,
                 ),
               ),
             ),
@@ -1033,8 +1154,9 @@ class _CustomOfferCard extends StatelessWidget {
               Text(
                 'Custom Offer',
                 style: GoogleFonts.inter(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: -0.2,
                   color: AppTheme.primary,
                 ),
               ),
@@ -1057,8 +1179,9 @@ class _CustomOfferCard extends StatelessWidget {
                   Text(
                     'PRICE',
                     style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.8,
                       color: context.themeTextLight,
                     ),
                   ),
@@ -1076,12 +1199,19 @@ class _CustomOfferCard extends StatelessWidget {
                 ElevatedButton(
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please accept custom offers from the website version for now.')),
+                      const SnackBar(
+                        content: Text(
+                          'Please accept custom offers from the website version for now.',
+                        ),
+                      ),
                     );
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 0,
+                    ),
                   ),
                   child: Text(
                     'Accept Offer',
@@ -1182,6 +1312,102 @@ class _SimpleBannerCard extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// 6. Reviews Published (Double-Blind Revealed)
+class _ReviewsPublishedCard extends StatelessWidget {
+  final MessageModel message;
+  const _ReviewsPublishedCard({required this.message});
+
+  Widget _buildReviewBox(
+    BuildContext context,
+    String title,
+    double rating,
+    String comment,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+      decoration: BoxDecoration(
+        color: context.themeBackground,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
+              const SizedBox(width: 4),
+              Text(
+                rating.toStringAsFixed(1),
+                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          if (comment.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              comment,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                color: context.themeTextDark,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = message.metadata ?? {};
+    final buyerRating = (meta['buyerRating'] as num?)?.toDouble() ?? 0.0;
+    final buyerComment = meta['buyerComment']?.toString() ?? '';
+    final sellerRating = (meta['sellerRating'] as num?)?.toDouble() ?? 0.0;
+    final sellerComment = meta['sellerComment']?.toString() ?? '';
+
+    return _WebStyleCard(
+      message: message,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Both parties have reviewed!',
+            style: GoogleFonts.inter(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.2,
+              color: const Color(0xFF10B981),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'The reviews are now public.',
+            style: GoogleFonts.inter(
+              fontSize: 13,
+              color: context.themeTextDark,
+            ),
+          ),
+          const SizedBox(height: 16),
+          _buildReviewBox(context, "Buyer's Review", buyerRating, buyerComment),
+          const SizedBox(height: 12),
+          _buildReviewBox(
+            context,
+            "Seller's Review",
+            sellerRating,
+            sellerComment,
           ),
         ],
       ),

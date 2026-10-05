@@ -49,7 +49,7 @@ struct WorkspaceTimeline: View {
                             .fill(isPassed ? Color.brandGreen : Color.black.opacity(0.25))
                             .frame(width: 32, height: 32)
                         Circle()
-                            .stroke(isActive || isPassed ? Color.brandGreen : Color.white.opacity(0.3), lineWidth: 2)
+                            .stroke(isActive || isPassed ? Color.brandGreen : Color.white.opacity(0.3), lineWidth: 1.5)
                             .frame(width: 32, height: 32)
                         if isPassed {
                             Image(systemName: "checkmark").font(.caption.weight(.bold)).foregroundStyle(.white)
@@ -66,7 +66,7 @@ struct WorkspaceTimeline: View {
                 .accessibilityLabel("\(labels[index]) step")
 
                 if index < labels.count - 1 {
-                    Rectangle()
+                    Capsule()
                         .fill(index < current ? Color.brandGreen : Color.white.opacity(0.15))
                         .frame(width: 2)
                         .frame(minHeight: 24)
@@ -75,8 +75,8 @@ struct WorkspaceTimeline: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 Text(labels[index].uppercased())
-                    .font(.caption.weight(.heavy))
-                    .tracking(1.5)
+                    .font(.caption.weight(.semibold))
+                    .tracking(0.9)
                     .foregroundStyle(isActive ? Color.brandGreen : (isPassed ? Color.primary : Color.secondary))
                     .padding(.top, 12)
                 if isOpen {
@@ -106,7 +106,7 @@ struct WorkspaceTimeline: View {
         box {
             Text(order.gigTitle).font(.headline)
             HStack {
-                Text("#\(String(order.id.suffix(6)).uppercased())").font(.caption.weight(.heavy))
+                Text("#\(String(order.id.suffix(6)).uppercased())").font(.caption.weight(.semibold))
                 Spacer()
                 StatusBadge(order: order)
             }
@@ -129,7 +129,7 @@ struct WorkspaceTimeline: View {
                 Text(order.requirements).font(.callout).textSelection(.enabled)
                 if !order.credentials.isEmpty {
                     Divider()
-                    Text("CREDENTIALS").font(.caption2.weight(.heavy)).foregroundStyle(.blue)
+                    Text("CREDENTIALS").font(.caption2.weight(.semibold)).tracking(0.8).foregroundStyle(.blue)
                     Text(order.credentials).font(.callout.monospaced()).textSelection(.enabled)
                 }
                 if order.needsRequirements && isBuyer {
@@ -157,14 +157,14 @@ struct WorkspaceTimeline: View {
                     let late = remaining < 0
                     VStack(spacing: 4) {
                         Label(late ? "LATE BY" : "TIME LEFT TO DELIVER", systemImage: "clock")
-                            .font(.caption.weight(.heavy))
+                            .font(.caption.weight(.semibold))
                         Text(Self.countdown(abs(remaining)))
-                            .font(.title2.monospacedDigit().weight(.heavy))
+                            .font(.system(.title, design: .rounded).monospacedDigit().weight(.semibold))
                     }
                     .foregroundStyle(late ? Color.red : Color.brandGreen)
                     .frame(maxWidth: .infinity)
                     .padding(16)
-                    .background((late ? Color.red : Color.brandGreen).opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.small))
+                    .background((late ? Color.red : Color.brandGreen).opacity(0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
                 }
             }
 
@@ -190,7 +190,7 @@ struct WorkspaceTimeline: View {
 
             if order.status == "revision", !order.revisionNote.isEmpty {
                 box(tint: .orange) {
-                    Text("REVISION REQUESTED").font(.caption2.weight(.heavy)).foregroundStyle(.orange)
+                    Text("REVISION REQUESTED").font(.caption2.weight(.semibold)).tracking(0.8).foregroundStyle(.orange)
                     Text(order.revisionNote).font(.callout)
                 }
             }
@@ -255,7 +255,7 @@ struct WorkspaceTimeline: View {
                 // Both reviews are public: show the seller's side too
                 if order.isReviewPublic, let sellerReview = order.sellerReview {
                     box(tint: .blue) {
-                        Text("SELLER'S REVIEW OF THE BUYER").font(.caption2.weight(.heavy)).foregroundStyle(.blue)
+                        Text("SELLER'S REVIEW OF THE BUYER").font(.caption2.weight(.semibold)).tracking(0.8).foregroundStyle(.blue)
                         HStack(spacing: 2) {
                             ForEach(0..<5, id: \.self) { i in
                                 Image(systemName: i < sellerReview.stars ? "star.fill" : "star").foregroundStyle(Color.starYellow)
@@ -342,8 +342,7 @@ struct WorkspaceTimeline: View {
         VStack(alignment: .leading, spacing: 10, content: content)
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(tint.opacity(tint == .white ? 0.06 : 0.12), in: RoundedRectangle(cornerRadius: Radius.small))
-            .overlay(RoundedRectangle(cornerRadius: Radius.small).stroke(tint.opacity(0.25), lineWidth: 1))
+            .background(tint.opacity(tint == .white ? 0.06 : 0.12), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 
     private func note(_ text: String) -> some View {
