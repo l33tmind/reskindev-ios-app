@@ -16,6 +16,7 @@ struct ImmersiveView: View {
     @Environment(SessionStore.self) private var session
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissImmersiveSpace) private var dismissImmersiveSpace
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var perches = ButterflyPerches()
     @State private var flight: Task<Void, Never>?
     /// Showroom root, so cards can be dragged from SwiftUI
@@ -65,7 +66,10 @@ struct ImmersiveView: View {
                 butterfly.position = [0.25, 1.35, -0.9]
                 root.addChild(butterfly)
                 let perches = perches
-                flight = Task { await Butterfly.fly(butterfly, in: root, perches: perches) }
+                // Reduce Motion: the butterfly just stays put instead of flying around
+                if !reduceMotion {
+                    flight = Task { await Butterfly.fly(butterfly, in: root, perches: perches) }
+                }
             }
         } update: { content, attachments in
             guard let root = content.entities.first(where: { $0.name == "showroom" }) else { return }

@@ -382,7 +382,7 @@ private struct SystemCard: View {
     private func run(_ work: @escaping () async throws -> Void) {
         isWorking = true
         Task {
-            do { try await work() } catch { onError(error.localizedDescription) }
+            do { try await work() } catch { onError(error.friendlyMessage) }
             isWorking = false
         }
     }

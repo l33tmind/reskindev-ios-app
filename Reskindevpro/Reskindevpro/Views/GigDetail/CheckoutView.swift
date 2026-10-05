@@ -72,7 +72,7 @@ struct CheckoutView: View {
     private var formColumn: some View {
         VStack(alignment: .leading, spacing: 24) {
             HStack {
-                Text(isOffer ? "Accept Custom Offer" : "Checkout").font(.extraLargeTitle2.weight(.bold))
+                Text(isOffer ? "Accept Custom Offer" : "Checkout").font(.extraLargeTitle2.weight(.semibold))
                 Spacer()
                 CircleIconButton(systemName: "xmark", label: "Close") { dismiss() }
             }
@@ -133,15 +133,15 @@ struct CheckoutView: View {
                 .font(.callout)
         }
         .padding(18)
-        .background(Color.starYellow.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.small))
-        .overlay(RoundedRectangle(cornerRadius: Radius.small).stroke(Color.starYellow.opacity(0.35), lineWidth: 1))
+        .background(Color.starYellow.opacity(0.12), in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.small, style: .continuous).stroke(Color.starYellow.opacity(0.35), lineWidth: 1))
     }
 
     // MARK: Summary
 
     private var summaryColumn: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Order Summary").font(.title2.weight(.bold))
+            Text("Order Summary").font(.title2.weight(.semibold))
 
             summaryHeader
 
@@ -177,9 +177,9 @@ struct CheckoutView: View {
             priceRow("Service Fee (\(feePercent.formatted())%)", pricing.feeAmount.usd)
             Divider()
             HStack {
-                Text("Total").font(.title3.weight(.bold))
+                Text("Total").font(.title3.weight(.semibold))
                 Spacer()
-                Text(pricing.total.usd).font(.title2.weight(.heavy))
+                Text(pricing.total.usd).font(.title2.weight(.semibold))
             }
 
             Spacer()
@@ -202,7 +202,7 @@ struct CheckoutView: View {
         }
         .padding(24)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Radius.medium))
+        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
     }
 
     private var successView: some View {
@@ -211,7 +211,9 @@ struct CheckoutView: View {
                 .font(.system(size: 90))
                 .foregroundStyle(Color.brandGreen)
                 .shadow(color: Color.brandGreen.opacity(0.6), radius: 24)
-            Text(isOffer ? "Offer Accepted!" : "Order Placed Successfully!").font(.extraLargeTitle2.weight(.bold))
+                .symbolEffect(.bounce, options: .nonRepeating)
+                .onAppear { SoundFX.success.play() }
+            Text(isOffer ? "Offer Accepted!" : "Order Placed Successfully!").font(.extraLargeTitle2.weight(.semibold))
             Text("Your order is in My Orders, and its WorkStream chat is open in the Inbox.")
                 .foregroundStyle(.secondary)
             Button("Done") { dismiss() }
@@ -228,7 +230,7 @@ struct CheckoutView: View {
             HStack(spacing: 14) {
                 CachedImage(url: gig.imageUrl)
                     .frame(width: 72, height: 72)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 VStack(alignment: .leading, spacing: 4) {
                     Text(gig.title).font(.headline).lineLimit(2)
                     Text("\(package.name.uppercased()) PACKAGE")
@@ -257,7 +259,7 @@ struct CheckoutView: View {
             coupon = try await OrderService.coupon(code: couponCode)
         } catch {
             coupon = nil
-            couponError = error.localizedDescription
+            couponError = error.friendlyMessage
         }
         applyingCoupon = false
     }
@@ -284,7 +286,7 @@ struct CheckoutView: View {
             appModel.celebrate()
             withAnimation { placedOrder = true }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.friendlyMessage
         }
         submitting = false
     }
@@ -330,10 +332,10 @@ private struct PaymentOption: View {
             .padding(16)
             .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
             .background(isSelected ? Color.brandGreen.opacity(0.12) : Color.white.opacity(0.05),
-                        in: RoundedRectangle(cornerRadius: Radius.small))
-            .overlay(RoundedRectangle(cornerRadius: Radius.small)
+                        in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
                 .stroke(isSelected ? Color.brandGreen : Color.white.opacity(0.15), lineWidth: isSelected ? 2 : 1))
-            .contentShape(RoundedRectangle(cornerRadius: Radius.small))
+            .contentShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
         }
         .buttonStyle(.plain)
         .hoverEffect(.highlight)

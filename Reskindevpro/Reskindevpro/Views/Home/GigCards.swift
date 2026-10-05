@@ -121,7 +121,47 @@ struct GigCardView: View {
                 .stroke(Color.white.opacity(isFocused ? 0.35 : 0.12), lineWidth: 1)
         )
         .accessibilityElement(children: .combine)
+        .gigQuickPreview(gig)
     }
+}
+
+// MARK: - Pinch and hold: big preview + quick save
+
+private struct GigQuickPreview: ViewModifier {
+    let gig: GigModel
+    @Environment(SessionStore.self) private var session
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            if session.isSignedIn {
+                let saved = session.isSaved(gig.id)
+                Button {
+                    Task { try? await session.toggleSave(gig.id) }
+                } label: {
+                    Label(saved ? "Remove from Saved" : "Save", systemImage: saved ? "heart.slash" : "heart")
+                }
+            }
+        } preview: {
+            VStack(alignment: .leading, spacing: 14) {
+                CachedImage(url: gig.imageUrl)
+                    .frame(width: 520, height: 300)
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                Text(gig.title).font(.title3.weight(.semibold)).lineLimit(2)
+                HStack {
+                    Label(gig.ratingText, systemImage: gig.ratingIcon).foregroundStyle(.secondary)
+                    Spacer()
+                    Text("From $\(String(format: "%.0f", gig.price))")
+                        .font(.system(.title3, design: .rounded).weight(.semibold))
+                }
+            }
+            .padding(20)
+            .frame(width: 560)
+        }
+    }
+}
+
+extension View {
+    func gigQuickPreview(_ gig: GigModel) -> some View { modifier(GigQuickPreview(gig: gig)) }
 }
 
 /// Smaller card used in the rows under the carousel:
@@ -175,6 +215,7 @@ struct CompactGigCard: View {
         .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.medium))
         .overlay(RoundedRectangle(cornerRadius: Radius.medium).stroke(Color.white.opacity(0.14), lineWidth: 1))
         .accessibilityElement(children: .combine)
+        .gigQuickPreview(gig)
     }
 }
 

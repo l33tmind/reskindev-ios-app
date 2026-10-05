@@ -78,7 +78,7 @@ struct ChatView: View {
                 ReportButtons { reason in
                     Task {
                         do { try await chat.report(reason: reason); show("Report submitted successfully") }
-                        catch { errorMessage = error.localizedDescription }
+                        catch { errorMessage = error.friendlyMessage }
                     }
                 }
             } message: {
@@ -165,7 +165,7 @@ struct ChatView: View {
                 try await chat.toggleBlock()
                 show(wasBlocked ? "User unblocked" : "User blocked")
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = error.friendlyMessage
             }
         }
     }
@@ -200,6 +200,12 @@ struct ChatView: View {
             .defaultScrollAnchor(.bottom)
             .onChange(of: chat.messages.last?.id) {
                 withAnimation { proxy.scrollTo(chat.messages.last?.id, anchor: .bottom) }
+                // A soft chime when money moves or the order closes, while you're looking at the chat
+                if let last = chat.messages.last, last.kind == .system,
+                   ["payment_verified", "order_completed"].contains(last.actionType),
+                   -(last.createdAt?.timeIntervalSinceNow ?? -999) < 30 {
+                    SoundFX.success.play()
+                }
             }
         }
     }
@@ -269,7 +275,7 @@ struct ChatView: View {
         Task {
             do { try await chat.send(text: text, replyTo: reply) } catch {
                 draft = text
-                errorMessage = error.localizedDescription
+                errorMessage = error.friendlyMessage
             }
         }
     }
@@ -380,7 +386,7 @@ private struct OfferComposer: View {
                             try await chat.sendOffer(price: Double(price) ?? 0, days: Int(days) ?? 3, description: description)
                             dismiss()
                         } catch {
-                            errorMessage = error.localizedDescription
+                            errorMessage = error.friendlyMessage
                         }
                         sending = false
                     }

@@ -164,6 +164,7 @@ struct GigEditorView: View {
                                     }
                                     .buttonStyle(.borderless)
                                     .help("Remove this package")
+                                    .accessibilityLabel("Remove this package")
                                 }
                             }
                             HStack {
@@ -293,7 +294,7 @@ struct GigEditorView: View {
     private func load() async {
         defer { loading = false }
         guard let gigID else { return }
-        do { draft = try await seller.loadDraft(id: gigID) } catch { errorMessage = error.localizedDescription }
+        do { draft = try await seller.loadDraft(id: gigID) } catch { errorMessage = error.friendlyMessage }
     }
 
     private func loadPhoto() async {
@@ -315,7 +316,7 @@ struct GigEditorView: View {
             try await seller.save(draft, newImage: newImage, session: session)
             dismiss()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.friendlyMessage
         }
         saving = false
     }

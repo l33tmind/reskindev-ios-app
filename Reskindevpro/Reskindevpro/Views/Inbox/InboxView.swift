@@ -24,10 +24,16 @@ struct InboxView: View {
                 NavigationSplitView {
                     Group {
                         if chat.conversationsLoading && chat.conversations.isEmpty {
-                            ProgressView()
+                            VStack(spacing: 12) {
+                                ForEach(0..<5, id: \.self) { _ in SkeletonRow(height: 72) }
+                                Spacer()
+                            }
+                            .padding(16)
+                            .accessibilityElement(children: .ignore)
+                            .accessibilityLabel("Loading conversations")
                         } else if chat.conversations.isEmpty {
-                            ContentUnavailableView("No messages yet", systemImage: "tray",
-                                                   description: Text("Contact a seller from any service to start a chat."))
+                            EmptyStateView(icon: "bubble.left.and.bubble.right", title: "No messages yet",
+                                           message: "Contact a seller from any service to start a chat.")
                         } else {
                             List(filtered, selection: $chat.activeChatID) { conversation in
                                 ConversationRow(conversation: conversation, me: uid)
@@ -42,7 +48,8 @@ struct InboxView: View {
                     if chat.activeChat != nil {
                         ChatView()
                     } else {
-                        ContentUnavailableView("Select a conversation", systemImage: "bubble.left.and.bubble.right")
+                        EmptyStateView(icon: "bubble.left.and.bubble.right", title: "Select a conversation",
+                                       message: "Pick a chat on the left to see its WorkStream.")
                     }
                 }
                 .onAppear {
@@ -59,6 +66,7 @@ struct InboxView: View {
             }
         }
         .frame(minWidth: 1000, minHeight: 640)
+        .offlineBanner()
         .sheet(isPresented: $showSignIn) { SignInView() }
     }
 }

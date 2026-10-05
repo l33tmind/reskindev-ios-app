@@ -138,16 +138,21 @@ struct ContentView: View {
             open(screen)
         }
         // Tapped a chat push → open that WorkStream
-        .onChange(of: push.pendingChatID) {
-            guard let chatID = push.pendingChatID else { return }
-            chat.activeChatID = chatID
-            appModel.selectedTab = .messages
-            push.pendingChatID = nil
-        }
+        // `initial` catches a tap that launched the app (the value is set before this view exists);
+        // it waits for sign-in, then opens the chat
+        .onChange(of: push.pendingChatID, initial: true) { openPendingChat() }
+        .onChange(of: session.isSignedIn) { openPendingChat() }
     }
 }
 
 extension ContentView {
+    fileprivate func openPendingChat() {
+        guard let chatID = push.pendingChatID, session.isSignedIn else { return }
+        chat.activeChatID = chatID
+        appModel.selectedTab = .messages
+        push.pendingChatID = nil
+    }
+
     func runSiri(_ request: ServiceSearchRequest) {
         siri.pending = nil
         appModel.selectedTab = .explore
@@ -191,6 +196,7 @@ extension ContentView {
         for key in appModel.openSellerKeys { dismissWindow(id: WindowID.sellerProfile, value: key) }
         for url in appModel.openModelURLs { dismissWindow(id: WindowID.model3D, value: url) }
         for item in appModel.openTheaters { dismissWindow(id: WindowID.theater, value: item) }
+        for id in appModel.openOrderTimelineIDs { dismissWindow(id: WindowID.orderTimeline3D, value: id) }
         if appModel.isEarnings3DOpen { dismissWindow(id: WindowID.earnings3D) }
         if appModel.immersiveSpaceState == .open {
             Task { await dismissImmersiveSpace() }

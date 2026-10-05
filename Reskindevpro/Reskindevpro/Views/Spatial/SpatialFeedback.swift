@@ -171,6 +171,7 @@ extension View {
 
 struct ConfettiBurst: View {
     let trigger: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @State private var pieces: [Piece] = []
     @State private var start = Date.now
@@ -204,6 +205,7 @@ struct ConfettiBurst: View {
         }
         .allowsHitTesting(false)
         .onChange(of: trigger) {
+            guard !reduceMotion else { return }
             start = .now
             pieces = (0..<140).map { _ in
                 Piece(x: .random(in: 0...1), drift: .random(in: -1.5...1.5), speed: .random(in: 0.6...1.4),

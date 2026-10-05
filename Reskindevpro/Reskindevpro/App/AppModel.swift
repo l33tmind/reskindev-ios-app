@@ -57,6 +57,7 @@ class AppModel {
     /// "View in Your Room" volumes and Delivery Theater screens that are open
     var openModelURLs = Set<String>()
     var openTheaters = Set<TheaterItem>()
+    var openOrderTimelineIDs: Set<String> = []
     var isEarnings3DOpen = false
     var openSellerKeys = Set<String>()
     var isDeliveryBoxOpen = false
@@ -93,5 +94,6 @@ enum WindowID {
     static let model3D = "Model3D"
     static let theater = "Theater"
     static let earnings3D = "Earnings3D"
+    static let orderTimeline3D = "OrderTimeline3D"
     static let single = "main"
 }

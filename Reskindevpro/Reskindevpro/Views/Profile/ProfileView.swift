@@ -81,7 +81,7 @@ private struct ProfileOverview: View {
             try await session.switchRole()
             appModel.profileTab = .profile
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.friendlyMessage
         }
     }
 
@@ -95,7 +95,7 @@ private struct ProfileOverview: View {
                     UserAvatar(name: session.displayName, photoUrl: session.photoUrl, size: 110)
                         .shadow(color: Color.brandGreen.opacity(0.5), radius: 18)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(session.nameOrFallback).font(.extraLargeTitle2.weight(.bold))
+                        Text(session.nameOrFallback).font(.extraLargeTitle2.weight(.semibold))
                         if !session.username.isEmpty {
                             Text("@\(session.username)").font(.title3).foregroundStyle(.secondary)
                         }
@@ -137,7 +137,7 @@ private struct ProfileOverview: View {
                             .background(Color.brandGreen.opacity(0.15), in: Circle())
                         VStack(alignment: .leading, spacing: 4) {
                             Text(toSeller ? "Start selling on Reskindev" : "Hire on Reskindev")
-                                .font(.title3.weight(.bold))
+                                .font(.title3.weight(.semibold))
                             Text(toSeller ? "Post gigs, take orders and get paid. Switch back any time."
                                           : "Switch to your buyer profile to order services and see your purchases.")
                                 .font(.callout).foregroundStyle(.secondary)
@@ -153,7 +153,7 @@ private struct ProfileOverview: View {
                         .disabled(switching)
                     }
                     .padding(20)
-                    .background(Color.brandGreen.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.medium))
+                    .background(Color.brandGreen.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
                     .errorAlert("Failed to switch role", message: $errorMessage)
                     .confirmationDialog(toSeller ? "Switch to Seller Account" : "Switch to Buyer Account",
                                         isPresented: $confirmSwitch, titleVisibility: .visible) {
@@ -176,7 +176,7 @@ private struct ProfileOverview: View {
 
                 if !session.bio.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("About").font(.title2.weight(.bold))
+                        Text("About").font(.title2.weight(.semibold))
                         Text(session.bio).foregroundStyle(.secondary)
                     }
                 }
@@ -196,12 +196,12 @@ private struct StatTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: icon).font(.title2).foregroundStyle(Color.brandGreen)
-            Text(value).font(.title.weight(.bold)).lineLimit(1).minimumScaleFactor(0.6)
+            Text(value).font(.title.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.6)
             Text(title).font(.subheadline).foregroundStyle(.secondary)
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Radius.medium))
+        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
     }
 }
 
@@ -346,7 +346,7 @@ private struct ProfileSettingsView: View {
                                             phone: phone, country: country, bio: bio)
             saved = true
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.friendlyMessage
         }
         isSaving = false
     }
@@ -366,7 +366,7 @@ private struct DeleteAccountSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Label("Delete your account?", systemImage: "exclamationmark.triangle.fill")
-                .font(.title.weight(.bold))
+                .font(.title.weight(.semibold))
                 .foregroundStyle(.red)
             Text("This permanently removes your Reskindev login and profile. It can't be undone. Orders and chats stay on record for the other side.")
                 .foregroundStyle(.secondary)
@@ -404,7 +404,7 @@ private struct DeleteAccountSheet: View {
             } catch {
                 deleting = false
                 dismiss()
-                onError(error.localizedDescription)
+                onError(error.friendlyMessage)
             }
         }
     }

@@ -9,7 +9,7 @@ struct InvoiceView: View {
     var body: some View {
         VStack(spacing: 20) {
             HStack {
-                Text("Invoice").font(.title.weight(.bold))
+                Text("Invoice").font(.title.weight(.semibold))
                 Spacer()
                 if let pdfURL {
                     ShareLink(item: pdfURL) { Label("Share PDF", systemImage: "square.and.arrow.up") }
@@ -25,7 +25,7 @@ struct InvoiceView: View {
             ScrollView {
                 InvoicePaper(order: order)
                     .frame(width: 700)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.small))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
             }
         }
         .padding(28)
@@ -62,7 +62,7 @@ private struct InvoicePaper: View {
         VStack(alignment: .leading, spacing: 28) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("reskindev").font(.title2.weight(.heavy)).foregroundStyle(Color.brandGreen)
+                    Text("reskindev").font(.title2.weight(.semibold)).foregroundStyle(Color.brandGreen)
                     Text("INVOICE").font(.system(size: 40, weight: .black)).foregroundStyle(ink)
                     Text("Order ID: #\(order.id)").font(.caption).foregroundStyle(muted)
                 }
@@ -70,7 +70,7 @@ private struct InvoicePaper: View {
                 VStack(alignment: .trailing, spacing: 6) {
                     Text("STATUS").font(.caption2.weight(.bold)).foregroundStyle(muted)
                     Text(order.status.replacingOccurrences(of: "_", with: " ").uppercased())
-                        .font(.caption.weight(.heavy))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(Color.brandGreen)
                         .padding(.horizontal, 10).padding(.vertical, 4)
                         .background(Color.brandGreen.opacity(0.12), in: Capsule())
@@ -107,7 +107,7 @@ private struct InvoicePaper: View {
                 }
                 .padding(12)
             }
-            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color(white: 0.88)))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color(white: 0.88)))
 
             HStack {
                 Spacer()

@@ -75,8 +75,8 @@ struct LeftSidebarView: View {
             }
         }
         .background(Color.white.opacity(0.03))
-        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large))
-        .overlay(RoundedRectangle(cornerRadius: Radius.large).stroke(Color.white.opacity(0.18), lineWidth: 1))
+        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.large, style: .continuous).stroke(Color.white.opacity(0.18), lineWidth: 1))
         .sheet(isPresented: $showSignIn) { SignInView() }
     }
 
@@ -119,9 +119,9 @@ struct SidebarNavItem: View {
                     ? AnyShapeStyle(LinearGradient(colors: [Color.brandGreen.opacity(0.55), Color.brandGreen.opacity(0.25)],
                                                    startPoint: .leading, endPoint: .trailing))
                     : AnyShapeStyle(Color.clear),
-                in: RoundedRectangle(cornerRadius: Radius.small)
+                in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous)
             )
-            .contentShape(.hoverEffect, RoundedRectangle(cornerRadius: Radius.small))
+            .contentShape(.hoverEffect, RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
         }
         .buttonStyle(.plain)
         .hoverEffect(.highlight)

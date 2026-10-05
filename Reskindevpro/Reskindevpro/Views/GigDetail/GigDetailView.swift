@@ -24,7 +24,7 @@ struct GigDetailView: View {
         .frame(minWidth: 1000, minHeight: 680)
         .onAppear { appModel.openGigIDs.insert(gigID) }
         .onDisappear { appModel.openGigIDs.remove(gigID) }
-        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large))
+        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large, style: .continuous))
     }
 }
 
@@ -133,7 +133,7 @@ private struct GigDetailContent: View {
     private func toggleSave() {
         guard session.isSignedIn else { sheet = .signIn; return }
         Task {
-            do { try await session.toggleSave(gig.id) } catch { errorMessage = error.localizedDescription }
+            do { try await session.toggleSave(gig.id) } catch { errorMessage = error.friendlyMessage }
         }
     }
 
@@ -146,7 +146,7 @@ private struct GigDetailContent: View {
                 chat.activeChatID = try await chat.contactSeller(gig: gig)
                 appModel.selectedTab = .messages
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = error.friendlyMessage
             }
             isContacting = false
         }
@@ -179,7 +179,7 @@ private struct GigDetailContent: View {
                 }
             }
             .frame(width: 500, height: 282)
-            .clipShape(RoundedRectangle(cornerRadius: Radius.medium))
+            .clipShape(RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
             .accessibilityLabel(playing ? "Service video" : "Service image")
 
             if !gig.model3dUrl.isEmpty {
@@ -219,9 +219,9 @@ private struct GigDetailContent: View {
                     Button { withAnimation(.easeInOut) { select(index) } } label: {
                         thumb(index)
                             .frame(width: 96, height: 64)
-                            .clipShape(RoundedRectangle(cornerRadius: 12))
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                             .overlay(
-                                RoundedRectangle(cornerRadius: 12)
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
                                     .stroke(index == selected ? Color.brandGreen : .clear, lineWidth: 3)
                             )
                     }
@@ -248,7 +248,7 @@ private struct GigDetailContent: View {
             }
 
             Text(gig.title)
-                .font(.largeTitle.weight(.bold))
+                .font(.largeTitle.weight(.semibold))
                 .fixedSize(horizontal: false, vertical: true)
 
 
@@ -337,7 +337,7 @@ private struct GigDetailContent: View {
                     }
                     .padding(18)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.small))
+                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
                 }
             }
         }
@@ -356,7 +356,7 @@ private struct GigDetailContent: View {
                 }
                 Spacer()
                 Text(pkg.price.usd)
-                    .font(.title.weight(.bold))
+                    .font(.title.weight(.semibold))
                     .foregroundStyle(Color.brandGreen)
                     .contentTransition(.numericText())
             }
@@ -384,7 +384,7 @@ private struct GigDetailContent: View {
             }
         }
         .padding(16)
-        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: Radius.medium))
+        .background(Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
         .animation(.snappy, value: pkg.id)
     }
 
@@ -393,7 +393,7 @@ private struct GigDetailContent: View {
     private var aboutSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("About this service")
-                .font(.title2.weight(.bold))
+                .font(.title2.weight(.semibold))
             Text(gig.description)
                 .font(.body)
                 .foregroundStyle(.secondary)

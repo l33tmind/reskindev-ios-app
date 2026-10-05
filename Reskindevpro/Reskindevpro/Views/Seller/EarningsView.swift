@@ -24,17 +24,11 @@ struct EarningsView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                     Spacer()
-                    Button {
-                        openWindow(id: WindowID.earnings3D)
-                    } label: {
-                        Label("3D Chart", systemImage: "chart.bar.xaxis")
-                    }
-                    .buttonStyle(.bordered)
-                    .help("Your last 6 months as 3D bars you can turn around")
-                    Button("Withdraw Funds") { showWithdraw = true }
-                        .buttonStyle(GlassOutlineButtonStyle(prominent: true))
-                        .frame(width: 220)
-                        .disabled(e.available < 20)
+                }
+
+                if !seller.earningsLoading && e.pending.isEmpty && e.withdrawals.isEmpty && e.completedOrders == 0 {
+                    EmptyStateView(icon: "dollarsign.circle", title: "No earnings yet",
+                                   message: "When a buyer accepts a delivery, the payment shows up here and clears after 15 days.")
                 }
 
                 if !e.pending.isEmpty {
@@ -59,7 +53,42 @@ struct EarningsView: View {
             }
             .padding(32)
         }
-        .overlay { if seller.earningsLoading { ProgressView() } }
+        .overlay {
+            if seller.earningsLoading {
+                VStack(spacing: 14) {
+                    HStack(spacing: 16) { ForEach(0..<4, id: \.self) { _ in SkeletonRow(height: 120) } }
+                    SkeletonRow(height: 70)
+                    SkeletonRow(height: 70)
+                    Spacer()
+                }
+                .padding(32)
+                .background(.background)
+                .accessibilityLabel("Loading earnings")
+            }
+        }
+        .offlineBanner()
+        // Quick actions float beside the window so the numbers stay uncluttered
+        .ornament(attachmentAnchor: .scene(.bottom)) {
+            HStack(spacing: 12) {
+                Button {
+                    openWindow(id: WindowID.earnings3D)
+                } label: {
+                    Label("3D Chart", systemImage: "chart.bar.xaxis")
+                }
+                .help("Your last 6 months as 3D bars you can turn around")
+                Button {
+                    showWithdraw = true
+                } label: {
+                    Label("Withdraw Funds", systemImage: "arrow.up.right.circle.fill")
+                }
+                .tint(Color.brandGreen)
+                .disabled(seller.earnings.available < 20)
+            }
+            .buttonBorderShape(.capsule)
+            .controlSize(.large)
+            .padding(12)
+            .glassBackgroundEffect()
+        }
         .navigationTitle("Earnings")
         .task { await seller.loadEarnings(session: session) }
         .sheet(isPresented: $showWithdraw) { WithdrawSheet().sheetPresence() }
@@ -68,18 +97,21 @@ struct EarningsView: View {
     private func tile(_ title: String, _ value: String, _ icon: String, highlight: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: icon).font(.title2).foregroundStyle(Color.brandGreen)
-            Text(value).font(.title.weight(.bold)).lineLimit(1).minimumScaleFactor(0.6)
-            Text(title).font(.subheadline).foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(.title, design: .rounded).weight(.semibold)).monospacedDigit()
+                .lineLimit(1).minimumScaleFactor(0.6)
+            Text(title.uppercased()).font(.caption2.weight(.semibold)).tracking(0.8).foregroundStyle(.secondary)
         }
-        .padding(18)
+        .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(highlight ? Color.brandGreen.opacity(0.15) : Color.white.opacity(0.06),
-                    in: RoundedRectangle(cornerRadius: Radius.medium))
+        .background(highlight ? Color.brandGreen.opacity(0.16) : Color.white.opacity(0.06),
+                    in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 
     private func list<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.title3.weight(.bold))
+            Text(title).font(.title3.weight(.semibold))
             content()
         }
     }
@@ -91,10 +123,11 @@ struct EarningsView: View {
                 Text(detail).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
-            Text(amount).font(.headline)
+            Text(amount).font(.system(.headline, design: .rounded)).monospacedDigit()
         }
-        .padding(14)
-        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.small))
+        .padding(18)
+        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -110,7 +143,7 @@ private struct WithdrawSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Withdraw via Payoneer").font(.title.weight(.bold))
+            Text("Withdraw via Payoneer").font(.title.weight(.semibold))
             if done {
                 Label("Withdrawal request submitted! It will be reviewed within 3-5 business days.", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(Color.brandGreen)
@@ -131,7 +164,7 @@ private struct WithdrawSheet: View {
                                 try await seller.requestWithdrawal(amount: Double(amount) ?? 0, email: email, session: session)
                                 done = true
                             } catch {
-                                errorMessage = error.localizedDescription
+                                errorMessage = error.friendlyMessage
                             }
                             working = false
                         }

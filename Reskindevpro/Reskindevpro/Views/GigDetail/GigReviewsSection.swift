@@ -12,7 +12,7 @@ struct GigReviewsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Reviews").font(.title2.weight(.bold))
+                Text("Reviews").font(.title2.weight(.semibold))
                 Spacer()
                 Image(systemName: "star.fill").foregroundStyle(Color.starYellow)
                 Text(String(format: "%.1f", average)).font(.headline)
@@ -53,11 +53,11 @@ struct GigReviewsSection: View {
                         .font(.subheadline)
                         .padding(12)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color.brandGreen.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                        .background(Color.brandGreen.opacity(0.1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     }
                 }
                 .padding(16)
-                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.small))
+                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
                 .accessibilityElement(children: .combine)
             }
         }

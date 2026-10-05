@@ -50,13 +50,20 @@ struct OrderDetailView: View {
                         self.action = nil
                     }
                     .padding(22)
-                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.medium))
+                    .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
                 } else {
                     WorkspaceTimeline(order: order) { action = $0 }
                         .padding(22)
-                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.medium))
+                        .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
 
                     HStack(spacing: 12) {
+                        Button {
+                            openWindow(id: WindowID.orderTimeline3D, value: order.id)
+                        } label: {
+                            Label("View in 3D", systemImage: "cube.transparent")
+                        }
+                        .buttonStyle(GlassOutlineButtonStyle())
+
                         Button {
                             invoiceOrder = order
                         } label: {
@@ -97,7 +104,7 @@ struct OrderDetailView: View {
             VStack(alignment: .leading, spacing: 8) {
                 StatusBadge(order: order)
                 Text(order.gigTitle)
-                    .font(.title.weight(.bold))
+                    .font(.title.weight(.semibold))
                     .fixedSize(horizontal: false, vertical: true)
                 // Name → public profile (website links /user/[id])
                 Button {
@@ -119,7 +126,7 @@ struct OrderDetailView: View {
             VStack(alignment: .trailing, spacing: 4) {
                 Text("Amount Secured").font(.subheadline).foregroundStyle(.secondary)
                 Text(order.price.usd)
-                    .font(.largeTitle.weight(.bold))
+                    .font(.largeTitle.weight(.semibold))
                     .foregroundStyle(Color.brandGreen)
             }
         }

@@ -10,7 +10,7 @@ struct NotificationsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Notifications").font(.title.weight(.bold))
+                Text("Notifications").font(.title.weight(.semibold))
                 Spacer()
                 if session.unreadNotifications > 0 {
                     Button("Mark all read") { session.markAllNotificationsRead() }
@@ -68,7 +68,7 @@ struct NotificationsView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.white.opacity(item.read ? 0.03 : 0.08), in: RoundedRectangle(cornerRadius: Radius.small))
+        .background(Color.white.opacity(item.read ? 0.03 : 0.08), in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
     }
 
     /// Website links: /profile/orders, /freelancer → orders panel

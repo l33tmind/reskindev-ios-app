@@ -324,7 +324,7 @@ struct WorkspaceTimeline: View {
     private func run(_ work: @escaping () async throws -> Void) {
         isWorking = true
         Task {
-            do { try await work() } catch { errorMessage = error.localizedDescription }
+            do { try await work() } catch { errorMessage = error.friendlyMessage }
             isWorking = false
         }
     }

@@ -45,7 +45,7 @@ struct SellerProfileView: View {
             }
         }
         .frame(minWidth: 960, minHeight: 680)
-        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large))
+        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large, style: .continuous))
         .task(id: userKey) { await load() }
         .onAppear { appModel.openSellerKeys.insert(userKey) }
         .onDisappear { appModel.openSellerKeys.remove(userKey) }
@@ -66,7 +66,7 @@ struct SellerProfileView: View {
 
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
-                    Text(profile.name).font(.extraLargeTitle2.weight(.bold))
+                    Text(profile.name).font(.extraLargeTitle2.weight(.semibold))
                     if profile.verified {
                         Image(systemName: "checkmark.seal.fill").font(.title2).foregroundStyle(.blue)
                             .accessibilityLabel("Verified")
@@ -106,7 +106,7 @@ struct SellerProfileView: View {
 
     private var gigsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("\(profile?.name.components(separatedBy: " ").first ?? "My")'s Services").font(.title.weight(.bold))
+            Text("\(profile?.name.components(separatedBy: " ").first ?? "My")'s Services").font(.title.weight(.semibold))
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 18) {
                     ForEach(gigs) { gig in
@@ -122,7 +122,7 @@ struct SellerProfileView: View {
 
     private var reviewsSection: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Reviews (\(reviews.count))").font(.title.weight(.bold))
+            Text("Reviews (\(reviews.count))").font(.title.weight(.semibold))
             if reviews.isEmpty {
                 Text("No reviews yet.").foregroundStyle(.secondary)
             }
@@ -149,7 +149,7 @@ struct SellerProfileView: View {
                     }
                 }
                 .padding(16)
-                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.small))
+                .background(Color.white.opacity(0.05), in: RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
             }
         }
     }
@@ -187,7 +187,7 @@ struct SellerProfileView: View {
                 chat.activeChatID = try await chat.contact(userID: uid, name: name)
                 appModel.selectedTab = .messages
             } catch {
-                errorMessage = error.localizedDescription
+                errorMessage = error.friendlyMessage
             }
             contacting = false
         }

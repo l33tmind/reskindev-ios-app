@@ -50,7 +50,7 @@ struct OrderActionForm: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             Label(action.title, systemImage: action.icon)
-                .font(.title2.weight(.bold))
+                .font(.title2.weight(.semibold))
             Text(order.gigTitle).font(.headline).foregroundStyle(.secondary).lineLimit(1)
 
             fields
@@ -143,6 +143,7 @@ struct OrderActionForm: View {
             case .deliver:
                 try await OrderService.deliver(order, message: t, link: link.trimmed, session: session)
                 appModel.celebrate()
+                SoundFX.success.play()
                 onDone("Order delivered successfully!")
             case .revision:
                 try await OrderService.requestRevision(order, note: t, session: session)
@@ -170,7 +171,7 @@ struct OrderActionForm: View {
                 onDone("Review submitted. Both reviews are now public!")
             }
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.friendlyMessage
         }
         isWorking = false
     }

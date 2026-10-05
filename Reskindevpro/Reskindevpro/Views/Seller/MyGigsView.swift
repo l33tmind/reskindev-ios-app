@@ -52,7 +52,7 @@ struct MyGigsView: View {
                             presenting: deleting) { gig in
             Button("Delete \"\(gig.title)\"", role: .destructive) {
                 Task {
-                    do { try await seller.delete(gigID: gig.id) } catch { errorMessage = error.localizedDescription }
+                    do { try await seller.delete(gigID: gig.id) } catch { errorMessage = error.friendlyMessage }
                 }
             }
         }
@@ -72,7 +72,7 @@ private struct MyGigCard: View {
                 CachedImage(url: gig.imageUrl)
                     .frame(height: 150)
                     .frame(maxWidth: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: Radius.small))
+                    .clipShape(RoundedRectangle(cornerRadius: Radius.small, style: .continuous))
                 Text(gig.statusLabel)
                     .font(.caption.weight(.bold))
                     .padding(.horizontal, 10)
@@ -100,7 +100,7 @@ private struct MyGigCard: View {
             }
         }
         .padding(14)
-        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Radius.medium))
-        .overlay(RoundedRectangle(cornerRadius: Radius.medium).stroke(Color.white.opacity(0.12), lineWidth: 1))
+        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Radius.medium, style: .continuous).stroke(Color.white.opacity(0.12), lineWidth: 1))
     }
 }

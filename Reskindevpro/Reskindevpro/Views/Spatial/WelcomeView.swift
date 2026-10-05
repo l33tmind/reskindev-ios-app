@@ -100,6 +100,7 @@ struct WelcomeView: View {
 /// The Showroom butterfly, hovering and flapping in place
 private struct ButterflyStage: View {
     @State private var butterfly: Entity?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         RealityView { content in
@@ -109,12 +110,12 @@ private struct ButterflyStage: View {
             loaded.position = [0, -0.055, 0]
             loaded.orientation = simd_quatf(angle: .pi / 7, axis: [1, 0, 0])
             content.add(loaded)
-            Butterfly.flap(loaded)
+            if !reduceMotion { Butterfly.flap(loaded) }
             butterfly = loaded
         }
         // Gentle bob up and down until the sheet closes
         .task(id: butterfly == nil) {
-            guard let butterfly else { return }
+            guard let butterfly, !reduceMotion else { return }
             var up = true
             while !Task.isCancelled {
                 var to = butterfly.transform

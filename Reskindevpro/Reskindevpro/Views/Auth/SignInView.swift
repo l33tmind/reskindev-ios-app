@@ -121,7 +121,7 @@ struct SignInView: View {
     private func finishApple(_ result: Result<ASAuthorization, Error>) async {
         switch result {
         case .failure(let error):
-            if (error as? ASAuthorizationError)?.code != .canceled { errorMessage = error.localizedDescription }
+            if (error as? ASAuthorizationError)?.code != .canceled { errorMessage = error.friendlyMessage }
         case .success(let authorization):
             await run {
                 let (credential, name) = try SocialSignIn.appleCredential(from: authorization, rawNonce: appleNonce)
@@ -146,7 +146,7 @@ struct SignInView: View {
         } catch SocialSignInError.cancelled {
             // User closed the sheet: nothing to show
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.friendlyMessage
         }
         isWorking = false
     }
@@ -166,7 +166,7 @@ struct SignInView: View {
             }
             finish()
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = error.friendlyMessage
         }
         isWorking = false
     }

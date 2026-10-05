@@ -1,5 +1,6 @@
 import SwiftUI
 import UIKit
+import ImageIO
 
 // MARK: - Design tokens
 
@@ -40,6 +41,9 @@ enum ImageCache {
     static let shared: NSCache<NSURL, UIImage> = {
         let cache = NSCache<NSURL, UIImage>()
         cache.countLimit = 200
+        cache.totalCostLimit = 150 * 1024 * 1024   // ~150 MB of decoded pixels
+        // Keep downloaded files on disk too, so relaunching doesn't re-download every cover
+        URLCache.shared = URLCache(memoryCapacity: 30 * 1024 * 1024, diskCapacity: 300 * 1024 * 1024)
         return cache
     }()
 }
@@ -75,10 +79,26 @@ struct CachedImage<Placeholder: View>: View {
             return
         }
         image = nil
-        guard let result = try? await URLSession.shared.data(from: u),
-              let loaded = UIImage(data: result.0) else { return }
-        ImageCache.shared.setObject(loaded, forKey: u as NSURL)
+        guard let result = try? await URLSession.shared.data(from: u) else { return }
+        // Decode and shrink off the main thread: a 4000px photo on a 300pt card is wasted memory
+        let data = result.0
+        let loaded = await Task.detached(priority: .userInitiated) { Self.downsampled(data) }.value
+        guard let loaded else { return }
+        ImageCache.shared.setObject(loaded, forKey: u as NSURL, cost: Int(loaded.size.width * loaded.size.height * 4))
         withAnimation(.easeOut(duration: 0.25)) { image = loaded }
+    }
+
+    private nonisolated static func downsampled(_ data: Data, maxPixels: CGFloat = 1400) -> UIImage? {
+        let options: [CFString: Any] = [kCGImageSourceShouldCache: false]
+        guard let source = CGImageSourceCreateWithData(data as CFData, options as CFDictionary) else { return nil }
+        let thumb: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixels,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, thumb as CFDictionary) else { return UIImage(data: data) }
+        return UIImage(cgImage: cg)
     }
 }
 

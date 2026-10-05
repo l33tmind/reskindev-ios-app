@@ -120,6 +120,14 @@ struct ReskindevproApp: App {
         .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)
         .restorationBehavior(.disabled)
 
+        // One order's progress as glowing stepping stones in your room
+        WindowGroup(id: WindowID.orderTimeline3D, for: String.self) { $orderID in
+            if let orderID { stores(OrderTimeline3DView(orderID: orderID).needsHomeWindow()) }
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 0.9, height: 0.5, depth: 0.3, in: .meters)
+        .restorationBehavior(.disabled)
+
         // Seller earnings as 3D bars on your desk
         WindowGroup(id: WindowID.earnings3D) {
             stores(Earnings3DView().needsHomeWindow())

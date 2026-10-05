@@ -38,7 +38,7 @@ struct RightOrdersView: View {
             // Header
             HStack(alignment: .center, spacing: 4) {
                 Text(session.mode == .seller ? "Orders Workspace" : "My Orders")
-                    .font(.largeTitle.weight(.bold))
+                    .font(.largeTitle.weight(.semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                 Spacer()
@@ -70,19 +70,24 @@ struct RightOrdersView: View {
                 }
                 .frame(maxHeight: .infinity)
             } else {
-                Picker("Filter", selection: $filter) {
-                    ForEach(OrderFilter.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-
                 if session.ordersLoading {
-                    ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
+                    VStack(spacing: 14) {
+                        ForEach(0..<3, id: \.self) { _ in SkeletonRow(height: 150) }
+                        Spacer()
+                    }
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Loading orders")
                 } else if visibleOrders.isEmpty {
-                    ContentUnavailableView("No orders here", systemImage: "doc.text",
-                                           description: Text(session.mode == .seller
-                                                             ? "Orders on your services will show up here."
-                                                             : "Orders you place will show up here."))
-                        .frame(maxHeight: .infinity)
+                    EmptyStateView(
+                        icon: "shippingbox",
+                        title: filter == .completed ? "No finished orders yet" : "No orders here",
+                        message: session.mode == .seller
+                            ? "Orders on your services will show up here."
+                            : "Orders you place will show up here.",
+                        actionTitle: session.mode == .seller ? nil : "Browse services",
+                        action: session.mode == .seller ? nil : { openWindow(id: WindowID.main) }
+                    )
+                    .frame(maxHeight: .infinity)
                 } else {
                     ScrollView {
                         VStack(spacing: 14) {
@@ -109,8 +114,18 @@ struct RightOrdersView: View {
         }
         .padding(28)
         .background(Color.white.opacity(0.03))
-        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large))
-        .overlay(RoundedRectangle(cornerRadius: Radius.large).stroke(Color.white.opacity(0.18), lineWidth: 1))
+        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 32, style: .continuous).stroke(Color.white.opacity(0.14), lineWidth: 1))
+        .offlineBanner()
+        .ornament(visibility: session.isSignedIn ? .visible : .hidden, attachmentAnchor: .scene(.bottom)) {
+            Picker("Filter", selection: $filter) {
+                ForEach(OrderFilter.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .frame(width: 340)
+            .padding(12)
+            .glassBackgroundEffect()
+        }
         .sheet(isPresented: $showSignIn) { SignInView() }
         .sheet(item: $nextStep) { step in
             OrderActionSheet(order: step.order, action: step.action) { message in show(message) }
@@ -189,9 +204,9 @@ struct OrderCard: View {
                 }
                 Spacer(minLength: 8)
                 VStack(alignment: .trailing, spacing: 2) {
-                    Text("Total Paid").font(.subheadline).foregroundStyle(.secondary)
+                    Text("TOTAL").font(.caption2.weight(.semibold)).tracking(0.8).foregroundStyle(.secondary)
                     Text(order.price.usd)
-                        .font(.title.weight(.bold))
+                        .font(.system(.title, design: .rounded).weight(.semibold)).monospacedDigit()
                         .foregroundStyle(order.isPendingPayment ? Color.starYellow : Color.brandGreen)
                 }
             }
@@ -208,9 +223,11 @@ struct OrderCard: View {
             }
 
             if order.isPendingPayment {
-                Text("Pending Payment")
-                    .font(.subheadline.weight(.semibold))
+                Label("Pending payment", systemImage: "hourglass")
+                    .font(.caption.weight(.semibold))
                     .foregroundStyle(Color.starYellow)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(Color.starYellow.opacity(0.15), in: Capsule())
             } else if let step = order.timelineStep {
                 OrderTimeline(currentStep: step)
             } else {
@@ -219,13 +236,12 @@ struct OrderCard: View {
                     .foregroundStyle(.red)
             }
         }
-        .padding(18)
-        .background(Color.white.opacity(isHighlighted ? 0.1 : 0.05), in: RoundedRectangle(cornerRadius: Radius.medium))
+        .padding(22)
+        .background(Color.white.opacity(isHighlighted ? 0.09 : 0.05), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: Radius.medium)
-                .stroke(isHighlighted ? Color.brandGreen.opacity(0.7) : Color.white.opacity(0.12), lineWidth: isHighlighted ? 1.5 : 1)
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(isHighlighted ? Color.brandGreen.opacity(0.45) : Color.white.opacity(0.12), lineWidth: 1)
         )
-        .shadow(color: isHighlighted ? Color.brandGreen.opacity(0.35) : .clear, radius: 14)
         .accessibilityElement(children: .combine)
     }
 }

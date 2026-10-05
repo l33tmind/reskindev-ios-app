@@ -75,7 +75,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     }
 
     func application(_ application: UIApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("🔔 APNs registration failed:", error.localizedDescription)
+        print("🔔 APNs registration failed:", error.friendlyMessage)
     }
 
     nonisolated func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
