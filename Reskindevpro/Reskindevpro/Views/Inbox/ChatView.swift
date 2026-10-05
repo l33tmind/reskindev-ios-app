@@ -382,6 +382,12 @@ private struct OfferComposer: View {
                 Button {
                     Task {
                         sending = true
+                        // Same minimum and step as the website and the iOS app
+                        if let problem = await PricingRules.load().check(Double(price)) {
+                            errorMessage = problem
+                            sending = false
+                            return
+                        }
                         do {
                             try await chat.sendOffer(price: Double(price) ?? 0, days: Int(days) ?? 3, description: description)
                             dismiss()

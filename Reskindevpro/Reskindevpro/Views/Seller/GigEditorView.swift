@@ -311,6 +311,14 @@ struct GigEditorView: View {
             errorMessage = "You must accept the Mandatory UGC & Copyright Declaration."
             return
         }
+        // Every package: at least the minimum and in steps (same rule as the website and the iOS app)
+        let rules = await PricingRules.load()
+        for pkg in draft.packages {
+            if let problem = rules.check(pkg.price) {
+                errorMessage = "\(pkg.name.isEmpty ? "Package" : pkg.name): \(problem)"
+                return
+            }
+        }
         saving = true
         do {
             try await seller.save(draft, newImage: newImage, session: session)

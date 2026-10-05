@@ -1,3 +1,7 @@
+import '../services/pricing_rules.dart';
+import '../widgets/live_timer.dart';
+
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'dart:async';
@@ -946,6 +950,18 @@ class _ChatScreenState extends State<ChatScreen> {
     final isToday =
         date.year == now.year && date.month == now.month && date.day == now.day;
     final isYesterday =
+              // Same minimum and step as the website and Vision Pro app
+              final rules = await PricingRules.load();
+              final problem = rules.check(num.tryParse(priceCtrl.text));
+              if (problem != null) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(problem), backgroundColor: Colors.red),
+                );
+                return;
+              }
+
+              if (!context.mounted) return;
         date.year == now.year &&
         date.month == now.month &&
         date.day == now.day - 1;

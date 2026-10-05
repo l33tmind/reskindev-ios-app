@@ -1,3 +1,4 @@
+import '../services/pricing_rules.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
@@ -267,7 +268,7 @@ class _GigEditorScreenState extends State<GigEditorScreen> {
 
   void _addTier() {
     setState(() {
-      _tiers.add(_PackageTierControllers(name: '', price: '0', desc: '', delivery: '3'));
+      _tiers.add(_PackageTierControllers(name: '', price: '5', desc: '', delivery: '3'));
       // Add feature checks for the new tier (all unchecked)
       final checks = <String, bool>{};
       for (var feat in _masterFeatures) {
@@ -366,6 +367,20 @@ class _GigEditorScreenState extends State<GigEditorScreen> {
   }
   
   Future<void> _save() async {
+
+    // Every package: at least the minimum and in steps (same rule as the website and Vision Pro app)
+    final rules = await PricingRules.load();
+    for (int t = 0; t < _tiers.length; t++) {
+      final problem = rules.check(double.tryParse(_tiers[t].priceCtrl.text));
+      if (problem != null) {
+        if (!mounted) return;
+        final name = _tiers[t].nameCtrl.text.trim().isEmpty ? 'Tier ${t + 1}' : _tiers[t].nameCtrl.text.trim();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$name: $problem'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+    }
 
     if (!_formKey.currentState!.validate()) return;
     

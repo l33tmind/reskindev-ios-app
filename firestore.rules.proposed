@@ -58,16 +58,27 @@ service cloud.firestore {
       }
     }
 
+    // ---------- Order values: at least $5, in steps of $5 (website, iOS/Android and Vision Pro apps check the same) ----------
+    // The clients read settings/global.minOrderPrice / priceStep; these rules are the fixed safety net (5 and 5).
+    function validPrice(p) { return (p is int || p is float) && p >= 5 && (p / 5.0) == int(p / 5.0); }
+    function packageOk(pkgs, i) { return pkgs.size() <= i || validPrice(pkgs[i].price); }
+    function packagesOk(data) {
+      return !('packages' in data) || (data.packages.size() > 0 && packageOk(data.packages, 0) && packageOk(data.packages, 1)
+        && packageOk(data.packages, 2) && data.packages.size() <= 3);
+    }
+
     // ---------- Gigs ----------
     match /services/{serviceId} {
       allow read: if true;
       // New gigs from sellers wait for admin approval (website + iOS editors already send "pending")
       allow create: if isAdmin()
-        || (signedIn() && request.resource.data.authorId == me() && request.resource.data.status == 'pending');
+        || (signedIn() && request.resource.data.authorId == me() && request.resource.data.status == 'pending'
+            && packagesOk(request.resource.data));
       allow update: if isAdmin()
         || (resource.data.authorId == me()
             && (!changes().hasAny(['status']) || request.resource.data.status in ['pending', 'paused', 'deleted'])
-            && !changes().hasAny(['authorId', 'isFeatured', 'order']))
+            && !changes().hasAny(['authorId', 'isFeatured', 'order'])
+            && (!changes().hasAny(['packages']) || packagesOk(request.resource.data)))
         || (signedIn() && onlyChanges(['views', 'reviewCount', 'averageRating', 'rating']));
       allow delete: if isAdmin() || resource.data.authorId == me();
 
@@ -107,7 +118,10 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         function chat() { return get(/databases/$(database)/documents/conversations/$(chatId)).data; }
-        allow read, create, update: if isAdmin() || isMember(chat());
+        allow read, update: if isAdmin() || isMember(chat());
+        // A custom offer must carry a valid price
+        allow create: if isAdmin() || (isMember(chat())
+          && (request.resource.data.get('type', '') != 'offer' || validPrice(request.resource.data.offerPrice)));
         allow delete: if isAdmin();
       }
     }
