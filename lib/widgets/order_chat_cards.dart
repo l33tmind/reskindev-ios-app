@@ -1,3 +1,4 @@
+import '../services/invoice_number.dart';
 import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -226,10 +227,7 @@ class _WebStyleCard extends StatelessWidget {
         ? DateFormat('HH:mm').format(message.createdAt!)
         : 'Now';
 
-    final String orderId = message.orderId?.toUpperCase() ?? 'UNKNOWN';
-    final String displayId = orderId.length > 6
-        ? orderId.substring(0, 6)
-        : orderId;
+    final String displayId = orderNumber(message.orderId ?? 'UNKNOWN').substring(1);
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -348,7 +346,7 @@ class _WebStyleCard extends StatelessWidget {
                 const SizedBox(height: 8),
                 // Title
                 Text(
-                  'for order #$displayId',
+                  'Order #$displayId',
                   style: GoogleFonts.outfit(
                     fontSize: 17,
                     fontWeight: FontWeight.w600,

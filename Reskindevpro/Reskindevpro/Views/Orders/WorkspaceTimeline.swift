@@ -106,7 +106,7 @@ struct WorkspaceTimeline: View {
         box {
             Text(order.gigTitle).font(.headline)
             HStack {
-                Text("#\(String(order.id.suffix(6)).uppercased())").font(.caption.weight(.semibold))
+                Text("Order \(order.orderNumber)").font(.caption.weight(.semibold))
                 Spacer()
                 StatusBadge(order: order)
             }

@@ -179,21 +179,21 @@ struct CompactGigCard: View {
             HStack(spacing: 6) {
                 Circle()
                     .fill(Color.brandGreen.opacity(0.35))
-                    .frame(width: 18, height: 18)
+                    .frame(width: 22, height: 22)
                     .overlay(
                         Text(String(gig.sellerName.prefix(1)).uppercased())
-                            .font(.system(size: 9, weight: .bold))
+                            .font(.system(size: 11, weight: .bold))
                             .foregroundStyle(.white)
                     )
                 Text(gig.sellerName.isEmpty ? "Seller" : gig.sellerName)
-                    .font(.caption)
+                    .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
 
             // Always two lines tall, so every card in a row lines up
             Text(gig.title)
-                .font(.subheadline.weight(.semibold))
+                .font(.callout.weight(.semibold))
                 .lineLimit(2, reservesSpace: true)
                 .multilineTextAlignment(.leading)
 
@@ -205,12 +205,14 @@ struct CompactGigCard: View {
                 Spacer(minLength: 6)
                 Text("$\(String(format: "%.0f", gig.price))")
                     .font(.headline.weight(.bold))
-                    .foregroundStyle(Color.brandGreen)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12).padding(.vertical, 5)
+                    .background(Color.brandGreen, in: Capsule())
             }
-            .font(.caption)
+            .font(.footnote)
         }
         .padding(10)
-        .frame(width: 210, height: 250)
+        .frame(width: 230, height: 276)
         .background(Color.white.opacity(0.06))
         .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.medium))
         .overlay(RoundedRectangle(cornerRadius: Radius.medium).stroke(Color.white.opacity(0.14), lineWidth: 1))

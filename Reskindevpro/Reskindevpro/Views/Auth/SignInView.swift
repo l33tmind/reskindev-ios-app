@@ -22,13 +22,13 @@ struct SignInView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 20) {
             Text(isSignUp ? "Join Reskindev" : "Sign in to Reskindev")
                 .font(.title.weight(.bold))
 
             // New accounts (Apple, Google or email) start as what you pick here, like the website's signup
             VStack(alignment: .leading, spacing: 8) {
-                Text("New to Reskindev? I want to").font(.subheadline).foregroundStyle(.secondary)
+                Text("New to Reskindev? I want to").font(.callout.weight(.medium)).foregroundStyle(.secondary)
                 Picker("I want to", selection: $role) {
                     Text("Hire (Buyer)").tag("buyer")
                     Text("Sell (Freelancer)").tag("freelancer")
@@ -59,7 +59,7 @@ struct SignInView: View {
 
             HStack {
                 VStack { Divider() }
-                Text("or use email").font(.caption).foregroundStyle(.secondary)
+                Text("or use email").font(.callout).foregroundStyle(.secondary)
                 VStack { Divider() }
             }
 
@@ -87,9 +87,13 @@ struct SignInView: View {
                 .textFieldStyle(.roundedBorder)
 
             if let errorMessage {
-                Text(errorMessage)
-                    .font(.callout)
-                    .foregroundStyle(.red)
+                Label(errorMessage, systemImage: "exclamationmark.circle.fill")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16).padding(.vertical, 12)
+                    .background(Color.red.opacity(0.55), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .accessibilityAddTraits(.isStaticText)
             }
 
             HStack(spacing: 12) {
@@ -103,18 +107,18 @@ struct SignInView: View {
                 .buttonStyle(GlassOutlineButtonStyle(prominent: true))
                 .disabled(!canSubmit || isWorking)
             }
-        }
-        .safeAreaInset(edge: .bottom) {
+
             Button("By continuing you agree to our Terms & Privacy Policy") {
                 openWindow(id: WindowID.page, value: WindowID.single)
             }
-            .font(.caption)
+            .font(.footnote)
             .buttonStyle(.plain)
             .foregroundStyle(.secondary)
-            .padding(.bottom, 16)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 10)
         }
-        .padding(32)
-        .frame(width: 480)
+        .padding(36)
+        .frame(width: 540)
         .sheetPresence()
     }
 

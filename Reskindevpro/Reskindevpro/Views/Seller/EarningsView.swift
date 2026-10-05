@@ -26,6 +26,45 @@ struct EarningsView: View {
                     Spacer()
                 }
 
+                // Withdraw to Payoneer: one clear button, with the reason when it's switched off
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 14) {
+                        Button {
+                            showWithdraw = true
+                        } label: {
+                            Label("Withdraw to Payoneer", systemImage: "arrow.up.right.circle.fill")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, minHeight: 72)
+                                .background(e.available >= 20 ? Color.brandGreen : Color.white.opacity(0.12),
+                                            in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .hoverEffect(.highlight)
+                        .disabled(e.available < 20)
+
+                        Button {
+                            openWindow(id: WindowID.earnings3D)
+                        } label: {
+                            Label("3D Chart", systemImage: "chart.bar.xaxis")
+                                .font(.title3.weight(.semibold))
+                                .padding(.horizontal, 26)
+                                .frame(minHeight: 72)
+                                .background(Color.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .hoverEffect(.highlight)
+                        .help("Your last 6 months as 3D bars you can turn around")
+                    }
+                    if e.available < 20 {
+                        Label("Minimum withdrawal is $20. You have \(e.available.usd) available.", systemImage: "info.circle")
+                            .font(.callout).foregroundStyle(.secondary)
+                    } else {
+                        Label("Paid to your Payoneer account in 3-5 business days. $3 processing charge.", systemImage: "checkmark.shield")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
+                }
+
                 if !seller.earningsLoading && e.pending.isEmpty && e.withdrawals.isEmpty && e.completedOrders == 0 {
                     EmptyStateView(icon: "dollarsign.circle", title: "No earnings yet",
                                    message: "When a buyer accepts a delivery, the payment shows up here and clears after 15 days.")
@@ -45,7 +84,7 @@ struct EarningsView: View {
                     list("Withdrawals") {
                         ForEach(e.withdrawals.indices, id: \.self) { i in
                             let w = e.withdrawals[i]
-                            row(w.status.capitalized, detail: w.date?.formatted(date: .abbreviated, time: .omitted) ?? "",
+                            row("Payoneer · \(w.status.capitalized)", detail: w.date?.formatted(date: .abbreviated, time: .omitted) ?? "",
                                 amount: w.amount.usd)
                         }
                     }
@@ -67,28 +106,6 @@ struct EarningsView: View {
             }
         }
         .offlineBanner()
-        // Quick actions float beside the window so the numbers stay uncluttered
-        .ornament(attachmentAnchor: .scene(.bottom)) {
-            HStack(spacing: 12) {
-                Button {
-                    openWindow(id: WindowID.earnings3D)
-                } label: {
-                    Label("3D Chart", systemImage: "chart.bar.xaxis")
-                }
-                .help("Your last 6 months as 3D bars you can turn around")
-                Button {
-                    showWithdraw = true
-                } label: {
-                    Label("Withdraw Funds", systemImage: "arrow.up.right.circle.fill")
-                }
-                .tint(Color.brandGreen)
-                .disabled(seller.earnings.available < 20)
-            }
-            .buttonBorderShape(.capsule)
-            .controlSize(.large)
-            .padding(12)
-            .glassBackgroundEffect()
-        }
         .navigationTitle("Earnings")
         .task { await seller.loadEarnings(session: session) }
         .sheet(isPresented: $showWithdraw) { WithdrawSheet().sheetPresence() }
@@ -135,48 +152,94 @@ private struct WithdrawSheet: View {
     @Environment(SellerStore.self) private var seller
     @Environment(SessionStore.self) private var session
     @Environment(\.dismiss) private var dismiss
-    @State private var email = ""
+    @State private var email = UserDefaults.standard.string(forKey: "lastPayoneerEmail") ?? ""
     @State private var amount = ""
     @State private var working = false
     @State private var errorMessage: String?
     @State private var done = false
+    @State private var confirm = false
+
+    private static let charge = 3.0
+    private var value: Double { Double(amount) ?? 0 }
+    private var emailOK: Bool { email.trimmed.contains("@") && email.trimmed.contains(".") }
+    private var problem: String? {
+        if value <= 0 { return nil }
+        if value < 20 { return "Minimum withdrawal is $20." }
+        if value > seller.earnings.available { return "You only have \(seller.earnings.available.usd) available." }
+        return nil
+    }
+    private var canSubmit: Bool { emailOK && value >= 20 && problem == nil && !working }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Withdraw via Payoneer").font(.title.weight(.semibold))
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.up.right.circle.fill").font(.title).foregroundStyle(Color.brandGreen)
+                Text("Withdraw to Payoneer").font(.title.weight(.semibold))
+            }
             if done {
-                Label("Withdrawal request submitted! It will be reviewed within 3-5 business days.", systemImage: "checkmark.circle.fill")
+                Label("Request sent. Your Payoneer payment is reviewed within 3-5 business days.", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(Color.brandGreen)
                 Button("Done") { dismiss() }.buttonStyle(GlassOutlineButtonStyle(prominent: true))
             } else {
-                Text("Available: \(seller.earnings.available.usd) · Minimum $20 · $3 processing charge")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                HStack {
+                    Text("Available").foregroundStyle(.secondary)
+                    Spacer()
+                    Text(seller.earnings.available.usd).font(.system(.title3, design: .rounded).weight(.semibold))
+                }
+                .padding(16)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+
                 GlassField(title: "Payoneer email", text: $email, prompt: "you@example.com")
-                GlassField(title: "Amount (USD)", text: $amount, prompt: "50")
+                GlassField(title: "Amount (USD, minimum $20)", text: $amount, prompt: "50")
+
+                if let problem {
+                    Label(problem, systemImage: "exclamationmark.circle.fill").font(.callout).foregroundStyle(.orange)
+                } else if value >= 20 {
+                    VStack(spacing: 6) {
+                        HStack { Text("Withdraw"); Spacer(); Text(value.usd) }
+                        HStack { Text("Processing charge"); Spacer(); Text("−\(Self.charge.usd)") }
+                        Divider()
+                        HStack { Text("You receive").fontWeight(.semibold); Spacer(); Text((value - Self.charge).usd).fontWeight(.semibold) }
+                    }
+                    .font(.callout).monospacedDigit()
+                    .padding(16)
+                    .background(Color.brandGreen.opacity(0.1), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
                 if let errorMessage { Text(errorMessage).font(.callout).foregroundStyle(.red) }
+
                 HStack(spacing: 12) {
                     Button("Cancel") { dismiss() }.buttonStyle(GlassOutlineButtonStyle())
                     Button {
-                        Task {
-                            working = true
-                            errorMessage = nil
-                            do {
-                                try await seller.requestWithdrawal(amount: Double(amount) ?? 0, email: email, session: session)
-                                done = true
-                            } catch {
-                                errorMessage = error.friendlyMessage
-                            }
-                            working = false
-                        }
+                        confirm = true
                     } label: {
-                        if working { ProgressView() } else { Text("Request Withdrawal") }
+                        if working { ProgressView() } else { Text("Continue") }
                     }
                     .buttonStyle(GlassOutlineButtonStyle(prominent: true))
-                    .disabled(working || email.trimmed.isEmpty || (Double(amount) ?? 0) <= 0)
+                    .disabled(!canSubmit)
                 }
             }
         }
         .padding(32)
-        .frame(width: 520)
+        .frame(width: 540)
+        // Money leaves your balance: always ask once more, spelling out where it goes
+        .alert("Send \((value - Self.charge).usd) to Payoneer?", isPresented: $confirm) {
+            Button("Cancel", role: .cancel) {}
+            Button("Withdraw") { Task { await submit() } }
+        } message: {
+            Text("\(value.usd) leaves your balance. After the \(Self.charge.usd) charge, \((value - Self.charge).usd) goes to \(email.trimmed). Check the email: payments to a wrong Payoneer account can't be undone.")
+        }
+    }
+
+    private func submit() async {
+        working = true
+        errorMessage = nil
+        do {
+            try await seller.requestWithdrawal(amount: value, email: email, session: session)
+            UserDefaults.standard.set(email.trimmed, forKey: "lastPayoneerEmail")
+            done = true
+        } catch {
+            errorMessage = error.friendlyMessage
+        }
+        working = false
     }
 }

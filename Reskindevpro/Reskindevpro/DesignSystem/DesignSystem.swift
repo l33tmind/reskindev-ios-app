@@ -170,6 +170,7 @@ struct SkeletonGigCard: View {
 
 struct GlassOutlineButtonStyle: ButtonStyle {
     var prominent = false
+    var tint: Color = .brandGreen
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -177,7 +178,7 @@ struct GlassOutlineButtonStyle: ButtonStyle {
             .foregroundStyle(.white)
             .frame(maxWidth: .infinity, minHeight: Hit.min)
             .background(
-                prominent ? AnyShapeStyle(Color.brandGreen) : AnyShapeStyle(Color.white.opacity(configuration.isPressed ? 0.18 : 0.06)),
+                prominent ? AnyShapeStyle(tint) : AnyShapeStyle(Color.white.opacity(configuration.isPressed ? 0.18 : 0.06)),
                 in: RoundedRectangle(cornerRadius: Radius.small)
             )
             .overlay(

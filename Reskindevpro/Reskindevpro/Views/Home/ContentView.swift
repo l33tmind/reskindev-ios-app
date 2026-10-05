@@ -265,12 +265,14 @@ struct ExploreView: View {
                         withAnimation { appModel.sidebarPanelShown.toggle() }
                     } label: {
                         Label(appModel.sidebarPanelShown ? "Hide Menu" : "Show Menu", systemImage: "sidebar.leading")
+                            .labelStyle(.titleAndIcon)
                     }
                     .disabled(appModel.showSidebar)
                     Button {
                         withAnimation { appModel.ordersPanelShown.toggle() }
                     } label: {
                         Label(appModel.ordersPanelShown ? "Hide Orders" : "Show Orders", systemImage: "shippingbox")
+                            .labelStyle(.titleAndIcon)
                     }
                     .disabled(appModel.showOrders)
                     ToggleImmersiveSpaceButton()
@@ -280,6 +282,7 @@ struct ExploreView: View {
                         } label: {
                             Label(session.unreadNotifications > 0 ? "Alerts (\(session.unreadNotifications))" : "Alerts",
                                   systemImage: session.unreadNotifications > 0 ? "bell.badge.fill" : "bell")
+                                .labelStyle(.titleAndIcon)
                         }
                     }
                 }
@@ -303,9 +306,11 @@ struct CockpitPanel<Content: View>: View {
             content
             Button(action: onPopOut) {
                 Label("Open as window", systemImage: "macwindow.on.rectangle")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.callout.weight(.semibold))
+                    .foregroundStyle(.white)
             }
-            .buttonStyle(.bordered)
+            .buttonStyle(.borderedProminent)
+            .tint(Color.black.opacity(0.5))
             .help("Move this panel anywhere in your room")
         }
         .rotation3DEffect(.degrees(side == .left ? 34 : -34), axis: (x: 0, y: 1, z: 0),

@@ -51,6 +51,8 @@ struct OrderModel: Identifiable, Hashable {
     let requirements: String
     let deliveryMessage: String
     let deliveryLink: String
+    /// "INV-000123": a running number the server saves on the order when it is created; "" for the first seconds
+    let invoiceNumberStored: String
     let revisionNote: String
     let cancelReason: String
     let credentials: String
@@ -87,6 +89,7 @@ struct OrderModel: Identifiable, Hashable {
         self.requirements = FS.string(data["requirements"]) ?? FS.string(data["requirementsText"]) ?? ""
         self.deliveryMessage = data["deliveryMessage"] as? String ?? ""
         self.deliveryLink = data["deliveryLink"] as? String ?? ""
+        self.invoiceNumberStored = data["invoiceNumber"] as? String ?? ""
         self.revisionNote = data["revisionNote"] as? String ?? ""
         self.cancelReason = data["cancelReason"] as? String ?? ""
         self.credentials = data["credentials"] as? String ?? ""
@@ -99,6 +102,13 @@ struct OrderModel: Identifiable, Hashable {
         self.deliveredAt = FS.date(data["deliveredAt"])
         self.completedAt = FS.date(data["completedAt"])
     }
+
+    /// Order number, e.g. "#0CFX1F": the end of the order id (what people mention in chat)
+    var orderNumber: String { "#" + String(id.suffix(6)).uppercased() }
+    /// Invoice number, e.g. "INV-000123" (a different number from the order number); "—" until the server has set it
+    var invoiceNumber: String { invoiceNumberStored.isEmpty ? "—" : invoiceNumberStored }
+    /// For short lines: "Invoice INV-000123", or "Invoice pending" until the server has numbered the order
+    var invoiceLabel: String { invoiceNumberStored.isEmpty ? "Invoice pending" : "Invoice \(invoiceNumberStored)" }
 
     var isPendingPayment: Bool { status == "pending_payment" }
     var needsRequirements: Bool { status == "requirements" || status == "pending" }

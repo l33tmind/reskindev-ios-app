@@ -6,15 +6,30 @@ struct LeftSidebarView: View {
     @Environment(ChatStore.self) private var chat
     @Environment(AppModel.self) private var appModel
     @Environment(\.openWindow) private var openWindow
+    @State private var confirmSwitch = false
+    /// Which way the pending switch goes, fixed when the button is tapped so the alert text can't flip while it closes
+    @State private var switchingToSeller = true
+    @State private var switchingRole = false
+    @State private var roleError: String?
     @State private var showSignIn = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Profile Header
             VStack(spacing: 16) {
-                UserAvatar(name: session.displayName, photoUrl: session.photoUrl, size: 90)
-                    .shadow(color: Color.brandGreen.opacity(0.5), radius: 16)
-                    .accessibilityHidden(true)
+                Group {
+                    if session.isSignedIn {
+                        UserAvatar(name: session.displayName, photoUrl: session.photoUrl, size: 90)
+                    } else {
+                        Image(systemName: "person.fill")
+                            .font(.system(size: 40))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .frame(width: 90, height: 90)
+                            .background(Color.white.opacity(0.14), in: Circle())
+                    }
+                }
+                .shadow(color: Color.brandGreen.opacity(session.isSignedIn ? 0.5 : 0), radius: 16)
+                .accessibilityHidden(true)
 
                 HStack(spacing: 6) {
                     Text(session.isSignedIn ? session.nameOrFallback : "Guest")
@@ -29,12 +44,8 @@ struct LeftSidebarView: View {
                     Button("Sign In") { showSignIn = true }
                         .buttonStyle(GlassOutlineButtonStyle(prominent: true))
                         .padding(.top, 8)
-                } else if session.canSell {
-                    Button(session.mode == .buyer ? "Switch to Seller" : "Switch to Buyer") {
-                        withAnimation { session.mode = session.mode == .buyer ? .seller : .buyer }
-                    }
-                    .buttonStyle(GlassOutlineButtonStyle(prominent: true))
-                    .padding(.top, 8)
+                } else if !session.isAdmin {
+                    roleSwitchButton.padding(.top, 6)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -78,6 +89,57 @@ struct LeftSidebarView: View {
         .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: Radius.large, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Radius.large, style: .continuous).stroke(Color.white.opacity(0.18), lineWidth: 1))
         .sheet(isPresented: $showSignIn) { SignInView() }
+        .alert(switchingToSeller ? "Switch to Seller account?" : "Switch to Buyer account?", isPresented: $confirmSwitch) {
+            Button("Cancel", role: .cancel) {}
+            Button(switchingToSeller ? "Switch to Seller" : "Switch to Buyer") { Task { await switchRole() } }
+        } message: {
+            Text(switchingToSeller
+                 ? "You'll get your seller tools: My Gigs, Earnings and orders on your services. You can switch back any time."
+                 : "You'll go back to your buyer profile to order services. Your gigs stay saved. You can switch back any time.")
+        }
+        .errorAlert("Couldn't switch", message: $roleError)
+    }
+
+    private var roleSwitchButton: some View {
+        let toSeller = !session.isFreelancer
+        return Button {
+            switchingToSeller = toSeller
+            confirmSwitch = true
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: toSeller ? "briefcase.fill" : "cart.fill")
+                    .font(.title3)
+                    .frame(width: 44, height: 44)
+                    .background(Color.white.opacity(0.2), in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(toSeller ? "Switch to Seller" : "Switch to Buyer").font(.headline)
+                    Text(toSeller ? "You're buying now" : "You're selling now")
+                        .font(.footnote).opacity(0.85)
+                }
+                Spacer(minLength: 0)
+                if switchingRole { ProgressView() } else { Image(systemName: "arrow.left.arrow.right") }
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 18)
+            .frame(maxWidth: .infinity, minHeight: 76)
+            .background(Color.brandGreen, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .contentShape(.hoverEffect, RoundedRectangle(cornerRadius: 24, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .hoverEffect(.highlight)
+        .disabled(switchingRole)
+        .accessibilityHint("Asks you to confirm first")
+    }
+
+    private func switchRole() async {
+        switchingRole = true
+        do {
+            try await session.switchRole()
+            appModel.selectedTab = .explore
+        } catch {
+            roleError = error.friendlyMessage
+        }
+        switchingRole = false
     }
 
     private func openProfile(_ tab: AppModel.ProfileTab) {

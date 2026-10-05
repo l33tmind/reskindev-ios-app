@@ -30,7 +30,7 @@ struct CenterStageView: View {
             HStack(spacing: 10) {
                 HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                    TextField("Search services...", text: $store.searchText)
+                    TextField("Search services…", text: $store.searchText, prompt: Text("Search services…").foregroundStyle(Color.white.opacity(0.75)))
                         .textFieldStyle(.plain)
                         .focused($searchFocused)
                         .onChange(of: appModel.searchFocusRequest) { searchFocused = true }
@@ -68,6 +68,14 @@ struct CenterStageView: View {
                     .padding(.horizontal, 4)
                 }
                 .frame(maxWidth: 560)
+                // Soft fade on the right edge says "there's more, scroll"
+                .mask(
+                    HStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                            .frame(width: 48)
+                    }
+                )
             }
             .padding(8)
             .glassBackgroundEffect(in: Capsule())

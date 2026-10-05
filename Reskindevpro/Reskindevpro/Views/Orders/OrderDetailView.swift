@@ -118,7 +118,7 @@ struct OrderDetailView: View {
                 }
                 .buttonStyle(.plain)
                 .hoverEffect(.highlight)
-                Text("#\(String(order.id.suffix(6)).uppercased()) · \(order.packageName) package · \(order.deliveryDays)-day delivery")
+                Text("Order \(order.orderNumber) · \(order.invoiceLabel) · \(order.packageName) package · \(order.deliveryDays)-day delivery")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }

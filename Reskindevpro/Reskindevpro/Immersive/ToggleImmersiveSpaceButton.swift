@@ -52,6 +52,7 @@ struct ToggleImmersiveSpaceButton: View {
             // Toolbar item: the Showroom is the app's immersive space
             Label(appModel.immersiveSpaceState == .open ? "Exit 3D" : "3D Showroom",
                   systemImage: appModel.immersiveSpaceState == .open ? "cube.fill" : "cube.transparent")
+                .labelStyle(.titleAndIcon)
         }
         .disabled(appModel.immersiveSpaceState == .inTransition)
         .accessibilityLabel(appModel.immersiveSpaceState == .open ? "Exit 3D Showroom" : "Open 3D Showroom")

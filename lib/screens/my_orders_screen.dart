@@ -1,3 +1,4 @@
+import '../services/invoice_number.dart';
 import 'package:confetti/confetti.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -747,6 +748,10 @@ class _OrderCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
+                      const SizedBox(height: 2),
+                      Text('Order ${orderNumber(order.id)} · Invoice ${invoiceNo(order.invoiceNumber)}',
+                        style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: context.themeTextLight),
+                      ),
                       const SizedBox(height: 4),
                       Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
@@ -970,6 +975,10 @@ class _OrderDetailsSheet extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                 children: [
                   _buildTimeline(context),
+                  const Divider(height: 32),
+                  _buildDetailRow(context, 'Order No.', orderNumber(order.id)),
+                  const Divider(height: 32),
+                  _buildDetailRow(context, 'Invoice No.', invoiceNo(order.invoiceNumber)),
                   const Divider(height: 32),
                   _buildDetailRow(context, 'Gig', order.gigTitle),
                   const Divider(height: 32),

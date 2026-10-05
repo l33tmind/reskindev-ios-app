@@ -125,7 +125,7 @@ struct ReskindevproApp: App {
             if let orderID { stores(OrderTimeline3DView(orderID: orderID).needsHomeWindow()) }
         }
         .windowStyle(.volumetric)
-        .defaultSize(width: 0.9, height: 0.5, depth: 0.3, in: .meters)
+        .defaultSize(width: 0.9, height: 0.8, depth: 0.3, in: .meters)
         .restorationBehavior(.disabled)
 
         // Seller earnings as 3D bars on your desk

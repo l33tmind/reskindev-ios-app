@@ -42,6 +42,8 @@ class OrderModel {
   final DateTime? deliveredAt;
   final String deliveryNote;
   final String deliveryLink;
+  /// "INV-000123": a running number the server saves on the order when it is created ("" for the first seconds)
+  final String invoiceNumber;
   final String revisionNote;
   
   // Rating & Review
@@ -82,6 +84,7 @@ class OrderModel {
     this.deliveredAt,
     this.deliveryNote = '',
     this.deliveryLink = '',
+    this.invoiceNumber = '',
     this.revisionNote = '',
     this.ratingCommunication,
     this.ratingQuality,
@@ -156,6 +159,7 @@ class OrderModel {
       deliveredAt: _parseDate(d['deliveredAt']),
       deliveryNote: d['deliveryNote'] ?? '',
       deliveryLink: d['deliveryLink'] ?? '',
+      invoiceNumber: d['invoiceNumber'] ?? '',
       revisionNote: d['revisionNote'] ?? '',
       ratingCommunication: _parseDouble(d['ratingCommunication']),
       ratingQuality: _parseDouble(d['ratingQuality']),

@@ -1,3 +1,4 @@
+import '../services/invoice_number.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -246,7 +247,7 @@ class _InboxScreenState extends State<InboxScreen> {
                                     Icon(Icons.work_outline, size: 12, color: AppTheme.primary),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'ORDER #${chat.orderId!.length > 6 ? chat.orderId!.substring(0, 6).toUpperCase() : chat.orderId!.toUpperCase()}',
+                                      'ORDER ${orderNumber(chat.orderId)}',
                                       style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primary),
                                     ),
                                   ],

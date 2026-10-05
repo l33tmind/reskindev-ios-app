@@ -1,3 +1,5 @@
+import '../services/invoice_number.dart';
+import 'countdown_timer.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme.dart';
@@ -83,8 +85,8 @@ class WorkspaceDetailsSheet extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('Order ID', style: GoogleFonts.inter(color: context.themeTextLight)),
-              Text(order.id != null ? '#${order.id!.length > 6 ? order.id!.substring(0,6).toUpperCase() : order.id!.toUpperCase()}' : '#', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: context.themeTextDark)),
+              Text('Order / Invoice', style: GoogleFonts.inter(color: context.themeTextLight)),
+              Text('${orderNumber(order.id)} · ${invoiceNo(order.invoiceNumber)}', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: context.themeTextDark)),
             ],
           ),
           const SizedBox(height: 24),

@@ -1,3 +1,4 @@
+import '../services/invoice_number.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
@@ -887,7 +888,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Order #${order.id?.substring(0, 6) ?? ''} has been cancelled'),
+            content: Text('Order ${orderNumber(order.id)} has been cancelled'),
             backgroundColor: const Color(0xFFEF4444),
             behavior: SnackBarBehavior.floating,
           ),

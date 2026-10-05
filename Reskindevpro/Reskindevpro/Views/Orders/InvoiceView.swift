@@ -37,7 +37,7 @@ struct InvoiceView: View {
     @MainActor
     private func renderPDF() -> URL? {
         let renderer = ImageRenderer(content: InvoicePaper(order: order).frame(width: 700))
-        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Reskindev-Invoice-\(order.id.suffix(6)).pdf")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("Reskindev-\(order.invoiceNumber).pdf")
         var ok = false
         renderer.render { size, draw in
             var box = CGRect(origin: .zero, size: size)
@@ -64,7 +64,9 @@ private struct InvoicePaper: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("reskindev").font(.title2.weight(.semibold)).foregroundStyle(Color.brandGreen)
                     Text("INVOICE").font(.system(size: 40, weight: .black)).foregroundStyle(ink)
-                    Text("Order ID: #\(order.id)").font(.caption).foregroundStyle(muted)
+                    Text("Invoice No. \(order.invoiceNumber)").font(.headline).foregroundStyle(ink)
+                    Text("Order \(order.orderNumber)").font(.caption.weight(.semibold)).foregroundStyle(muted)
+                    Text("Order ID: \(order.id)").font(.caption2).foregroundStyle(muted)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 6) {

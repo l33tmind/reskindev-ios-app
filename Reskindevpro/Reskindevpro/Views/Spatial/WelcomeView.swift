@@ -35,7 +35,8 @@ struct WelcomeView: View {
     var body: some View {
         VStack(spacing: 22) {
             ButterflyStage()
-                .frame(height: 110)
+                .frame(height: 130)
+                .padding(.bottom, 14)
 
             let current = pages[page]
             VStack(spacing: 12) {
@@ -60,8 +61,8 @@ struct WelcomeView: View {
             HStack(spacing: 8) {
                 ForEach(pages.indices, id: \.self) { index in
                     Capsule()
-                        .fill(index == page ? Color.brandGreen : Color.white.opacity(0.25))
-                        .frame(width: index == page ? 26 : 8, height: 8)
+                        .fill(index == page ? Color.brandGreen : Color.white.opacity(0.3))
+                        .frame(width: index == page ? 34 : 10, height: 10)
                 }
             }
             .accessibilityLabel("Page \(page + 1) of \(pages.count)")
@@ -107,7 +108,7 @@ private struct ButterflyStage: View {
             guard let loaded = await Butterfly.load() else { return }
             // Small and flush with the sheet, so the eye goes to the text, not the butterfly
             loaded.scale *= 0.8
-            loaded.position = [0, -0.055, 0]
+            loaded.position = [0, -0.04, 0]
             loaded.orientation = simd_quatf(angle: .pi / 7, axis: [1, 0, 0])
             content.add(loaded)
             if !reduceMotion { Butterfly.flap(loaded) }
@@ -119,7 +120,7 @@ private struct ButterflyStage: View {
             var up = true
             while !Task.isCancelled {
                 var to = butterfly.transform
-                to.translation.y += up ? 0.02 : -0.02
+                to.translation.y += up ? 0.012 : -0.012
                 butterfly.move(to: to, relativeTo: butterfly.parent, duration: 1.4, timingFunction: .easeInOut)
                 up.toggle()
                 try? await Task.sleep(for: .seconds(1.4))
