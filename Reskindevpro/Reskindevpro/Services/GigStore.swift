@@ -71,7 +71,7 @@ final class GigStore {
             guard let self else { return }
             self.isLoading = false
             if let error {
-                self.errorMessage = error.localizedDescription
+                self.errorMessage = error.friendlyMessage
                 print("🔥 Firestore services error:", error)
                 return
             }
@@ -80,6 +80,7 @@ final class GigStore {
                 .compactMap { GigModel(id: $0.documentID, data: $0.data()) }
                 .filter(\.isVisible)
                 .sorted { $0.order < $1.order }
+            SiriIndex.update(self.gigs)
         }
 
         pagesListener = db.collection("pages").addSnapshotListener { [weak self] snapshot, _ in

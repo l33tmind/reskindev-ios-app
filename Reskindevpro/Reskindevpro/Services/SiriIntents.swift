@@ -1,4 +1,6 @@
 import AppIntents
+import CoreSpotlight
+import CoreTransferable
 import Observation
 import FirebaseCore
 import FirebaseAuth
@@ -175,6 +177,56 @@ struct GigQuery: EntityStringQuery {
     }
 }
 
+// Apple Intelligence: Siri knows every gig (Spotlight index), and can read the one on screen
+extension GigEntity: IndexedEntity {
+    var attributeSet: CSSearchableItemAttributeSet {
+        let attributes = defaultAttributeSet
+        attributes.displayName = title
+        attributes.contentDescription = "\(seller) · from $\(Int(price)) on Reskindev"
+        attributes.keywords = ["Reskindev", seller]
+        return attributes
+    }
+}
+
+extension GigEntity: Transferable {
+    /// What Siri gets when you ask about "this service" while it's open
+    static var transferRepresentation: some TransferRepresentation {
+        ProxyRepresentation(exporting: \.summary)
+    }
+
+    var summary: String {
+        "\(title) by \(seller) on Reskindev, starting at $\(Int(price))."
+    }
+}
+
+@MainActor
+enum SiriIndex {
+    /// Called whenever the services list changes, so Siri always knows the current gigs
+    static func update(_ gigs: [GigModel]) {
+        let entities = gigs.map(GigEntity.init)
+        Task.detached(priority: .utility) {
+            try? await CSSearchableIndex.default().deleteAllSearchableItems()
+            try? await CSSearchableIndex.default().indexAppEntities(entities)
+        }
+    }
+}
+
+// MARK: - Apple Intelligence search: "Search Reskindev for a logo designer"
+
+@AppIntent(schema: .system.search)
+struct SearchServicesIntent: ShowInAppSearchResultsIntent {
+    static let searchScopes: [StringSearchScope] = [.general]
+
+    var criteria: StringSearchCriteria
+
+    @MainActor
+    func perform() async throws -> some IntentResult {
+        let words = criteria.term.lowercased().split(separator: " ").map(String.init).filter { $0.count > 1 }
+        SiriBridge.shared.pending = ServiceSearchRequest(keywords: words, maxPrice: nil)
+        return .result()
+    }
+}
+
 // MARK: - Data retrieval: "What's my order status on Reskindev?"
 
 struct OrderStatusIntent: AppIntent {
@@ -300,6 +352,15 @@ struct ReskindevShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Find a Service",
             systemImageName: "magnifyingglass"
+        )
+        AppShortcut(
+            intent: SearchServicesIntent(),
+            phrases: [
+                "Search \(.applicationName)",
+                "Search services on \(.applicationName)",
+            ],
+            shortTitle: "Search Services",
+            systemImageName: "text.magnifyingglass"
         )
         AppShortcut(
             intent: OrderStatusIntent(),

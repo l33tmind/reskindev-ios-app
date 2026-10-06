@@ -1,3 +1,4 @@
+import AppIntents
 import SwiftUI
 
 /// Opens in its own window: openWindow(id: "GigDetail", value: gig.id)
@@ -12,6 +13,11 @@ struct GigDetailView: View {
             if let gig = store.gig(id: gigID) {
                 GigDetailContent(gig: gig) {
                     dismissWindow(id: WindowID.gigDetail, value: gigID)
+                }
+                // Lets Siri see which service is on screen ("tell me about this", "save this")
+                .userActivity("com.reskindevdotcom.reskindev.viewService") { activity in
+                    activity.title = gig.title
+                    activity.appEntityIdentifier = EntityIdentifier(for: GigEntity(gig))
                 }
             } else if store.isLoading {
                 ProgressView("Loading service...")
@@ -291,8 +297,14 @@ private struct GigDetailContent: View {
                     Button {
                         withAnimation(.snappy) { selectedPackageID = pkg.id }
                     } label: {
-                        Text(pkg.name)
-                            .font(.headline)
+                        VStack(spacing: 1) {
+                            if gig.packages.count == 3, gig.packages.firstIndex(where: { $0.id == pkg.id }) == 1 {
+                                Text("MOST POPULAR")
+                                    .font(.system(size: 9, weight: .heavy))
+                                    .foregroundStyle(Color.brandGreen)
+                            }
+                            Text(pkg.name).font(.headline)
+                        }
                             .frame(maxWidth: .infinity, minHeight: 52)
                             .foregroundStyle(isOn ? Color.white : Color.secondary)
                             .background(isOn ? Color.black.opacity(0.5) : Color.clear, in: Capsule())
@@ -368,7 +380,7 @@ private struct GigDetailContent: View {
                     Button {
                         sheet = .order
                     } label: {
-                        Label("Order Now", systemImage: "cart.fill")
+                        Label("Continue · \(pkg.price.usd)", systemImage: "arrow.right.circle.fill")
                     }
                     .buttonStyle(GlassOutlineButtonStyle(prominent: true))
 

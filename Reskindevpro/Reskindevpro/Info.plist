@@ -30,6 +30,10 @@
 	</array>
 	<key>NSSupportsGroupActivities</key>
 	<true/>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.reskindevdotcom.reskindev.viewService</string>
+	</array>
 	<key>NSWorldSensingUsageDescription</key>
 	<string>Lets the Showroom butterfly land on the tables and chairs in your room.</string>
 	<key>UIApplicationSceneManifest</key>
