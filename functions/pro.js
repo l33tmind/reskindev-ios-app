@@ -299,3 +299,38 @@ exports.expireProSubscriptions = onSchedule({ schedule: "every 24 hours", region
     const snap = await db().collection("users").where("pro.active", "==", true).where("pro.expiresAt", "<", cutoff).get();
     for (const doc of snap.docs) await endPro(doc.id, "expired");
 });
+
+// ---------------- Taka (Bangladesh, website) ----------------
+
+exports.buyProWithTaka = onCall({ region: REGION }, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Please sign in first.");
+    const planKey = request.data && request.data.plan;
+    const plan = PLANS[planKey];
+    if (!plan) throw new HttpsError("invalid-argument", "Choose monthly or yearly.");
+    const st = (await db().collection("settings").doc("bdtWallet").get()).data() || {};
+    const priceBdt = planKey === "yearly" ? (Number(st.proYearlyBdt) || 9999) : (Number(st.proMonthlyBdt) || 999);
+    const uid = request.auth.uid;
+    const ref = db().collection("users").doc(uid);
+    let expiresAtMs = 0;
+    await db().runTransaction(async (tx) => {
+        const u = (await tx.get(ref)).data() || {};
+        const code = String(u.countryCode || "").toUpperCase();
+        const name = String(u.country || "").trim().toLowerCase();
+        if (!(code === "BD" || name === "bangladesh" || name === "বাংলাদেশ")) {
+            throw new HttpsError("failed-precondition", "Taka prices are for accounts in Bangladesh.");
+        }
+        const have = Math.round((Number(u.walletBdt) || 0) * 100) / 100;
+        if (have < priceBdt) throw new HttpsError("failed-precondition", `Pro ${planKey} costs ৳${priceBdt}. Your taka wallet has ৳${have.toFixed(2)}.`);
+        const current = u.pro && u.pro.expiresAt ? u.pro.expiresAt.toMillis() : 0;
+        expiresAtMs = Math.max(Date.now(), current) + plan.days * 86400000;
+        tx.update(ref, { walletBdt: Math.round((have - priceBdt) * 100) / 100 });
+        tx.set(db().collection("wallet_transactions").doc(), {
+            uid, type: "pro_purchase", amountBdt: -priceBdt, amountUsd: 0, feeBdt: 0, rate: null, refId: planKey,
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        tx.set(db().collection("pro_payments").doc(), {
+            uid, plan: planKey, amountBdt: priceBdt, source: "taka", createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+    });
+    return grantPro(uid, { plan: planKey, source: "wallet", productId: plan.productId, expiresAtMs, autoRenew: false });
+});

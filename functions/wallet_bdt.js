@@ -26,7 +26,14 @@ const db = () => admin.firestore();
 const now = () => admin.firestore.FieldValue.serverTimestamp();
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-const DEFAULTS = { bdtPerUsd: 122, rateMode: "live", convertFeePercent: 3, minDepositBdt: 100, maxDepositBdt: 500000, enabled: true, methods: [] };
+const DEFAULTS = {
+    bdtPerUsd: 122, rateMode: "live", convertFeePercent: 3, minDepositBdt: 100, maxDepositBdt: 500000, enabled: true, methods: [],
+    // Sellers paid in taka withdraw to these (admin chooses which are on), from this amount up
+    withdrawMethods: ["bkash", "nagad", "rocket", "bank"], minWithdrawBdt: 500,
+    // Reskindev Pro paid in taka
+    proMonthlyBdt: 999, proYearlyBdt: 9999,
+};
+const CLEARANCE_MS = 15 * 86400000; // same 15 days as dollar earnings
 
 /** Market USD→BDT from open.er-api.com (free, daily). Ignores anything outside a sane band. */
 async function fetchLiveRate() {
@@ -229,6 +236,176 @@ exports.saveBdtWalletSettings = onCall({ region: REGION }, async (request) => {
         minDepositBdt: Math.max(1, Number(d.minDepositBdt) || DEFAULTS.minDepositBdt),
         maxDepositBdt: Math.max(1, Number(d.maxDepositBdt) || DEFAULTS.maxDepositBdt),
         enabled: d.enabled !== false, methods, updatedAt: now(),
+        withdrawMethods: (Array.isArray(d.withdrawMethods) ? d.withdrawMethods : DEFAULTS.withdrawMethods)
+            .filter((m) => ["bkash", "nagad", "rocket", "bank"].includes(m)),
+        minWithdrawBdt: Math.max(1, Number(d.minWithdrawBdt) || DEFAULTS.minWithdrawBdt),
+        proMonthlyBdt: Math.max(1, Number(d.proMonthlyBdt) || DEFAULTS.proMonthlyBdt),
+        proYearlyBdt: Math.max(1, Number(d.proYearlyBdt) || DEFAULTS.proYearlyBdt),
     }, { merge: false });
     return { ok: true, bdtPerUsd, rateMode };
 });
+
+// ---------------- Paying for an order in taka ----------------
+
+/** Find the order's chat and post a system card (the chat push function turns it into notifications) */
+async function postOrderCard(order, orderId, actionType, text) {
+    const chats = await db().collection("conversations").where("orderId", "==", orderId).limit(1).get();
+    if (chats.empty) return;
+    const ref = chats.docs[0].ref;
+    await ref.collection("messages").add({
+        type: "system_notification", actionType, text, orderId, gigTitle: order.gigTitle || "",
+        price: Number(order.price) || 0, senderId: "system", createdAt: now(), read: false,
+    });
+    await ref.update({ lastMessage: text, updatedAt: now() });
+}
+
+/**
+ * Buyer pays a placed order (status pending_payment) from the taka wallet.
+ * Dollar price × current rate, rounded up to whole taka. The order becomes paid right away.
+ */
+exports.payOrderWithTaka = onCall({ region: REGION }, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Please sign in first.");
+    const uid = request.auth.uid;
+    const orderId = request.data && request.data.orderId;
+    if (!orderId) throw new HttpsError("invalid-argument", "Missing order.");
+    const s = await settings();
+    const orderRef = db().collection("orders").doc(orderId);
+    const userRef = db().collection("users").doc(uid);
+    let paid;
+    await db().runTransaction(async (tx) => {
+        const [os, us] = await Promise.all([tx.get(orderRef), tx.get(userRef)]);
+        if (!os.exists) throw new HttpsError("not-found", "Order not found.");
+        const o = os.data();
+        if ((o.userId || o.clientUid) !== uid) throw new HttpsError("permission-denied", "This isn't your order.");
+        if (!["pending_payment", "pending"].includes(o.status)) throw new HttpsError("failed-precondition", "This order is already paid.");
+        const u = us.data() || {};
+        if (!isBangladesh(u)) throw new HttpsError("failed-precondition", "Taka payments are for accounts in Bangladesh.");
+        const amountBdt = Math.ceil(Number(o.price) * s.bdtPerUsd);
+        const have = round2(u.walletBdt);
+        if (have < amountBdt) throw new HttpsError("failed-precondition", `This order costs ৳${amountBdt}. Your taka wallet has ৳${have.toFixed(2)}.`);
+        tx.update(userRef, { walletBdt: round2(have - amountBdt) });
+        tx.update(orderRef, {
+            status: "requirements", paidCurrency: "BDT", amountBdt, bdtRate: s.bdtPerUsd,
+            paymentMethod: "taka_wallet", paidAt: now(), updatedAt: now(),
+        });
+        tx.set(db().collection("wallet_transactions").doc(), {
+            uid, type: "order_payment", amountBdt: -amountBdt, amountUsd: 0, feeBdt: 0, rate: s.bdtPerUsd, refId: orderId, createdAt: now(),
+        });
+        paid = { order: o, amountBdt };
+    });
+    await postOrderCard(paid.order, orderId, "payment_verified",
+        `Payment received: ৳${paid.amountBdt} from the taka wallet. The seller can start now.`);
+    return { amountBdt: paid.amountBdt, status: "requirements" };
+});
+
+// ---------------- Sellers' taka earnings and withdrawals ----------------
+
+/** Taka earned from completed orders paid in taka, after the platform fee; cleared after 15 days */
+async function takaEarnings(uid) {
+    const g = (await db().collection("settings").doc("global").get()).data() || {};
+    const feePct = Number(g.platformFee) || 10;
+    const orders = await db().collection("orders").where("authorId", "==", uid).where("paidCurrency", "==", "BDT").get();
+    let total = 0, cleared = 0;
+    for (const d of orders.docs) {
+        const o = d.data();
+        if (o.status !== "completed") continue;
+        const usdPaid = Number(o.price) || 0;
+        // A dispute split pays the seller part of the price: same share of the taka
+        const usdSeller = o.disputeResolution && o.disputeResolution.sellerAmount != null ? Number(o.disputeResolution.sellerAmount) || 0 : usdPaid;
+        const bdt = usdPaid > 0 ? (Number(o.amountBdt) || 0) * (usdSeller / usdPaid) : 0;
+        const share = bdt * (1 - feePct / 100);
+        total += share;
+        const done = o.completedAt && o.completedAt.toMillis ? o.completedAt.toMillis() : 0;
+        if (done && Date.now() - done >= CLEARANCE_MS) cleared += share;
+    }
+    return { total: round2(total), cleared: round2(cleared), feePct };
+}
+
+exports.getTakaEarnings = onCall({ region: REGION }, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Please sign in first.");
+    const uid = request.auth.uid;
+    const e = await takaEarnings(uid);
+    const u = (await db().collection("users").doc(uid).get()).data() || {};
+    const withdrawn = round2(u.bdtWithdrawnTotal);
+    const s = await settings();
+    return { ...e, withdrawn, available: round2(Math.max(0, e.cleared - withdrawn)), pending: round2(e.total - e.cleared),
+             minWithdrawBdt: s.minWithdrawBdt, withdrawMethods: s.withdrawMethods };
+});
+
+exports.requestBdtWithdrawal = onCall({ region: REGION }, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Please sign in first.");
+    const uid = request.auth.uid;
+    const d = request.data || {};
+    const s = await settings();
+    const amountBdt = round2(d.amountBdt);
+    const method = String(d.method || "");
+    const accountNumber = String(d.accountNumber || "").trim().slice(0, 60);
+    const accountName = String(d.accountName || "").trim().slice(0, 120);
+    const bankName = String(d.bankName || "").trim().slice(0, 120);
+    const branch = String(d.branch || "").trim().slice(0, 120);
+    if (!(s.withdrawMethods || []).includes(method)) throw new HttpsError("invalid-argument", "Choose a withdrawal method.");
+    if (!(amountBdt >= s.minWithdrawBdt)) throw new HttpsError("invalid-argument", `The minimum withdrawal is ৳${s.minWithdrawBdt}.`);
+    if (accountNumber.length < 6) throw new HttpsError("invalid-argument", "Enter the account / wallet number.");
+    if (!accountName) throw new HttpsError("invalid-argument", "Enter the account holder's name.");
+    if (method === "bank" && !bankName) throw new HttpsError("invalid-argument", "Enter the bank name.");
+
+    const e = await takaEarnings(uid);
+    const userRef = db().collection("users").doc(uid);
+    const wRef = db().collection("bdt_withdrawals").doc();
+    await db().runTransaction(async (tx) => {
+        const u = (await tx.get(userRef)).data() || {};
+        if (!isBangladesh(u)) throw new HttpsError("failed-precondition", "Taka withdrawals are for accounts in Bangladesh.");
+        const withdrawn = round2(u.bdtWithdrawnTotal);
+        const available = round2(e.cleared - withdrawn);
+        if (amountBdt > available) throw new HttpsError("failed-precondition", `You can withdraw up to ৳${Math.max(0, available).toFixed(2)} now.`);
+        tx.set(userRef, { bdtWithdrawnTotal: round2(withdrawn + amountBdt) }, { merge: true });
+        tx.set(wRef, {
+            uid, name: u.displayName || u.name || "", email: u.email || "",
+            amountBdt, method, accountNumber, accountName, bankName: bankName || null, branch: branch || null,
+            status: "pending", createdAt: now(),
+        });
+    });
+    const admins = await db().collection("users").where("role", "==", "admin").get();
+    for (const a of admins.docs) {
+        await db().collection("notifications").add({
+            userId: a.id, title: `Taka withdrawal ৳${amountBdt}`,
+            message: `Send ৳${amountBdt} by ${method} to ${accountNumber} (${accountName}).`,
+            type: "admin_withdrawal", link: "/admin/deposits?tab=withdrawals", route: "/admin", read: false, createdAt: now(),
+        });
+    }
+    return { id: wRef.id, status: "pending" };
+});
+
+/** Admin: mark paid (with the transaction ID) or reject (the amount goes back to the seller's available taka) */
+exports.reviewBdtWithdrawal = onCall({ region: REGION }, async (request) => {
+    const adminUser = await requireAdmin(request);
+    const { withdrawalId, decision, txnId, reason } = request.data || {};
+    if (!withdrawalId || !["paid", "reject"].includes(decision)) throw new HttpsError("invalid-argument", "Missing decision.");
+    const t = String(txnId || "").trim().slice(0, 80);
+    const why = String(reason || "").trim().slice(0, 500);
+    if (decision === "paid" && t.length < 4) throw new HttpsError("invalid-argument", "Enter the bKash / Nagad / bank transaction ID.");
+    if (decision === "reject" && why.length < 5) throw new HttpsError("invalid-argument", "Tell them why (at least 5 characters).");
+    const ref = db().collection("bdt_withdrawals").doc(withdrawalId);
+    let w;
+    await db().runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) throw new HttpsError("not-found", "Withdrawal not found.");
+        w = snap.data();
+        if (w.status !== "pending") throw new HttpsError("failed-precondition", `Already ${w.status}.`);
+        if (decision === "paid") {
+            tx.update(ref, { status: "paid", txnId: t, paidAt: now(), reviewedBy: adminUser.uid, reviewedByName: adminUser.name });
+            tx.set(db().collection("wallet_transactions").doc(), {
+                uid: w.uid, type: "bdt_withdrawal", amountBdt: -w.amountBdt, amountUsd: 0, feeBdt: 0, rate: null, refId: withdrawalId, createdAt: now(),
+            });
+        } else {
+            tx.update(ref, { status: "rejected", rejectReason: why, reviewedAt: now(), reviewedBy: adminUser.uid, reviewedByName: adminUser.name });
+            tx.set(db().collection("users").doc(w.uid), { bdtWithdrawnTotal: admin.firestore.FieldValue.increment(-w.amountBdt) }, { merge: true });
+        }
+    });
+    await notify(w.uid,
+        decision === "paid" ? `৳${w.amountBdt} sent to your ${w.method}` : "Withdrawal not sent",
+        decision === "paid" ? `Transaction ID: ${t}` : `Reason: ${why}. The amount is available to withdraw again.`,
+        decision === "paid" ? "withdrawal_paid" : "withdrawal_rejected");
+    return { status: decision === "paid" ? "paid" : "rejected" };
+});
+

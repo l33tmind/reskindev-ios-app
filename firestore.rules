@@ -24,7 +24,7 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         isAdmin() ||
         (request.auth.uid == userId
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pro', 'verified', 'verificationStatus', 'verifiedAt', 'walletBdt'])
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pro', 'verified', 'verificationStatus', 'verifiedAt', 'walletBdt', 'bdtWithdrawnTotal'])
           // People may spend their dollar balance (pay with wallet, withdraw) but never raise it themselves
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['walletBalance'])
               || request.resource.data.get('walletBalance', 0) < resource.data.get('walletBalance', 0)))
@@ -58,8 +58,14 @@ service cloud.firestore {
       }
 
       allow read: if isAuthenticated() && (isParticipant() || isAdmin());
-      allow create: if isAuthenticated();
-      allow update: if isAuthenticated() && (
+      // Taka payment fields are set only by Cloud Functions (payOrderWithTaka)
+      function touchesTaka() {
+        return request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['paidCurrency', 'amountBdt', 'bdtRate']);
+      }
+      allow create: if isAuthenticated()
+        && !('paidCurrency' in request.resource.data) && !('amountBdt' in request.resource.data) && !('bdtRate' in request.resource.data);
+      allow update: if isAuthenticated() && (isAdmin() || !touchesTaka()) && (
         isParticipant() || isAdmin() ||
         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sellerReview', 'isReviewPublic'])
       );
@@ -91,6 +97,10 @@ service cloud.firestore {
       allow write: if false;
     }
     match /bdt_deposits/{depositId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+    match /bdt_withdrawals/{withdrawalId} {
       allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
       allow write: if false;
     }
