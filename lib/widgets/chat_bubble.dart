@@ -256,7 +256,7 @@ class ChatBubble extends StatelessWidget {
                       children: [
                         Text(
                           message.createdAt != null
-                              ? DateFormat('hh:mm a').format(message.createdAt!)
+                              ? DateFormat('h:mm a').format(message.createdAt!)
                               : 'Sending...',
                           style: GoogleFonts.inter(
                             color: isMe
@@ -339,7 +339,7 @@ class ChatBubble extends StatelessWidget {
                     children: [
                       Text(
                         message.createdAt != null
-                            ? DateFormat('hh:mm a').format(message.createdAt!)
+                            ? DateFormat('h:mm a').format(message.createdAt!)
                             : 'Sending...',
                         style: GoogleFonts.inter(
                           color: Colors.white,

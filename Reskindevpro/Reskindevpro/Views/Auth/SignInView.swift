@@ -57,6 +57,15 @@ struct SignInView: View {
             .buttonStyle(GlassOutlineButtonStyle())
             .disabled(isWorking)
 
+            // Try everything without an email or password (same guest accounts as the iOS app)
+            Button {
+                Task { await run { try await session.signInAsGuest() } }
+            } label: {
+                Label("Continue as Guest", systemImage: "person.crop.circle.badge.questionmark")
+            }
+            .buttonStyle(GlassOutlineButtonStyle())
+            .disabled(isWorking)
+
             HStack {
                 VStack { Divider() }
                 Text("or use email").font(.callout).foregroundStyle(.secondary)

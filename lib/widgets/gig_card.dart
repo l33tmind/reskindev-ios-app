@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'gig_cover.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/gig_model.dart';
 import '../theme.dart';
+import '../services/soft_sound.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -64,23 +66,22 @@ class GigCard extends StatelessWidget {
             // Thumbnail
             AspectRatio(
               aspectRatio: 16 / 9,
-              child: thumbnailUrl.isNotEmpty
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  thumbnailUrl.isNotEmpty
                   ? Image.network(
                       thumbnailUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: context.themeSurface,
-                        child: const Center(child: Icon(Icons.image, color: Colors.grey)),
-                      ),
+                      errorBuilder: (context, error, stackTrace) => GigCover(gig: gig, showTitle: false),
                       loadingBuilder: (context, child, loadingProgress) {
                         if (loadingProgress == null) return child;
                         return Container(color: context.themeSurface);
                       },
                     )
-                  : Container(
-                      color: context.themeSurface,
-                      child: const Center(child: Icon(Icons.image, color: Colors.grey)),
-                    ),
+                  : GigCover(gig: gig, showTitle: false),
+                ],
+              ),
             ),
             
             // Content
@@ -110,6 +111,9 @@ class GigCard extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        // A long seller name ends with "..." before it reaches the heart
+                        const SizedBox(width: 4),
+                        _HeartButton(gig: gig),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -139,7 +143,7 @@ class GigCard extends StatelessWidget {
                               const SizedBox(width: 2),
                               Flexible(
                                 child: Text(
-                                  gig.averageRating > 0 ? gig.averageRating.toStringAsFixed(1) : 'Rising Talent',
+                                  gig.averageRating > 0 ? gig.averageRating.toStringAsFixed(1) : 'New',
                                   style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: const Color(0xFFFFB33E)),
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -152,62 +156,7 @@ class GigCard extends StatelessWidget {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                              const SizedBox(width: 6),
-                            Builder(
-                              builder: (context) {
-                                final user = FirebaseAuth.instance.currentUser;
-                                if (user == null) {
-                                  return GestureDetector(
-                                    onTap: () {
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        const SnackBar(content: Text('Please login to add to wishlist')),
-                                      );
-                                      context.push('/login');
-                                    },
-                                    child: Icon(Icons.favorite_border_rounded, size: 16, color: context.themeTextLight),
-                                  );
-                                }
-                                
-                                final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
-                                
-                                return StreamBuilder<DocumentSnapshot>(
-                                  stream: userRef.snapshots(),
-                                  builder: (context, snapshot) {
-                                    bool isFav = false;
-                                    if (snapshot.hasData && snapshot.data!.exists) {
-                                      final data = snapshot.data!.data() as Map<String, dynamic>;
-                                      final savedGigs = List<String>.from(data['savedGigs'] ?? []);
-                                      isFav = savedGigs.contains(gig.id);
-                                    }
-                                    
-                                    return GestureDetector(
-                                      onTap: () async {
-                                        if (isFav) {
-                                          await userRef.update({
-                                            'savedGigs': FieldValue.arrayRemove([gig.id])
-                                          });
-                                        } else {
-                                          await userRef.update({
-                                            'savedGigs': FieldValue.arrayUnion([gig.id])
-                                          });
-                                          if (context.mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Added to wishlist'), duration: Duration(seconds: 1)),
-                                            );
-                                          }
-                                        }
-                                      },
-                                      child: Icon(
-                                        isFav ? Icons.favorite_rounded : Icons.favorite_border_rounded, 
-                                        size: 16, 
-                                        color: isFav ? Colors.red : context.themeTextLight,
-                                      ),
-                                    );
-                                  },
-                                );
-                              }
-                            ),
-                          ],
+                            ],
                         ),
                         ),
                         
@@ -233,6 +182,80 @@ class GigCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _HeartButton extends StatefulWidget {
+  final GigModel gig;
+  const _HeartButton({required this.gig});
+
+  @override
+  State<_HeartButton> createState() => _HeartButtonState();
+}
+
+class _HeartButtonState extends State<_HeartButton> with SingleTickerProviderStateMixin {
+  late final AnimationController _pop = AnimationController(vsync: this, duration: const Duration(milliseconds: 320));
+
+  @override
+  void dispose() {
+    _pop.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final user = FirebaseAuth.instance.currentUser;
+    final scale = TweenSequence<double>([
+      TweenSequenceItem(tween: Tween(begin: 1.0, end: 1.35).chain(CurveTween(curve: Curves.easeOut)), weight: 40),
+      TweenSequenceItem(tween: Tween(begin: 1.35, end: 1.0).chain(CurveTween(curve: Curves.easeInOut)), weight: 60),
+    ]).animate(_pop);
+
+    Widget heart(bool filled, VoidCallback onTap) => GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          child: SizedBox(
+            width: 28,
+            height: 24,
+            child: Center(
+              child: ScaleTransition(
+                scale: scale,
+                child: Icon(
+                  filled ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                  size: 20,
+                  color: filled ? Colors.redAccent : context.themeTextLight,
+                ),
+              ),
+            ),
+          ),
+        );
+
+    if (user == null) {
+      return heart(false, () {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please login to add to wishlist')));
+        context.push('/login');
+      });
+    }
+
+    final userRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+    return StreamBuilder<DocumentSnapshot>(
+      stream: userRef.snapshots(),
+      builder: (context, snapshot) {
+        var isFav = false;
+        if (snapshot.hasData && snapshot.data!.exists) {
+          final data = snapshot.data!.data() as Map<String, dynamic>;
+          isFav = List<String>.from(data['savedGigs'] ?? []).contains(widget.gig.id);
+        }
+        return heart(isFav, () async {
+          if (isFav) {
+            await userRef.update({'savedGigs': FieldValue.arrayRemove([widget.gig.id])});
+          } else {
+            _pop.forward(from: 0);
+            SoftSound.chime();
+            await userRef.update({'savedGigs': FieldValue.arrayUnion([widget.gig.id])});
+          }
+        });
+      },
     );
   }
 }

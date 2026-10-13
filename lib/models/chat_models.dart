@@ -82,6 +82,11 @@ class MessageModel {
   final num? offerPrice;
   final int? offerDays;
   final String? offerDescription;
+  /// Custom offer: a short headline, the included features (✓ list) and pending / accepted / declined
+  final String? offerTitle;
+  final List<String> offerFeatures;
+  final String? offerStatus;
+  final String? offerOrderId;
   final String? imageUrl;
   final String? replyToId;
   final String? replyToText;
@@ -107,6 +112,10 @@ class MessageModel {
     this.offerPrice,
     this.offerDays,
     this.offerDescription,
+    this.offerTitle,
+    this.offerFeatures = const [],
+    this.offerStatus,
+    this.offerOrderId,
     this.imageUrl,
     this.replyToId,
     this.replyToText,
@@ -147,6 +156,10 @@ class MessageModel {
       offerPrice: data['offerPrice'] != null ? num.tryParse(data['offerPrice'].toString()) : null,
       offerDays: data['offerDays'] != null ? int.tryParse(data['offerDays'].toString()) : null,
       offerDescription: data['offerDescription']?.toString(),
+      offerTitle: data['offerTitle']?.toString(),
+      offerFeatures: data['offerFeatures'] is List ? List<String>.from((data['offerFeatures'] as List).map((e) => e.toString())) : const [],
+      offerStatus: data['offerStatus']?.toString(),
+      offerOrderId: data['offerOrderId']?.toString(),
       imageUrl: data['imageUrl']?.toString(),
       replyToId: data['replyToId']?.toString(),
       replyToText: data['replyToText']?.toString(),

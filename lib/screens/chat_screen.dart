@@ -1,5 +1,3 @@
-import '../services/pricing_rules.dart';
-import '../widgets/live_timer.dart';
 
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:go_router/go_router.dart';
@@ -17,6 +15,11 @@ import '../models/order_model.dart';
 import '../theme.dart';
 import '../widgets/chat_bubble.dart';
 import '../widgets/order_chat_cards.dart';
+import '../widgets/order_next_step_panel.dart';
+import '../widgets/user_avatar.dart';
+import '../widgets/custom_offer.dart';
+import 'quick_replies_screen.dart' show QuickReplyDefaults;
+import '../services/notification_feed.dart';
 import '../widgets/workspace_details_sheet.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -35,18 +38,31 @@ class ChatScreen extends StatefulWidget {
     this.orderId,
   }) : super(key: key);
 
+  /// The chat on screen right now, or null
+  static String? get openChatId => _ChatScreenState.openChatId;
+  static set openChatId(String? id) => _ChatScreenState.openChatId = id;
+
   @override
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends State<ChatScreen> {
+  /// The chat on screen right now (null when none). Push notifications for it are not shown as a banner,
+  /// because the person is already reading it.
+  static String? openChatId;
+
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   MessageModel? _replyingTo;
   late String _chatId;
+  String? _lastReadMessageId;
   bool _isFreelancer = false;
   Stream<List<MessageModel>>? _messagesStream;
   String? _currentOrderId;
+  ChatProvider? _chatProvider;
+  late String _targetUserId;
+  late String _targetUserName;
+  late String _targetUserAvatar;
 
   bool _isTyping = false;
   Timer? _typingTimer;
@@ -57,6 +73,9 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _chatId = widget.chatId;
+    _targetUserId = widget.targetUserId;
+    _targetUserName = widget.targetUserName;
+    _targetUserAvatar = widget.targetUserAvatar;
     _initializeChat();
     _fetchChatSuggestions();
     _controller.addListener(_onTextChanged);
@@ -113,11 +132,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   void dispose() {
+    if (ChatScreen.openChatId == _chatId) ChatScreen.openChatId = null;
     _typingTimer?.cancel();
     if (_isTyping && _chatId.isNotEmpty && _chatId != 'new') {
-      final currentUserId = context.read<AuthProvider>().user?.uid;
+      final currentUserId = FirebaseAuth.instance.currentUser?.uid;
       if (currentUserId != null) {
-        context.read<ChatProvider>().setTyping(_chatId, currentUserId, false);
+        _chatProvider?.setTyping(_chatId, currentUserId, false);
       }
     }
     _controller.removeListener(_onTextChanged);
@@ -129,9 +149,45 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _initializeChat() async {
     final auth = context.read<AuthProvider>();
     final chatProvider = context.read<ChatProvider>();
-    final currentUser = auth.user;
+    _chatProvider = chatProvider;
+    // Opened from a push notification: the route carries only the chat id, and on a cold start the
+    // auth state may not be restored yet, so wait for it before loading the chat.
+    final currentUser = auth.user ??
+        FirebaseAuth.instance.currentUser ??
+        await FirebaseAuth.instance
+            .authStateChanges()
+            .firstWhere((u) => u != null)
+            .timeout(const Duration(seconds: 10), onTimeout: () => null);
+    if (currentUser == null || !mounted) return;
 
-    if (currentUser == null) return;
+    if (_chatId.isNotEmpty && _chatId != 'new' && _targetUserId.isEmpty) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('conversations')
+            .doc(_chatId)
+            .get();
+        final data = doc.data();
+        if (data != null) {
+          final participants = List<String>.from(data['participants'] ?? []);
+          final other = participants.firstWhere(
+            (id) => id != currentUser.uid,
+            orElse: () => '',
+          );
+          final details = (data['participantDetails'] as Map?)?[other] as Map?;
+          if (mounted) {
+            setState(() {
+              _targetUserId = other;
+              _targetUserName = (details?['name'] as String?) ?? _targetUserName;
+              _targetUserAvatar = (details?['avatar'] as String?) ?? _targetUserAvatar;
+              _currentOrderId = data['orderId'] as String?;
+            });
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading chat from notification: $e');
+      }
+    }
+    if (!mounted) return;
 
     if (_chatId.isEmpty || _chatId == 'new') {
       if (widget.orderId != null && widget.orderId!.isNotEmpty) {
@@ -139,9 +195,9 @@ class _ChatScreenState extends State<ChatScreen> {
           currentUserId: currentUser.uid,
           currentUserName: auth.displayName,
           currentUserAvatar: auth.photoUrl,
-          targetUserId: widget.targetUserId,
-          targetUserName: widget.targetUserName,
-          targetUserAvatar: widget.targetUserAvatar,
+          targetUserId: _targetUserId,
+          targetUserName: _targetUserName,
+          targetUserAvatar: _targetUserAvatar,
           orderId: widget.orderId!,
         );
       } else {
@@ -149,9 +205,9 @@ class _ChatScreenState extends State<ChatScreen> {
           currentUserId: currentUser.uid,
           currentUserName: auth.displayName,
           currentUserAvatar: auth.photoUrl,
-          targetUserId: widget.targetUserId,
-          targetUserName: widget.targetUserName,
-          targetUserAvatar: widget.targetUserAvatar,
+          targetUserId: _targetUserId,
+          targetUserName: _targetUserName,
+          targetUserAvatar: _targetUserAvatar,
         );
       }
     }
@@ -165,8 +221,12 @@ class _ChatScreenState extends State<ChatScreen> {
       });
     }
 
+    ChatScreen.openChatId = _chatId;
+    _loadMyRole(currentUser.uid);
+
     // Mark as read when entering
     await chatProvider.markAsRead(_chatId, currentUser.uid);
+    AppNotif.markChatRead(currentUser.uid, chatId: _chatId, orderId: widget.orderId ?? _currentOrderId);
   }
 
   Future<void> _showReportDialog() async {
@@ -212,7 +272,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
                 await FirebaseFirestore.instance.collection('reports').add({
                   'reportedBy': currentUserId,
-                  'reportedUser': widget.targetUserId,
+                  'reportedUser': _targetUserId,
                   'reason': selectedReason,
                   'createdAt': FieldValue.serverTimestamp(),
                   'status': 'pending',
@@ -259,7 +319,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   .doc(currentUserId)
                   .update({
                     'blockedUsers': FieldValue.arrayUnion([
-                      widget.targetUserId,
+                      _targetUserId,
                     ]),
                   });
 
@@ -313,6 +373,65 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// The other person's profile picture beside their messages, shown on the last message of a group.
+  /// Am I the seller in this chat? Order chat: the order's seller. Direct chat: the conversation's
+  /// freelancerId (the person who was contacted about their gig). Not the account's role:
+  /// every new account (guests too) gets role "freelancer", so that said nothing about this chat.
+  Future<void> _loadMyRole(String myUid) async {
+    try {
+      final chat = (await FirebaseFirestore.instance.collection('conversations').doc(_chatId).get()).data();
+      final orderId = (chat?['orderId'] ?? widget.orderId ?? '').toString();
+      bool seller;
+      if (orderId.isNotEmpty) {
+        final order = await FirebaseFirestore.instance.collection('orders').doc(orderId).get();
+        seller = (order.data()?['authorId'] ?? '') == myUid;
+      } else {
+        var sellerId = (chat?['freelancerId'] ?? '').toString();
+        if (sellerId.isEmpty) {
+          // No roles saved (older chat): whoever sent the first message is the buyer, the other one the seller.
+          // Saved on the chat, so every app and the website agree from now on.
+          final first = await FirebaseFirestore.instance
+              .collection('conversations').doc(_chatId).collection('messages')
+              .orderBy('createdAt').limit(1).get();
+          final firstSender = first.docs.isEmpty ? '' : (first.docs.first.data()['senderId'] ?? '').toString();
+          final participants = List<String>.from(chat?['participants'] ?? const []);
+          if (firstSender.isNotEmpty && firstSender != 'system' && participants.length == 2 && participants.contains(firstSender)) {
+            sellerId = participants.firstWhere((p) => p != firstSender);
+            await FirebaseFirestore.instance.collection('conversations').doc(_chatId)
+                .set({'freelancerId': sellerId, 'clientId': firstSender}, SetOptions(merge: true));
+          }
+        }
+        seller = sellerId == myUid;
+      }
+      if (mounted && seller != _isFreelancer) setState(() => _isFreelancer = seller);
+    } catch (_) {}
+  }
+
+  Widget _withAvatar({required MessageModel msg, required bool isMe, required bool isLast, required Widget bubble}) {
+    if (isMe) return bubble;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        SizedBox(
+          width: 32,
+          height: 32,
+          // Only next to the last bubble of a group, like iMessage/WhatsApp; live photo from their profile
+          child: isLast
+              ? Center(
+                  child: UserAvatar(
+                    uid: _targetUserId,
+                    name: msg.senderName.isNotEmpty ? msg.senderName : _targetUserName,
+                    radius: 16,
+                  ),
+                )
+              : null,
+        ),
+        const SizedBox(width: 6),
+        Expanded(child: bubble),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final chatProvider = context.read<ChatProvider>();
@@ -325,40 +444,50 @@ class _ChatScreenState extends State<ChatScreen> {
         backgroundColor: context.themeSurface,
         elevation: 0.5,
         iconTheme: IconThemeData(color: context.themeTextDark),
-        title: Row(
-          children: [
-            CircleAvatar(
-              radius: 16,
-              backgroundColor: AppTheme.primary.withOpacity(0.1),
-              backgroundImage: widget.targetUserAvatar.isNotEmpty
-                  ? NetworkImage(widget.targetUserAvatar)
-                  : null,
-              child: widget.targetUserAvatar.isEmpty
-                  ? Text(
-                      widget.targetUserName.isNotEmpty
-                          ? widget.targetUserName[0].toUpperCase()
-                          : '?',
-                      style: const TextStyle(
-                        color: AppTheme.primary,
-                        fontSize: 12,
-                      ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.targetUserName,
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: context.themeTextDark,
+        title: StreamBuilder<DocumentSnapshot>(
+          stream: _targetUserId.isNotEmpty 
+              ? FirebaseFirestore.instance.collection('users').doc(_targetUserId).snapshots() 
+              : null,
+          builder: (context, userSnapshot) {
+            String displayAvatar = _targetUserAvatar;
+            String displayName = _targetUserName;
+            
+            if (userSnapshot.hasData && userSnapshot.data != null && userSnapshot.data!.exists) {
+              final data = userSnapshot.data!.data() as Map<String, dynamic>?;
+              if (data != null) {
+                displayAvatar = data['photoUrl'] ?? data['profilePicture'] ?? displayAvatar;
+                final n = data['name'] ?? data['displayName'] ?? data['username'] ?? '';
+                if (n.isNotEmpty) displayName = n;
+              }
+            }
+            
+            return Row(
+              children: [
+                // Tap the picture to see their profile
+                GestureDetector(
+                  onTap: _targetUserId.isEmpty ? null : () => context.push('/seller-profile/$_targetUserId'),
+                  child: SizedBox(
+                    width: 38,
+                    height: 38,
+                    child: Center(
+                      child: UserAvatar(uid: _targetUserId, name: displayName, photoUrl: displayAvatar, radius: 19),
                     ),
-                    overflow: TextOverflow.ellipsis,
                   ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        displayName,
+                        style: GoogleFonts.outfit(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                          color: context.themeTextDark,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                   if (_chatId.isNotEmpty && _chatId != 'new')
                     StreamBuilder<DocumentSnapshot>(
                       stream: FirebaseFirestore.instance
@@ -374,7 +503,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           final typingMap =
                               data['typing'] as Map<String, dynamic>? ?? {};
                           isTargetTyping =
-                              typingMap[widget.targetUserId] == true;
+                              typingMap[_targetUserId] == true;
                         }
 
                         if (isTargetTyping) {
@@ -389,11 +518,11 @@ class _ChatScreenState extends State<ChatScreen> {
                         }
 
                         // If not typing, show Online status
-                        if (widget.targetUserId.isEmpty) return const SizedBox.shrink();
+                        if (_targetUserId.isEmpty) return const SizedBox.shrink();
                         return StreamBuilder<DocumentSnapshot>(
                           stream: FirebaseFirestore.instance
                               .collection('users')
-                              .doc(widget.targetUserId)
+                              .doc(_targetUserId)
                               .snapshots(),
                           builder: (ctx, userSnapshot) {
                             if (!userSnapshot.hasData ||
@@ -473,12 +602,16 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
           ],
+        );
+          }
         ),
         actions: [
           PopupMenuButton<String>(
             onSelected: (value) {
-              if (value == 'profile') {
-                context.push('/seller-profile/${widget.targetUserId}');
+              if (value == 'details') {
+                _showWorkspaceDetails();
+              } else if (value == 'profile') {
+                context.push('/seller-profile/${_targetUserId}');
               } else if (value == 'report') {
                 _showReportDialog();
               } else if (value == 'block') {
@@ -486,6 +619,8 @@ class _ChatScreenState extends State<ChatScreen> {
               }
             },
             itemBuilder: (context) => [
+              if ((_currentOrderId ?? widget.orderId ?? '').isNotEmpty)
+                const PopupMenuItem(value: 'details', child: Text('Order details')),
               const PopupMenuItem(
                 value: 'profile',
                 child: Text('View Profile'),
@@ -506,36 +641,35 @@ class _ChatScreenState extends State<ChatScreen> {
                 final orderId = chatData?['orderId'] as String?;
                 if (orderId == null || orderId.isEmpty) return const SizedBox.shrink();
                 
-                return GestureDetector(
-                  onTap: () {
-                    _currentOrderId = orderId;
-                    _showWorkspaceDetails();
-                  },
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.primary.withValues(alpha: 0.1),
-                      border: Border(bottom: BorderSide(color: AppTheme.primary.withValues(alpha: 0.3))),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(Icons.workspace_premium_rounded, color: AppTheme.primary, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Active Order Workspace',
-                            style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: AppTheme.primary, fontSize: 13),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(color: AppTheme.primary, borderRadius: BorderRadius.circular(12)),
-                          child: Text('View', style: GoogleFonts.inter(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-                        )
-                      ],
-                    ),
-                  ),
+                // Fetch order to determine role
+                if (_currentOrderId != orderId) {
+                  _currentOrderId = orderId;
+                  FirebaseFirestore.instance.collection('orders').doc(orderId).get().then((doc) {
+                    if (doc.exists && mounted) {
+                      final order = OrderModel.fromFirestore(doc);
+                      setState(() {
+                        _isFreelancer = FirebaseAuth.instance.currentUser?.uid == order.authorId;
+                      });
+                    }
+                  });
+                }
+                
+                return StreamBuilder<DocumentSnapshot>(
+                  stream: FirebaseFirestore.instance.collection('orders').doc(orderId).snapshots(),
+                  builder: (context, orderSnap) {
+                    if (!orderSnap.hasData || !orderSnap.data!.exists) return const SizedBox.shrink();
+                    final order = OrderModel.fromFirestore(orderSnap.data!);
+                    
+                    return OrderNextStepPanel(
+                      order: order,
+                      isSeller: FirebaseAuth.instance.currentUser?.uid == order.authorId,
+                      chatId: _chatId,
+                      onDetails: () {
+                        _currentOrderId = orderId;
+                        _showWorkspaceDetails();
+                      },
+                    );
+                  }
                 );
               },
             ),
@@ -560,7 +694,7 @@ class _ChatScreenState extends State<ChatScreen> {
                             chatData['unreadCount'] as Map<String, dynamic>? ??
                             {};
                         targetUnreadCount =
-                            (unreadMap[widget.targetUserId] as num?)?.toInt() ??
+                            (unreadMap[_targetUserId] as num?)?.toInt() ??
                             0;
                       }
 
@@ -581,9 +715,37 @@ class _ChatScreenState extends State<ChatScreen> {
 
                           final messages = snapshot.data ?? [];
 
-                          // Auto mark as read if new messages arrive
-                          if (messages.isNotEmpty && currentUserId != null) {
+                          // Mark as read when a new message arrives (not on every rebuild:
+                          // typing and online status redraw this often, and each call reads the chat)
+                          if (messages.isNotEmpty && currentUserId != null && messages.first.id != _lastReadMessageId) {
+                            _lastReadMessageId = messages.first.id;
                             chatProvider.markAsRead(_chatId, currentUserId);
+                          }
+
+                          // A new chat: say who it is and how to start, instead of an empty screen
+                          if (messages.isEmpty) {
+                            return Center(
+                              child: Padding(
+                                padding: const EdgeInsets.all(32),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    UserAvatar(uid: _targetUserId, name: _targetUserName, radius: 36),
+                                    const SizedBox(height: 14),
+                                    Text('Say hi to ${_targetUserName.split(' ').first} 👋',
+                                      style: GoogleFonts.outfit(fontSize: 19, fontWeight: FontWeight.bold, color: context.themeTextDark)),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      _isFreelancer
+                                          ? 'Answer their questions here. When you agree on the work, send a custom offer with the 🏷 button.'
+                                          : 'Ask about the service, the price or the delivery time. Tap ⚡ for ready-made questions.',
+                                      textAlign: TextAlign.center,
+                                      style: GoogleFonts.inter(fontSize: 13.5, height: 1.45, color: context.themeTextLight),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
                           }
 
                           return Align(
@@ -713,14 +875,20 @@ class _ChatScreenState extends State<ChatScreen> {
                                           message: msg,
                                           isCurrentUser: isMe,
                                           isFreelancer: _isFreelancer,
+                                          chatId: _chatId,
                                         )
-                                      : ChatBubble(
-                                          isFreelancer: _isFreelancer,
-                                          message: msg,
+                                      : _withAvatar(
+                                          msg: msg,
                                           isMe: isMe,
-                                          isFirstInGroup: isFirst,
-                                          isLastInGroup: isLast,
-                                          isRead: isRead,
+                                          isLast: isLast,
+                                          bubble: ChatBubble(
+                                            isFreelancer: _isFreelancer,
+                                            message: msg,
+                                            isMe: isMe,
+                                            isFirstInGroup: isFirst,
+                                            isLastInGroup: isLast,
+                                            isRead: isRead,
+                                          ),
                                         ),
                                 );
 
@@ -760,18 +928,18 @@ class _ChatScreenState extends State<ChatScreen> {
                     },
                   ),
           ),
-          if (widget.targetUserId.isEmpty) 
+          if (_targetUserId.isEmpty) 
             const SizedBox.shrink()
           else
             StreamBuilder<DocumentSnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('users')
-                  .doc(widget.targetUserId)
+                  .doc(_targetUserId)
                   .snapshots(),
             builder: (context, snapshot) {
               final auth = context.watch<AuthProvider>();
               final iBlockedThem = auth.blockedUsers.contains(
-                widget.targetUserId,
+                _targetUserId,
               );
 
               bool theyBlockedMe = false;
@@ -810,7 +978,6 @@ class _ChatScreenState extends State<ChatScreen> {
               return Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _buildQuickReplies(auth),
                   if (_replyingTo != null) _buildReplyPreview(),
                   _buildMessageInput(),
                 ],
@@ -823,91 +990,14 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _showCustomOfferModal() {
-    final priceCtrl = TextEditingController();
-    final daysCtrl = TextEditingController();
-    final descCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (c) => AlertDialog(
-        backgroundColor: context.themeCard,
-        title: Text(
-          'Send Custom Offer',
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            color: context.themeTextDark,
-          ),
-        ),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: priceCtrl,
-                keyboardType: TextInputType.number,
-                style: TextStyle(color: context.themeTextDark),
-                decoration: const InputDecoration(labelText: 'Price (USD)'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: daysCtrl,
-                keyboardType: TextInputType.number,
-                style: TextStyle(color: context.themeTextDark),
-                decoration: const InputDecoration(
-                  labelText: 'Delivery Time (Days)',
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: descCtrl,
-                maxLines: 3,
-                style: TextStyle(color: context.themeTextDark),
-                decoration: const InputDecoration(
-                  labelText: 'Offer Description',
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (priceCtrl.text.isEmpty ||
-                  daysCtrl.text.isEmpty ||
-                  descCtrl.text.isEmpty)
-                return;
-
-              final auth = context.read<AuthProvider>();
-              final currentUser = auth.user;
-              if (currentUser == null) return;
-
-              Navigator.pop(c);
-
-              await context.read<ChatProvider>().sendMessage(
-                chatId: _chatId,
-                currentUserId: currentUser.uid,
-                currentUserName: auth.displayName,
-                text: 'Sent a custom offer',
-                type: 'offer',
-                offerPrice: num.tryParse(priceCtrl.text) ?? 0,
-                offerDays: int.tryParse(daysCtrl.text) ?? 0,
-                offerDescription: descCtrl.text,
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primary,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Send Offer'),
-          ),
-        ],
-      ),
-    );
+    final isOrderWorkspace = (_currentOrderId != null && _currentOrderId!.isNotEmpty) || (widget.orderId != null && widget.orderId!.isNotEmpty);
+    if (isOrderWorkspace) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Custom offers can only be sent in direct buyer-seller chat, not inside an active order workstream.')),
+      );
+      return;
+    }
+    showCreateOfferSheet(context, chatId: _chatId);
   }
 
   void _showWorkspaceDetails() {
@@ -924,23 +1014,11 @@ class _ChatScreenState extends State<ChatScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.8,
-          minChildSize: 0.5,
-          maxChildSize: 0.95,
-          builder: (_, scrollController) {
-            return SingleChildScrollView(
-              controller: scrollController,
-              child: WorkspaceDetailsSheet(
-                orderId: _currentOrderId!,
-                isSeller: context.read<AuthProvider>().isFreelancer,
-                chatId: _chatId,
-              ),
-            );
-          },
-        );
-      },
+      // The sheet sizes itself to its content (up to 85% of the screen) and scrolls inside
+      builder: (context) => WorkspaceDetailsSheet(
+        orderId: _currentOrderId!,
+        chatId: _chatId,
+      ),
     );
   }
 
@@ -950,18 +1028,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final isToday =
         date.year == now.year && date.month == now.month && date.day == now.day;
     final isYesterday =
-              // Same minimum and step as the website and Vision Pro app
-              final rules = await PricingRules.load();
-              final problem = rules.check(num.tryParse(priceCtrl.text));
-              if (problem != null) {
-                if (!context.mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(problem), backgroundColor: Colors.red),
-                );
-                return;
-              }
-
-              if (!context.mounted) return;
         date.year == now.year &&
         date.month == now.month &&
         date.day == now.day - 1;
@@ -992,56 +1058,69 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildQuickReplies(AuthProvider auth) {
-    if (!auth.isFreelancer) return const SizedBox.shrink();
+  /// Quick replies for both sides: sellers and buyers each have their own list (editable in Profile → Quick Replies)
+  bool _canUseQuickReplies(AuthProvider auth) => auth.user != null;
 
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').doc(auth.user?.uid).snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox.shrink();
-        
-        final data = snapshot.data!.data() as Map<String, dynamic>?;
-        final savedReplies = List<String>.from(data?['quickReplies'] ?? []);
-        
-        final templates = savedReplies.isNotEmpty ? savedReplies : [
-          "Let's start a Google Meet call for better communication",
-          "Hello! How can I help you?",
-          "Let me check the details.",
-          "Thanks for ordering!",
-          "I'll deliver this soon.",
-          "Could you provide more info?",
-        ];
+  /// Opens the saved quick replies. Tapping one puts it in the message box, so it can be edited before sending.
+  Future<void> _showQuickReplies() async {
+    final uid = context.read<AuthProvider>().user?.uid;
+    List<String> saved = [];
+    try {
+      final doc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      saved = List<String>.from(doc.data()?[QuickReplyDefaults.field(seller: _isFreelancer)] ?? []);
+    } catch (_) {}
+    final templates = saved.isNotEmpty ? saved : QuickReplyDefaults.forRole(seller: _isFreelancer);
+    if (!mounted) return;
 
-        return Container(
-          height: 40,
-          margin: const EdgeInsets.only(bottom: 8),
-          child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            scrollDirection: Axis.horizontal,
-            itemCount: templates.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 8),
-            itemBuilder: (context, index) {
-              return ActionChip(
-                label: Text(
-                  templates[index],
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: context.themeTextDark,
-                    fontWeight: FontWeight.w500,
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: context.themeSurface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 8, 4),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text('Quick replies',
+                      style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: context.themeTextDark)),
                   ),
-                ),
-                backgroundColor: context.themeSurface,
-                side: BorderSide(color: context.themeBorder),
-                onPressed: () {
-                  _controller.text = templates[index];
-                  _sendMessage();
-                },
-              );
-            },
-          ),
-        );
-      },
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      context.push('/quick-replies', extra: _isFreelancer ? 'seller' : 'buyer');
+                    },
+                    child: const Text('Edit'),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: 8),
+                children: [
+                  for (final t in templates)
+                    ListTile(
+                      leading: const Icon(Icons.bolt_rounded, color: AppTheme.primary, size: 20),
+                      title: Text(t, style: GoogleFonts.inter(fontSize: 14.5, color: context.themeTextDark)),
+                      onTap: () => Navigator.pop(ctx, t),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
+    if (picked == null || !mounted) return;
+    _controller.text = picked;
+    _controller.selection = TextSelection.fromPosition(TextPosition(offset: picked.length));
+    setState(() {});
   }
 
   Widget _buildReplyPreview() {
@@ -1149,7 +1228,9 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
               child: Row(
                 children: [
-                  if (_isFreelancer) ...[
+                  // Custom offers: only the seller, and only before there is an order
+                  if (!((_currentOrderId != null && _currentOrderId!.isNotEmpty) || (widget.orderId != null && widget.orderId!.isNotEmpty)) &&
+                      _isFreelancer) ...[
                     IconButton(
                       icon: const Icon(
                         Icons.local_offer_outlined,
@@ -1160,14 +1241,16 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                     const SizedBox(width: 4),
                   ],
-                  IconButton(
-                    icon: Icon(Icons.info_outline_rounded, color: context.themeTextLight),
-                    onPressed: _showWorkspaceDetails,
-                    tooltip: 'Work Details',
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                  const SizedBox(width: 12),
+                  if (_canUseQuickReplies(context.watch<AuthProvider>())) ...[
+                    IconButton(
+                      icon: const Icon(Icons.bolt_rounded, color: AppTheme.primary),
+                      onPressed: _showQuickReplies,
+                      tooltip: 'Quick replies',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                   Expanded(
                     child: Container(
                       decoration: BoxDecoration(

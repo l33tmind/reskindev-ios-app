@@ -189,6 +189,7 @@ class AppTheme {
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
+      dividerTheme: const DividerThemeData(color: darkBorder, space: 1, thickness: 0.6),
       primaryColor: primary,
       scaffoldBackgroundColor: darkBackground,
       colorScheme: ColorScheme.dark(
@@ -242,6 +243,24 @@ class AppTheme {
         }),
         elevation: 0,
         height: 68,
+      ),
+      // Same filled primary buttons as the light theme; without this, dialog buttons in dark mode were flat and hard to see
+      // Every dialog's title and text readable on dark (many dialogs set only the font, not the color)
+      dialogTheme: DialogThemeData(
+        backgroundColor: darkCard,
+        titleTextStyle: GoogleFonts.outfit(color: darkText, fontWeight: FontWeight.bold, fontSize: 20),
+        contentTextStyle: GoogleFonts.inter(color: darkTextLight, fontSize: 14, height: 1.5),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primary,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shadowColor: Colors.transparent,
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15),
+        ),
       ),
       cardTheme: CardThemeData(
         color: darkCard,

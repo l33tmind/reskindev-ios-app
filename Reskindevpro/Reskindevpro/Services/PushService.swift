@@ -26,7 +26,13 @@ final class PushService {
         Task {
             let center = UNUserNotificationCenter.current()
             let settings = await center.notificationSettings()
-            if settings.authorizationStatus == .notDetermined {
+            // Simulator demo runs (`-…Demo` launch arguments) skip the prompt so it can't cover the screen
+            #if DEBUG
+            let isDemoRun = ProcessInfo.processInfo.arguments.contains { $0.hasSuffix("Demo") }
+            #else
+            let isDemoRun = false
+            #endif
+            if settings.authorizationStatus == .notDetermined, !isDemoRun {
                 _ = try? await center.requestAuthorization(options: [.alert, .badge, .sound])
             }
             UIApplication.shared.registerForRemoteNotifications()

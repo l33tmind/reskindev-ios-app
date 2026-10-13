@@ -1,21 +1,23 @@
 import '../services/invoice_number.dart';
+import '../services/admin_order_status.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:online_platform/services/notification_service.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import '../theme.dart';
 import '../models/order_model.dart';
 import '../providers/auth_provider.dart' as ap;
+import '../providers/chat_provider.dart';
 import '../providers/settings_provider.dart';
 import 'manage_services_view.dart';
 import 'manage_pages_view.dart';
 import 'admin_overview_view.dart';
 import 'admin_users_view.dart';
 import 'admin_coupons_view.dart';
+import 'admin_reports_view.dart';
 import 'admin_support_tickets_view.dart';
 import 'admin_orders_view.dart';
 
@@ -156,6 +158,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   isActive: _selectedIndex == 7,
                   onTap: () => setState(() => _selectedIndex = 7),
                 ),
+                _SidebarItem(
+                  icon: Icons.report_problem,
+                  label: 'User Reports',
+                  isActive: _selectedIndex == 8,
+                  onTap: () => setState(() => _selectedIndex = 8),
+                ),
               ],
             ),
           ),
@@ -175,7 +183,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                     ? const AdminCouponsView()
                                     : _selectedIndex == 6
                                         ? _buildSettingsTab()
-                                        : const AdminSupportTicketsView(),
+                                        : _selectedIndex == 7
+                                            ? const AdminSupportTicketsView()
+                                            : const AdminReportsView(),
           ),
         ],
       ),
@@ -756,8 +766,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                                 Expanded(
                                   flex: 3,
                                   child: ElevatedButton(
+                                    // Verify the offline payment: the order goes to Requirements, exactly like the website
                                     onPressed: () async {
-                                      await _updateOrderStatus(order, 'in_progress');
+                                      await _updateOrderStatus(order, 'requirements');
                                     },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: const Color(0xFF3B82F6),
@@ -900,45 +911,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _updateOrderStatus(OrderModel order, String newStatus) async {
     if (order.id == null) return;
     
-    final oldStatus = order.status;
-    await FirebaseFirestore.instance.collection('orders').doc(order.id).update({'status': newStatus});
-    
-    // Offline Escrow Logic: pending_payment -> requirements
-    if (oldStatus == 'pending_payment' && newStatus == 'requirements') {
-      try {
-        // Notify Buyer
-        await NotificationService.sendAndSaveNotification(
-          userId: order.clientUid,
-          title: 'Payment Secured! ✅',
-          body: 'Reskindev has successfully held your escrow payment for ${order.gigTitle}. Please submit your requirements if you haven\'t already.',
-        );
-        
-        // Notify Seller (Freelancer)
-        if (order.authorId.isNotEmpty) {
-          await NotificationService.sendAndSaveNotification(
-            userId: order.authorId,
-            title: 'Escrow Payment Received! 🎉',
-            body: 'Reskindev has secured the funds for ${order.gigTitle}. You can now safely start working on this order!',
-          );
-        }
-      } catch (e) {
-        debugPrint('Error sending escrow notifications: $e');
+    try {
+      final chat = context.read<ChatProvider>();
+      if ((order.status == 'pending_payment' || order.status == 'pending') && newStatus == 'requirements') {
+        await AdminOrderStatus.verifyPayment(order, chat);
+      } else {
+        await AdminOrderStatus.set(order, newStatus, chat,
+            reason: newStatus == 'cancelled' ? 'Cancelled by admin in the app' : 'Changed by admin in the app');
       }
-    } else {
-      // Standard notification for other status updates
-      try {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(order.clientUid).get();
-        final fcmToken = userDoc.data()?['fcmToken'];
-        if (fcmToken != null) {
-          await NotificationService.sendAndSaveNotification(
-            userId: order.clientUid,
-            title: 'Order Updated',
-            body: 'Your order for ${order.gigTitle} is now $newStatus',
-          );
-        }
-      } catch (e) {
-        debugPrint('Error sending client notification: $e');
-      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$e')));
+      return;
     }
 
     // Trigger email via PHP
@@ -1115,34 +1098,16 @@ class AdminOrderListItem extends StatelessWidget {
   Future<void> _updateStatus(BuildContext context, String newStatus) async {
     if (order.id == null) return;
     try {
-      await FirebaseFirestore.instance.collection('orders').doc(order.id).update({
-        'status': newStatus,
-      });
-
-      // Trigger push notification to client
-      try {
-        final userDoc = await FirebaseFirestore.instance.collection('users').doc(order.clientUid).get();
-        final fcmToken = userDoc.data()?['fcmToken'];
-        if (fcmToken != null) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(order.clientUid)
-              .collection('notifications')
-              .add({
-            'title': 'Order Completed! 🎉',
-            'body': 'Your order for ${order.gigTitle} has been successfully completed.',
-            'isRead': false,
-            'createdAt': FieldValue.serverTimestamp(),
-          });
-
-          await NotificationService.sendPushNotification(
-            fcmToken: fcmToken,
-            title: 'Order Completed! 🎉',
-            body: 'Your order for ${order.gigTitle} has been successfully completed.',
-          );
-        }
-      } catch (e) {
-        debugPrint('Error sending client notification: $e');
+      // Same as the website: status + timestamps + refund, and one chat card that the server turns into
+      // the right push for buyer and seller ("Payment secured", "Your delivery is ready", ...)
+      final chat = context.read<ChatProvider>();
+      final refund = order.status == 'pending_payment' && newStatus == 'requirements'
+          ? await AdminOrderStatus.verifyPayment(order, chat)
+          : await AdminOrderStatus.set(order, newStatus, chat, reason: 'Changed by admin in the app');
+      if (refund > 0 && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('\$${refund.toStringAsFixed(2)} refunded to the buyer\'s wallet')),
+        );
       }
 
       // Trigger Email via PHP Script

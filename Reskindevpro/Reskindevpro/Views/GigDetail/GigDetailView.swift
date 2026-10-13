@@ -134,6 +134,11 @@ private struct GigDetailContent: View {
             }
         }
         .errorAlert("Something went wrong", message: $errorMessage)
+        #if DEBUG
+        .task {
+            if ProcessInfo.processInfo.arguments.contains("-CheckoutGig"), session.isSignedIn { sheet = .order }
+        }
+        #endif
     }
 
     private func toggleSave() {

@@ -65,6 +65,27 @@ struct CheckoutView: View {
             if case .offer(let message, _) = item, form.requirements.isEmpty { form.requirements = message.offerDescription }
         }
         .errorAlert("Order Error", message: $errorMessage)
+        // Sheets sit in front of the main window, so the party has to happen here, not behind the sheet
+        .celebrations(appModel.celebration)
+        #if DEBUG
+        // `-CheckoutGig`: fill the form and press Place Order (the visionOS simulator can't be tapped from scripts)
+        .task {
+            guard ProcessInfo.processInfo.arguments.contains("-CheckoutGig"), case .gig = item else { return }
+            // `-ConfettiDemo`: no order, just confetti every 3 s over this sheet (checks it shows in front)
+            if ProcessInfo.processInfo.arguments.contains("-ConfettiDemo") {
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(3))
+                    appModel.celebrate()
+                }
+                return
+            }
+            try? await Task.sleep(for: .seconds(2))
+            if form.phone.trimmed.isEmpty { form.phone = "+8801000000000" }
+            form.requirements = "Test order from a Vision Pro guest: please edit a 1-minute YouTube intro."
+            try? await Task.sleep(for: .seconds(2))
+            await placeOrder()
+        }
+        #endif
     }
 
     // MARK: Form

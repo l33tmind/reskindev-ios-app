@@ -87,6 +87,8 @@ struct ChatMessage: Identifiable, Hashable {
     let replyToText: String?
     let replyToSender: String?
     let gigImage: String?
+    /// Photo message (type "image"), same fields as the Flutter app
+    let imageUrl: String?
 
     init(id: String, data: [String: Any]) {
         self.id = id
@@ -103,8 +105,12 @@ struct ChatMessage: Identifiable, Hashable {
         self.orderId = FS.string(data["orderId"])
         self.gigTitle = data["gigTitle"] as? String ?? ""
         self.price = FS.double(data["price"]) ?? 0
-        self.deliveryMessage = data["deliveryMessage"] as? String ?? ""
-        self.deliveryLink = data["deliveryLink"] as? String ?? ""
+        // The iOS/Android app puts the seller's delivery note in `text`, the website / Vision Pro in `deliveryMessage`
+        let isDelivery = (data["actionType"] as? String) == "order_delivered"
+        let note = FS.string(data["deliveryMessage"]) ?? (isDelivery ? (data["text"] as? String ?? "") : "")
+        self.deliveryMessage = note
+        // No separate link field from the iOS app: use the first link in the note
+        self.deliveryLink = FS.string(data["deliveryLink"]) ?? (isDelivery ? Self.firstLink(in: note) : "")
         self.rating = FS.double(data["rating"]).map { Int($0.rounded()) }
         self.comment = data["comment"] as? String ?? ""
         self.cancelReason = data["cancelReason"] as? String ?? ""
@@ -121,6 +127,12 @@ struct ChatMessage: Identifiable, Hashable {
         self.replyToText = FS.string(data["replyToText"])
         self.replyToSender = FS.string(data["replyToSender"])
         self.gigImage = FS.string(data["gigImage"])
+        self.imageUrl = FS.string(data["imageUrl"])
+    }
+
+    private static func firstLink(in text: String) -> String {
+        let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+        return detector?.firstMatch(in: text, range: NSRange(text.startIndex..., in: text))?.url?.absoluteString ?? ""
     }
 
     /// Title + SF Symbol for system cards, by actionType

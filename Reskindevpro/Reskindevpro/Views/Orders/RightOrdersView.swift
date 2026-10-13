@@ -113,6 +113,15 @@ struct RightOrdersView: View {
         .sheet(item: $nextStep) { step in
             OrderActionSheet(order: step.order, action: step.action) { message in show(message) }
         }
+        #if DEBUG
+        // `-AcceptDemo`: open the accept sheet for the first delivery waiting on this buyer (simulator screenshots)
+        .onChange(of: session.orders.count, initial: true) {
+            guard ProcessInfo.processInfo.arguments.contains("-AcceptDemo"), nextStep == nil,
+                  let order = session.orders.first(where: { $0.isDelivered && $0.nextAction(for: session.uid) == .acceptDelivery })
+            else { return }
+            nextStep = NextStep(order: order, action: .acceptDelivery)
+        }
+        #endif
         .sheet(item: Binding(get: { appModel.selectedOrderID.map(SelectedOrder.init) },
                              set: { appModel.selectedOrderID = $0?.id })) { selected in
             OrderDetailView(orderID: selected.id)

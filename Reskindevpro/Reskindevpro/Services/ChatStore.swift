@@ -1,6 +1,7 @@
 import SwiftUI
 import Observation
 import FirebaseFirestore
+import FirebaseStorage
 
 // MARK: - Inbox: conversations + messages of the open chat (website app/inbox/page.js)
 
@@ -75,6 +76,8 @@ final class ChatStore {
     func bind(uid: String?, name: String) {
         myName = name
         guard uid != self.uid else { return }
+        // A chat opened from a push that launched the app is set before sign-in finishes; keep it
+        let carriedChatID = self.uid == nil ? activeChatID : nil
         self.uid = uid
         conversationsListener?.remove(); conversationsListener = nil
         messagesListener?.remove(); messagesListener = nil
@@ -99,6 +102,7 @@ final class ChatStore {
                 // Chat opened before the list loaded (e.g. right after checkout)
                 if self.activeChatID != nil, self.workspaceListeners.isEmpty { self.listenToWorkspace() }
             }
+        if let carriedChatID { activeChatID = carriedChatID }
     }
 
     // MARK: WorkStream context
@@ -262,6 +266,34 @@ final class ChatStore {
             self.isTyping = false
             try? await self.db.collection("conversations").document(chatID).updateData(["typing.\(uid)": false])
         }
+    }
+
+    /// Photo message: JPEG to Storage (chat_images/{chatID}/…), then a `type: "image"` message with
+    /// `imageUrl`, which the iOS / Android app already shows as a picture bubble
+    func sendImage(_ jpeg: Data) async throws {
+        guard let uid, let chat = activeChat else { return }
+        let ref = Storage.storage().reference().child("chat_images/\(chat.id)/\(UUID().uuidString).jpg")
+        let metadata = StorageMetadata()
+        metadata.contentType = "image/jpeg"
+        _ = try await ref.putDataAsync(jpeg, metadata: metadata)
+        let url = try await ref.downloadURL().absoluteString
+
+        let chatRef = db.collection("conversations").document(chat.id)
+        try await chatRef.collection("messages").addDocument(data: [
+            "text": "",
+            "type": "image",
+            "imageUrl": url,
+            "senderId": uid,
+            "senderName": myName,
+            "createdAt": Date(),
+        ])
+        var update: [String: Any] = [
+            "lastMessage": "📷 Photo",
+            "updatedAt": Date(),
+            "msgCount": FieldValue.increment(Int64(1)),
+        ]
+        if let other = chat.otherID(me: uid) { update["unreadCount.\(other)"] = FieldValue.increment(Int64(1)) }
+        try await chatRef.updateData(update)
     }
 
     func send(text: String, replyTo: ChatMessage? = nil) async throws {

@@ -94,6 +94,36 @@ final class SessionStore {
         }
     }
 
+    /// Guest login, same as the Flutter app: a Firebase anonymous account named "Guest 1234",
+    /// so a guest can order, sell and chat without an email or password
+    func signInAsGuest() async throws {
+        let user = try await Auth.auth().signInAnonymously().user
+        var name = user.displayName ?? ""
+        if name.isEmpty {
+            name = "Guest \(Int.random(in: 1000..<10000))"
+            let change = user.createProfileChangeRequest()
+            change.displayName = name
+            try? await change.commitChanges()
+            displayName = name
+        }
+        let ref = db.collection("users").document(user.uid)
+        var data: [String: Any] = [
+            "uid": user.uid,
+            "isGuest": true,
+            "name": name,
+            "displayName": name,
+            "email": "",
+            "lastLogin": FieldValue.serverTimestamp(),
+        ]
+        let existing = try? await ref.getDocument()
+        if existing?.exists != true {
+            data["createdAt"] = FieldValue.serverTimestamp()
+            data["role"] = "freelancer"
+            data["username"] = "guest_\(Int.random(in: 1000..<10000))"
+        }
+        try await ref.setData(data, merge: true)
+    }
+
     /// Same as the website's signupWithEmail: Auth user + users/{uid} document
     func signUp(name: String, email: String, password: String, role: String) async throws {
         let cleanEmail = email.trimmingCharacters(in: .whitespaces)
@@ -350,6 +380,8 @@ struct AppNotification: Identifiable, Hashable {
     let link: String
     let read: Bool
     let createdAt: Date?
+    let orderNumber: String
+    let invoiceNumber: String
     let ref: DocumentReference
 
     init(doc: QueryDocumentSnapshot, isBroadcast: Bool) {
@@ -361,6 +393,8 @@ struct AppNotification: Identifiable, Hashable {
         link = d["link"] as? String ?? ""
         read = d["read"] as? Bool ?? false
         createdAt = FS.date(d["createdAt"])
+        orderNumber = d["orderNumber"] as? String ?? ""
+        invoiceNumber = d["invoiceNumber"] as? String ?? ""
         ref = doc.reference
     }
 

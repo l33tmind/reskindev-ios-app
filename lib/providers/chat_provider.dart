@@ -66,6 +66,8 @@ class ChatProvider extends ChangeNotifier {
     num? offerPrice,
     int? offerDays,
     String? offerDescription,
+    String? offerTitle,
+    List<String>? offerFeatures,
     String? imageUrl,
     String? replyToId,
     String? replyToText,
@@ -86,6 +88,9 @@ class ChatProvider extends ChangeNotifier {
       if (offerPrice != null) 'offerPrice': offerPrice,
       if (offerDays != null) 'offerDays': offerDays,
       if (offerDescription != null) 'offerDescription': offerDescription,
+      if (offerTitle != null) 'offerTitle': offerTitle,
+      if (offerFeatures != null) 'offerFeatures': offerFeatures,
+      if (type == 'offer') 'offerStatus': 'pending',
       if (imageUrl != null) 'imageUrl': imageUrl,
       if (replyToId != null) 'replyToId': replyToId,
       if (replyToText != null) 'replyToText': replyToText,
@@ -117,36 +122,7 @@ class ChatProvider extends ChangeNotifier {
 
     await batch.commit();
 
-    // Send push notification to other participants
-    if (chatDoc.exists) {
-      final participants = List<String>.from(
-        chatDoc.data()!['participants'] ?? [],
-      );
-      String? myDeviceToken;
-      try {
-        myDeviceToken = await FirebaseMessaging.instance.getToken();
-      } catch (_) {}
 
-      for (String p in participants) {
-        if (p != currentUserId) {
-          try {
-            final userDoc = await _db.collection('users').doc(p).get();
-            if (userDoc.exists) {
-              final token = userDoc.data()?['fcmToken'] as String?;
-              if (token != null && token.isNotEmpty && token != myDeviceToken) {
-                await NotificationService.sendPushNotification(
-                  fcmToken: token,
-                  title: currentUserName,
-                  body: text,
-                );
-              }
-            }
-          } catch (e) {
-            debugPrint('Failed to send chat notification: $e');
-          }
-        }
-      }
-    }
   }
 
   // Mark messages as read for current user
@@ -228,6 +204,10 @@ class ChatProvider extends ChangeNotifier {
       if (participants.contains(targetUserId) &&
           participants.length == 2 &&
           doc.data()['orderId'] == null) {
+        // Older chats have no roles saved. Contacting someone from their service makes you the buyer.
+        if ((doc.data()['freelancerId'] ?? '').toString().isEmpty) {
+          await doc.reference.set({'freelancerId': targetUserId, 'clientId': currentUserId}, SetOptions(merge: true));
+        }
         return doc.id;
       }
     }
@@ -268,6 +248,7 @@ class ChatProvider extends ChangeNotifier {
     required String gigTitle,
     required String actionType,
     required String text,
+    double? price,
     Map<String, dynamic>? metadata,
   }) async {
     try {
@@ -320,6 +301,7 @@ class ChatProvider extends ChangeNotifier {
             'gigTitle': gigTitle,
             'senderId': 'system',
             'createdAt': FieldValue.serverTimestamp(),
+            if (price != null) 'price': price,
             if (metadata != null) 'metadata': metadata,
           });
     } catch (e) {

@@ -182,7 +182,7 @@ class EarningsScreen extends StatelessWidget {
                 return;
               }
               
-              setState(() {}); // trigger rebuild if needed, though earnings screen isn't stateful builder here, it's a dialog.
+              // setState(() {}); // trigger rebuild if needed, though earnings screen isn't stateful builder here, it's a dialog.
               
               try {
                 await FirebaseFirestore.instance.collection('withdrawals').add({

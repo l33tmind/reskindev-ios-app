@@ -87,7 +87,8 @@ struct OrderModel: Identifiable, Hashable {
         self.status = FS.string(data["status"]) ?? "requirements"
         // The chat writes `requirements`, the orders page `requirementsText`
         self.requirements = FS.string(data["requirements"]) ?? FS.string(data["requirementsText"]) ?? ""
-        self.deliveryMessage = data["deliveryMessage"] as? String ?? ""
+        // Flutter writes deliveryNote, the website / Vision Pro deliveryMessage
+        self.deliveryMessage = FS.string(data["deliveryMessage"]) ?? FS.string(data["deliveryNote"]) ?? ""
         self.deliveryLink = data["deliveryLink"] as? String ?? ""
         self.invoiceNumberStored = data["invoiceNumber"] as? String ?? ""
         self.revisionNote = data["revisionNote"] as? String ?? ""

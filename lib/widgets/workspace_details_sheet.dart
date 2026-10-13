@@ -1,23 +1,25 @@
 import '../services/invoice_number.dart';
-import 'countdown_timer.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import '../theme.dart';
 import '../models/order_model.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'workspace_timeline_modals.dart';
 
+/// "Details" from the order chat: everything about the order, to read.
+/// It has no buttons on purpose: the actions live in one place, the panel at the top of the chat.
 class WorkspaceDetailsSheet extends StatelessWidget {
   final String orderId;
-  final bool isSeller;
   final String chatId;
 
   const WorkspaceDetailsSheet({
     super.key,
     required this.orderId,
-    required this.isSeller,
     required this.chatId,
   });
+
+  static String _money(num v) => '\$${v.toStringAsFixed(v % 1 == 0 ? 0 : 2)}';
+  static String _date(DateTime? d) => d == null ? '' : DateFormat('d MMM yyyy, HH:mm').format(d);
 
   @override
   Widget build(BuildContext context) {
@@ -26,332 +28,188 @@ class WorkspaceDetailsSheet extends StatelessWidget {
       builder: (context, snapshot) {
         if (!snapshot.hasData || !snapshot.data!.exists) {
           return Container(
-            color: context.themeBackground,
             height: 200,
+            decoration: BoxDecoration(
+              color: context.themeBackground,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            ),
             child: const Center(child: CircularProgressIndicator()),
           );
         }
         final order = OrderModel.fromFirestore(snapshot.data!);
+        final review = order.buyerReview;
+        // Custom offers carry the seller's list of what's included
+        final raw = snapshot.data!.data() as Map<String, dynamic>? ?? const {};
+        final included = raw['offerFeatures'] is List ? List<String>.from((raw['offerFeatures'] as List).map((e) => '$e')) : const <String>[];
+
         return Container(
-      decoration: BoxDecoration(
-        color: context.themeBackground,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Drag handle
-          Center(
-            child: Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 24),
-              decoration: BoxDecoration(
-                color: context.themeBorder,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+          decoration: BoxDecoration(
+            color: context.themeBackground,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           ),
-          
-          Text('Workspace Details', style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: context.themeTextDark)),
-          const SizedBox(height: 16),
-          
-          // Gig Info
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(8),
-                child: _buildPlaceholder(),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(order.gigTitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: context.themeTextDark)),
-                    const SizedBox(height: 4),
-                    Text('\$${order.price}', style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primary)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          
-          // Order ID
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('Order / Invoice', style: GoogleFonts.inter(color: context.themeTextLight)),
-              Text('${orderNumber(order.id)} · ${invoiceNo(order.invoiceNumber)}', style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: context.themeTextDark)),
-            ],
-          ),
-          const SizedBox(height: 24),
-          
-          Text('Order Timeline', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: context.themeTextDark)),
-          const SizedBox(height: 16),
-          
-          // Timeline Stepper
-          WorkspaceTimeline(order: order, isSeller: isSeller, chatId: chatId),
-        ],
-      ),
-    );
-      },
-    );
-  }
-  Widget _buildPlaceholder() {
-    return Container(
-      width: 80,
-      height: 60,
-      color: Colors.grey.withValues(alpha: 0.2),
-      child: const Icon(Icons.image, color: Colors.grey),
-    );
-  }
-}
-
-class WorkspaceTimeline extends StatelessWidget {
-  final OrderModel order;
-  final bool isSeller;
-  final String chatId;
-  
-  const WorkspaceTimeline({
-    super.key, 
-    required this.order,
-    required this.isSeller,
-    required this.chatId,
-  });
-
-  bool _isPastProcessing(String status) {
-    return ['processing', 'in_progress', 'delivered', 'completed', 'revision'].contains(status);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Step 1: Payment (Always completed)
-        _buildTimelineStep(
-          context,
-          title: 'Payment Secured',
-          isActive: true,
-          isCompleted: true,
-          content: Text('Funds of \$${order.price} are held in escrow.', style: GoogleFonts.inter(fontSize: 13, color: context.themeTextLight)),
-        ),
-        
-        // Step 2: Requirements
-        _buildTimelineStep(
-          context,
-          title: 'Requirements',
-          isActive: order.status == 'requirements',
-          isCompleted: order.projectDetails.isNotEmpty,
-          content: order.projectDetails.isNotEmpty
-              ? Text('Requirements submitted:\n${order.projectDetails}', style: GoogleFonts.inter(fontSize: 13, color: context.themeTextLight), maxLines: 20, overflow: TextOverflow.ellipsis)
-              : (order.status == 'requirements' && !isSeller
-                  ? ElevatedButton(
-                      onPressed: () => WorkspaceActionModals.showSubmitRequirements(context, order, chatId),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white, minimumSize: const Size(120, 36)),
-                      child: const Text('Submit Requirements'))
-                  : null),
-        ),
-
-        // Step 3: Processing
-        _buildTimelineStep(
-          context,
-          title: 'Processing',
-          isActive: order.status == 'processing' || order.status == 'in_progress' || order.status == 'revision',
-          isCompleted: ['delivered', 'completed'].contains(order.status),
-          content: _isPastProcessing(order.status)
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Order is currently in progress.', style: GoogleFonts.inter(fontSize: 13, color: context.themeTextLight)),
-                    if ((order.status == 'processing' || order.status == 'in_progress' || order.status == 'revision') && isSeller) ...[
-                      const SizedBox(height: 8),
-                      ElevatedButton(
-                        onPressed: () => WorkspaceActionModals.showDeliverWork(context, order, chatId),
-                        style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
-                        child: const Text('Deliver Work'),
-                      ),
-                    ]
-                  ],
-                )
-              : null,
-        ),
-
-        // Step 4: Delivered
-        _buildTimelineStep(
-          context,
-          title: 'Delivery',
-          isActive: order.status == 'delivered',
-          isCompleted: order.status == 'completed',
-          content: order.deliveryNote.isNotEmpty
-              ? Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(order.deliveryNote, style: GoogleFonts.inter(fontSize: 13, color: context.themeTextLight)),
-                    const SizedBox(height: 8),
-                    if (order.status == 'delivered' && !isSeller)
-                      Row(
-                        children: [
-                          OutlinedButton(
-                            onPressed: () => WorkspaceActionModals.showRevision(context, order, chatId),
-                            child: const Text('Revision'),
-                          ),
-                          const SizedBox(width: 8),
-                          ElevatedButton(
-                            onPressed: () => WorkspaceActionModals.showAcceptDelivery(context, order, chatId),
-                            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
-                            child: const Text('Accept Delivery'),
-                          ),
-                        ],
-                      )
-                  ],
-                )
-              : (_isPastProcessing(order.status) ? Text('Waiting for review', style: GoogleFonts.inter(fontSize: 13, color: context.themeTextLight)) : null),
-        ),
-
-        // Step 5: Completed
-        _buildTimelineStep(
-          context,
-          title: 'Completed',
-          isActive: order.status == 'completed',
-          isCompleted: order.status == 'completed',
-          isLast: true,
-          content: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              if (order.buyerReview != null)
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.amber.withValues(alpha: 0.5)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Buyer Review:', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: context.themeTextDark)),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Row(
-                            children: List.generate(
-                              5,
-                              (index) => Icon(
-                                Icons.star_rounded,
-                                color: index < (order.buyerReview!['rating'] as num? ?? 5.0).toInt() ? Colors.amber : Colors.grey.withValues(alpha: 0.3),
-                                size: 16,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Text('${order.buyerReview!['rating'] ?? 5.0}', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: context.themeTextDark)),
-                        ],
-                      ),
-                      if (order.buyerReview!['comment'] != null)
-                        Text('"${order.buyerReview!['comment']}"', style: GoogleFonts.inter(fontSize: 12, color: context.themeTextDark, fontStyle: FontStyle.italic)),
-                    ],
-                  ),
-                )
-              else if (order.status == 'completed')
-                Text('Funds Released', style: GoogleFonts.inter(fontSize: 13, color: Colors.green)),
-              
-              if (order.status == 'completed' && isSeller && order.buyerReview != null && order.sellerReview == null)
-                Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.05),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.blue.withValues(alpha: 0.2)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Leave a Review', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: Colors.blue[800])),
-                      const SizedBox(height: 4),
-                      Text('The buyer has rated you. Rate your experience.', style: GoogleFonts.inter(fontSize: 12, color: Colors.blue[600])),
-                      const SizedBox(height: 8),
-                      ElevatedButton(
-                        onPressed: () => WorkspaceActionModals.showSellerReview(context, order, chatId),
-                        style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 36)),
-                        child: const Text('Rate Buyer'),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTimelineStep(BuildContext context, {
-    required String title,
-    required bool isActive,
-    required bool isCompleted,
-    Widget? content,
-    bool isLast = false,
-  }) {
-    final color = isCompleted ? AppTheme.primary : (isActive ? AppTheme.primary : context.themeBorder);
-    
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Column(
-            children: [
-              Container(
-                width: 24,
-                height: 24,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isCompleted ? AppTheme.primary : (isActive ? AppTheme.primary.withValues(alpha: 0.2) : context.themeSurface),
-                  border: Border.all(color: color, width: 2),
-                ),
-                child: isCompleted
-                    ? const Icon(Icons.check, size: 14, color: Colors.white)
-                    : (isActive ? Center(child: Container(width: 8, height: 8, decoration: const BoxDecoration(color: AppTheme.primary, shape: BoxShape.circle))) : null),
-              ),
-              if (!isLast)
-                Expanded(
-                  child: Container(
-                    width: 2,
-                    color: color,
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: 24.0),
+          child: SafeArea(
+            top: false,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.outfit(
-                      fontSize: 16,
-                      fontWeight: isActive || isCompleted ? FontWeight.bold : FontWeight.normal,
-                      color: isActive || isCompleted ? context.themeTextDark : context.themeTextLight,
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(color: context.themeBorder, borderRadius: BorderRadius.circular(2)),
                     ),
                   ),
-                  if (content != null) ...[
-                    const SizedBox(height: 8),
-                    content,
-                  ]
+                  Text(order.gigTitle,
+                    style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: context.themeTextDark)),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: order.statusColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(order.statusLabel,
+                          style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: order.statusColor)),
+                      ),
+                      const Spacer(),
+                      Text(_money(order.price),
+                        style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primary)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  _Section(children: [
+                    _Row('Order', orderNumber(order.id)),
+                    if (order.invoiceNumber.isNotEmpty) _Row('Invoice', invoiceNo(order.invoiceNumber)),
+                    _Row('Package', order.packageName),
+                    _Row('Delivery time', '${order.deliveryDays} day${order.deliveryDays == 1 ? '' : 's'}'),
+                    _Row('Placed', _date(order.createdAt)),
+                    if (order.deliveredAt != null) _Row('Delivered', _date(order.deliveredAt)),
+                    if (order.completedAt != null && order.status == 'completed') _Row('Completed', _date(order.completedAt)),
+                  ]),
+                  if (included.isNotEmpty) _IncludedBlock(items: included),
+                  if (order.projectDetails.isNotEmpty) _TextBlock('Requirements', order.projectDetails),
+                  if (order.deliveryNote.isNotEmpty) _TextBlock('Delivery note', order.deliveryNote),
+                  if (order.revisionNote.isNotEmpty && order.status == 'revision') _TextBlock('Changes requested', order.revisionNote),
+                  if (review != null)
+                    _TextBlock(
+                      'Buyer review  ${'★' * ((review['rating'] as num?)?.round() ?? 5)}',
+                      (review['comment'] ?? '').toString().isEmpty ? 'No comment' : review['comment'].toString(),
+                    ),
                 ],
               ),
             ),
           ),
+        );
+      },
+    );
+  }
+}
+
+class _Section extends StatelessWidget {
+  final List<Widget> children;
+  const _Section({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      decoration: BoxDecoration(
+        color: context.themeSurface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: context.themeBorder),
+      ),
+      child: Column(children: children),
+    );
+  }
+}
+
+class _Row extends StatelessWidget {
+  final String label;
+  final String value;
+  const _Row(this.label, this.value);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Text(label, style: GoogleFonts.inter(fontSize: 13.5, color: context.themeTextLight)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(value,
+              textAlign: TextAlign.right,
+              style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.themeTextDark)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TextBlock extends StatelessWidget {
+  final String label;
+  final String text;
+  const _TextBlock(this.label, this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label.toUpperCase(),
+            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: context.themeTextLight)),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: context.themeSurface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: context.themeBorder),
+            ),
+            child: SelectableText(text,
+              style: GoogleFonts.inter(fontSize: 14, height: 1.4, color: context.themeTextDark)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IncludedBlock extends StatelessWidget {
+  final List<String> items;
+  const _IncludedBlock({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("WHAT'S INCLUDED",
+            style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: context.themeTextLight)),
+          const SizedBox(height: 8),
+          for (final f in items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded, size: 18, color: Color(0xFF10B981)),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(f, style: GoogleFonts.inter(fontSize: 14, color: context.themeTextDark))),
+                ],
+              ),
+            ),
         ],
       ),
     );

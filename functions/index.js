@@ -1,4 +1,6 @@
-const { onDocumentWritten } = require("firebase-functions/v2/firestore");
+const { onDocumentWritten, onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 
 admin.initializeApp();
@@ -41,8 +43,107 @@ exports.updateGigRating = onDocumentWritten("services/{gigId}/reviews/{reviewId}
 });
 
 /**
+ * Order events that appear in an order chat as system messages.
+ * `to` says who gets the push + in-app notification, so nobody is notified about their own action.
+ * `type` picks the icon in the app's Notifications screen.
+ */
+const money = (n) => (n == null || isNaN(n) ? "" : `$${Number(n).toFixed(Number(n) % 1 === 0 ? 0 : 2)}`);
+
+const ORDER_EVENTS = {
+    // No notification here: onOrderCreated already tells buyer and seller about every new order,
+    // on every platform. Notifying here too gave each person the same news twice.
+    order_placed: { type: "order" },
+    payment_verified: {
+        type: "payment",
+        seller: (o) => ({ title: "Payment secured", body: `${o.gigTitle} · funds are held safely, you can start` }),
+        // The buyer already gave the project details when ordering; nothing more is needed from them
+        buyer: (o) => ({ title: "Payment secured", body: `${o.gigTitle} · the seller can start now` }),
+    },
+    requirements_submitted: {
+        type: "requirements",
+        seller: (o) => ({ title: "Requirements received", body: `${o.gigTitle} · review them and start work` }),
+    },
+    order_started: {
+        type: "started",
+        buyer: (o) => ({ title: "Work has started", body: `${o.gigTitle}${o.deliveryDays ? " · due in " + o.deliveryDays + " days" : ""}` }),
+    },
+    order_delivered: {
+        type: "delivery",
+        buyer: (o) => ({ title: "Your delivery is ready", body: `${o.gigTitle} · review it and approve or ask for a revision` }),
+    },
+    revision_requested: {
+        type: "revision",
+        seller: (o) => ({ title: "Revision requested", body: `${o.gigTitle} · the buyer needs a few changes` }),
+    },
+    order_completed: {
+        type: "completed",
+        seller: (o) => ({ title: "Order completed", body: `${o.gigTitle}${o.price ? " · " + money(o.price) + " is yours" : ""}` }),
+        buyer: (o) => ({ title: "Order completed", body: `${o.gigTitle} · tell others how it went with a review` }),
+    },
+    reviews_published: {
+        type: "review",
+        seller: (o) => ({ title: "Reviews published", body: `${o.gigTitle}` }),
+        buyer: (o) => ({ title: "Reviews published", body: `${o.gigTitle}` }),
+    },
+};
+
+/**
+ * One in-app notification, in the shared `notifications` collection that the website bell and the
+ * Vision Pro app already read (the Flutter app reads it too). `link` is the website page, `route` the app page.
+ */
+async function saveNotification(db, uid, { title, message, type, chatId, orderId, orderNumber, invoiceNumber, route }) {
+    await db.collection("notifications").add({
+        userId: uid,
+        title, message, type,
+        link: chatId ? `/inbox?chat=${chatId}` : "/profile/orders",
+        route: route || (chatId ? `/chat/${chatId}` : "/my-orders"),
+        chatId: chatId || null,
+        orderId: orderId || null,
+        orderNumber: orderNumber || "",
+        invoiceNumber: invoiceNumber || "",
+        read: false,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+}
+
+async function sendToUser(db, uid, { title, subtitle, body, route, data }) {
+    const userDoc = await db.collection("users").doc(uid).get();
+    if (!userDoc.exists) return;
+    const userData = userDoc.data();
+    // fcmToken = the iOS app's device; fcmTokens = extra devices (Vision Pro)
+    const tokens = [...new Set([userData.fcmToken, ...(userData.fcmTokens || [])].filter(Boolean))];
+    for (const token of tokens) {
+        try {
+            await admin.messaging().send({
+                notification: { title, body },
+                data: { route, click_action: "FLUTTER_NOTIFICATION_CLICK", ...data },
+                // iOS shows 2 lines in the banner; press and hold (or pull down) to read the whole text
+                apns: { payload: { aps: { alert: { title, ...(subtitle ? { subtitle } : {}), body }, sound: "default" } } },
+                android: {
+                    notification: {
+                        sound: "default",
+                        channelId: "high_importance_channel",
+                        priority: "high",
+                    },
+                },
+                token,
+            });
+        } catch (error) {
+            console.error(`Error sending push notification to user ${uid}:`, error);
+            // Drop extra-device tokens that no longer exist (app deleted / signed out)
+            if (error.code === "messaging/registration-token-not-registered" && token !== userData.fcmToken) {
+                await userDoc.ref.update({ fcmTokens: admin.firestore.FieldValue.arrayRemove(token) });
+            }
+        }
+    }
+}
+
+/**
  * Trigger: Whenever a new message is added to a conversation.
- * Action: Sends a push notification to the other participant.
+ * Action: sends a push notification AND saves it to the user's in-app notifications.
+ *  - Normal chat message  -> the other person ("Robius", the text)
+ *  - Offer                -> the other person
+ *  - Order event (system) -> only the person who needs to act, with order number + invoice number
  */
 exports.sendChatPushNotification = onDocumentCreated("conversations/{chatId}/messages/{messageId}", async (event) => {
     const snap = event.data;
@@ -51,92 +152,74 @@ exports.sendChatPushNotification = onDocumentCreated("conversations/{chatId}/mes
     const messageData = snap.data();
     const senderId = messageData.senderId;
     const chatId = event.params.chatId;
-
-    // Do not send notifications for system messages unless they are important (like order updates)
-    if (senderId === 'system' && !messageData.actionType) {
-        return;
-    }
+    const route = `/chat/${chatId}`;
 
     const db = admin.firestore();
-    
-    // Fetch conversation details to find the other participant
     const chatDoc = await db.collection("conversations").doc(chatId).get();
     if (!chatDoc.exists) return;
-
     const chatData = chatDoc.data();
     const participants = chatData.participants || [];
-    
-    let recipientId = null;
-    
-    if (senderId === 'system') {
-        // If it's a system message, try to deduce who to send it to.
-        // For example, if actionType is 'order_placed', send to seller.
-        // Actually, send system messages to BOTH participants if it's an order update!
-        // But for simplicity, if participant length is 2, we can just fetch both, 
-        // or let's say system messages are meant to notify everyone.
-        // For standard chat, we notify the NON-SENDER.
-    } else {
-        recipientId = participants.find(id => id !== senderId);
-    }
 
-    // Determine target users to notify
-    const usersToNotify = recipientId ? [recipientId] : participants.filter(id => id !== senderId && id !== 'system');
-    
-    if (usersToNotify.length === 0) return;
+    // ── Order events ────────────────────────────────────────────
+    if (senderId === "system") {
+        const spec = ORDER_EVENTS[messageData.actionType];
+        if (!spec) return null;
 
-    // Fetch sender info for notification title
-    let title = "New Message";
-    let body = messageData.text || "You received a new message.";
-    
-    if (senderId !== 'system') {
-        title = messageData.senderName || "New Message";
-    } else {
-        title = "Reskindev Notification";
-    }
-
-    // Fallbacks for specific system messages
-    if (messageData.actionType === 'order_completed') {
-        title = "Order Completed!";
-    } else if (messageData.actionType === 'order_delivered') {
-        title = "Delivery Received!";
-    } else if (messageData.actionType === 'order_placed') {
-        title = "New Order Placed!";
-    }
-
-    for (const uid of usersToNotify) {
-        const userDoc = await db.collection("users").doc(uid).get();
-        if (userDoc.exists) {
-            const userData = userDoc.data();
-            // fcmToken = the iOS app's device; fcmTokens = extra devices (Vision Pro)
-            const tokens = [...new Set([userData.fcmToken, ...(userData.fcmTokens || [])].filter(Boolean))];
-
-            for (const token of tokens) {
-                const payload = {
-                    notification: {
-                        title: title,
-                        body: body,
-                    },
-                    data: {
-                        route: `/chat/${chatId}`,
-                        click_action: "FLUTTER_NOTIFICATION_CLICK"
-                    },
-                    token: token,
-                };
-
-                try {
-                    await admin.messaging().send(payload);
-                    console.log(`Push notification sent successfully to user ${uid}`);
-                } catch (error) {
-                    console.error(`Error sending push notification to user ${uid}:`, error);
-                    // Drop extra-device tokens that no longer exist (app deleted / signed out)
-                    if (error.code === "messaging/registration-token-not-registered" && token !== userData.fcmToken) {
-                        await userDoc.ref.update({ fcmTokens: admin.firestore.FieldValue.arrayRemove(token) });
-                    }
-                }
+        const orderId = messageData.orderId || chatData.orderId;
+        let order = {};
+        if (orderId) {
+            let orderDoc = await db.collection("orders").doc(orderId).get();
+            // The invoice number is assigned a moment after the order is created
+            if (orderDoc.exists && !orderDoc.data().invoiceNumber && messageData.actionType === "order_placed") {
+                await new Promise((r) => setTimeout(r, 2500));
+                orderDoc = await db.collection("orders").doc(orderId).get();
             }
+            if (orderDoc.exists) order = orderDoc.data();
         }
+
+        const buyerId = order.clientUid || chatData.clientId || participants[0];
+        const sellerId = order.authorId || chatData.freelancerId || participants.find((p) => p !== buyerId);
+        const gigTitle = order.gigTitle || messageData.gigTitle || "your order";
+        const price = order.price != null ? order.price : messageData.price;
+        const ctx = { gigTitle, price, deliveryDays: order.deliveryDays };
+        const orderNo = orderId ? `#${orderId.slice(-6).toUpperCase()}` : "";
+        const invoiceNo = order.invoiceNumber || "";
+
+        for (const [role, uid] of [["buyer", buyerId], ["seller", sellerId]]) {
+            if (!uid || !spec[role]) continue;
+            const { title, body: summary } = spec[role](ctx);
+            // Requirements, delivery and revision notes: send what the person actually wrote (up to 400 characters)
+            const noteTypes = ["requirements_submitted", "order_delivered", "revision_requested"];
+            let note = noteTypes.includes(messageData.actionType) ? String(messageData.text || "").trim() : "";
+            if (note.length > 400) note = note.slice(0, 397) + "...";
+            const body = note || summary;
+            const pushTitle = orderNo ? `${title} · ${orderNo}` : title;
+            const pushBody = invoiceNo ? `${body}\n${invoiceNo}` : body;
+
+            await saveNotification(db, uid, {
+                title, message: body, type: spec.type, chatId, orderId,
+                orderNumber: orderNo, invoiceNumber: invoiceNo,
+            });
+            await sendToUser(db, uid, { title: pushTitle, subtitle: gigTitle, body: pushBody, route, data: { orderId: orderId || "" } });
+        }
+        return null;
     }
-    
+
+    // ── Normal chat messages and offers ─────────────────────────
+    const recipientId = participants.find((id) => id !== senderId);
+    if (!recipientId) return null;
+
+    let title = messageData.senderName || "New message";
+    let body = messageData.text || "You received a new message.";
+    if (messageData.type === "offer") {
+        title = `${messageData.senderName || "Seller"} sent you an offer`;
+        body = [messageData.offerPrice != null ? money(messageData.offerPrice) : "", messageData.offerDays ? `${messageData.offerDays} days` : ""].filter(Boolean).join(" · ") || body;
+    } else if (messageData.type === "image" || messageData.imageUrl) {
+        body = body || "Sent a photo";
+    }
+    if (chatData.orderId) title = `${title} · #${String(chatData.orderId).slice(-6).toUpperCase()}`;
+
+    await sendToUser(db, recipientId, { title, body, route, data: {} });
     return null;
 });
 
@@ -215,4 +298,212 @@ exports.assignInvoiceNumber = onDocumentCreated("orders/{orderId}", async (event
         });
     });
     return null;
+});
+
+/**
+ * Trigger: whenever a new order document is created in Firestore.
+ * Action: sends immediate push notification to the seller and the buyer,
+ * ensuring sellers know instantly when an order arrives (Android & iOS).
+ */
+exports.onOrderCreated = onDocumentCreated("orders/{orderId}", async (event) => {
+    const snap = event.data;
+    if (!snap) return null;
+    const order = snap.data();
+    const orderId = event.params.orderId;
+    const db = admin.firestore();
+
+    const sellerId = order.authorId || order.freelancerId || order.sellerId;
+    const buyerId = order.clientUid || order.userId || order.buyerId;
+    const orderNo = `#${orderId.slice(-6).toUpperCase()}`;
+    const priceStr = money(order.price);
+    const gigTitle = order.gigTitle || "your gig";
+
+    // 1. Notify Seller
+    if (sellerId) {
+        const title = `New Order Received! 🚀 · ${orderNo}`;
+        const body = `${order.userName || "A client"} placed an order for "${gigTitle}"${priceStr ? " · " + priceStr : ""}. Tap to review details.`;
+        await saveNotification(db, sellerId, {
+            title: "New order received",
+            message: body,
+            type: "order",
+            orderId,
+            orderNumber: orderNo,
+            route: `/order-chat/${orderId}`,
+        });
+        await sendToUser(db, sellerId, {
+            title,
+            subtitle: gigTitle,
+            body,
+            route: `/order-chat/${orderId}`,
+            data: { orderId },
+        });
+    }
+
+    // 2. Notify Buyer
+    if (buyerId) {
+        const title = `Order Placed Successfully · ${orderNo}`;
+        const body = order.status === "pending_payment"
+            ? `Your order for "${gigTitle}" is placed. We'll confirm your payment shortly.`
+            : `Your order for "${gigTitle}" has been placed securely.`;
+        await saveNotification(db, buyerId, {
+            title: "Order placed",
+            message: body,
+            type: "order",
+            orderId,
+            orderNumber: orderNo,
+            route: `/order-chat/${orderId}`,
+        });
+        await sendToUser(db, buyerId, {
+            title,
+            subtitle: gigTitle,
+            body,
+            route: `/order-chat/${orderId}`,
+            data: { orderId },
+        });
+    }
+
+    return null;
+});
+
+/**
+ * Trigger: whenever a gig/service document is updated.
+ * Action: sends immediate push notification when admin approves or rejects a gig.
+ */
+exports.onServiceUpdated = onDocumentUpdated("services/{gigId}", async (event) => {
+    const before = event.data && event.data.before ? event.data.before.data() : null;
+    const after = event.data && event.data.after ? event.data.after.data() : null;
+    if (!before || !after) return null;
+
+    const gigId = event.params.gigId;
+    const db = admin.firestore();
+    const authorId = after.authorId;
+    if (!authorId) return null;
+
+    // Gig Approved (status changed to active)
+    if (before.status !== "active" && after.status === "active") {
+        const title = "Gig Approved! 🎉";
+        const body = `Your gig "${after.title || 'Service'}" has been approved by admin and is now live!`;
+        await saveNotification(db, authorId, {
+            title,
+            message: body,
+            type: "gig_approved",
+            link: `/gig/${after.slug || gigId}`,
+            route: `/gig/${gigId}`,
+        });
+        await sendToUser(db, authorId, {
+            title,
+            subtitle: after.title,
+            body,
+            route: `/gig/${gigId}`,
+            data: { gigId },
+        });
+    }
+    // Gig Rejected
+    else if (before.status !== "rejected" && after.status === "rejected") {
+        const title = "Gig Needs Attention";
+        const body = `Your gig "${after.title || 'Service'}" was not approved. Please review details and resubmit.`;
+        await saveNotification(db, authorId, {
+            title,
+            message: body,
+            type: "gig_rejected",
+            route: "/my-orders",
+        });
+        await sendToUser(db, authorId, {
+            title,
+            subtitle: after.title,
+            body,
+            route: "/my-orders",
+            data: { gigId },
+        });
+    }
+
+    return null;
+});
+
+
+/**
+ * Scheduled: every hour, gentle reminders so orders keep moving.
+ *  - seller: delivery is due within 24 hours (or is late)
+ *  - buyer:  paid but no requirements sent for 2 days
+ *  - buyer:  delivery has been waiting for approval for 2 days
+ * Each reminder is sent once (flag saved on the order) and shows the order + invoice number.
+ */
+exports.orderReminders = onSchedule("every 60 minutes", async () => {
+    const db = admin.firestore();
+    const now = Date.now();
+    const HOUR = 3600 * 1000;
+    const ms = (t) => (t && t.toMillis ? t.toMillis() : null);
+
+    const remind = async (orderDoc, flag, uid, { title, body, type }) => {
+        const o = orderDoc.data();
+        const orderNo = `#${orderDoc.id.slice(-6).toUpperCase()}`;
+        const invoiceNo = o.invoiceNumber || "";
+        // Order chat (if any) so a tap opens the conversation
+        const chatSnap = await db.collection("conversations").where("orderId", "==", orderDoc.id).limit(1).get();
+        const chatId = chatSnap.empty ? null : chatSnap.docs[0].id;
+        const route = chatId ? `/chat/${chatId}` : "/my-orders";
+
+        await saveNotification(db, uid, {
+            title, message: body, type, chatId, orderId: orderDoc.id,
+            orderNumber: orderNo, invoiceNumber: invoiceNo,
+        });
+        await sendToUser(db, uid, {
+            title: `${title} · ${orderNo}`,
+            body: invoiceNo ? `${body}\n${invoiceNo}` : body,
+            route, data: { orderId: orderDoc.id },
+        });
+        await orderDoc.ref.update({ [`reminders.${flag}`]: true });
+    };
+
+    // Seller: delivery due soon / late
+    for (const status of ["in_progress", "processing", "revision"]) {
+        const snap = await db.collection("orders").where("status", "==", status).get();
+        for (const d of snap.docs) {
+            const o = d.data();
+            if ((o.reminders || {}).dueSoon || !o.authorId) continue;
+            const started = ms(o.startedAt);
+            if (!started) continue;
+            const due = started + (o.deliveryDays || 3) * 24 * HOUR;
+            if (due - now < 24 * HOUR) {
+                const late = due < now;
+                await remind(d, "dueSoon", o.authorId, {
+                    type: "delivery",
+                    title: late ? "Delivery is overdue" : "Delivery due within 24 hours",
+                    body: `${o.gigTitle || "Your order"} · deliver on time to keep your rating high`,
+                });
+            }
+        }
+    }
+
+    // Buyer: paid, but no requirements yet
+    const reqSnap = await db.collection("orders").where("status", "==", "requirements").get();
+    for (const d of reqSnap.docs) {
+        const o = d.data();
+        const buyer = o.clientUid || o.userId;
+        if ((o.reminders || {}).requirements || !buyer) continue;
+        const created = ms(o.createdAt);
+        if (created && now - created > 48 * HOUR) {
+            await remind(d, "requirements", buyer, {
+                type: "requirements",
+                title: "Send your requirements",
+                body: `${o.gigTitle || "Your order"} · the seller is waiting to start`,
+            });
+        }
+    }
+
+    // Buyer: delivery waiting for approval
+    const delSnap = await db.collection("orders").where("status", "==", "delivered").get();
+    for (const d of delSnap.docs) {
+        const o = d.data();
+        const buyer = o.clientUid || o.userId;
+        if ((o.reminders || {}).approval || !buyer) continue;
+        const delivered = ms(o.deliveredAt);
+        if (delivered && now - delivered > 48 * HOUR) {
+            await remind(d, "approval", buyer, {
+                type: "delivery",
+                title: "Your delivery is waiting",
+                body: `${o.gigTitle || "Your order"} · approve it or ask for a revision`,
+            });
+        }
+    }
 });

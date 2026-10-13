@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI
 
 /// The open WorkStream: header, messages, quick replies, composer —
 /// with the workspace details floating beside the window as an ornament
@@ -14,6 +15,8 @@ struct ChatView: View {
     @State private var toast: String?
     @State private var errorMessage: String?
     @FocusState private var composerFocused: Bool
+    @State private var photoItem: PhotosPickerItem?
+    @State private var sendingPhoto = false
 
     var body: some View {
         if let conversation = chat.activeChat, let uid = session.uid {
@@ -239,6 +242,23 @@ struct ChatView: View {
             }
 
             HStack(spacing: 12) {
+                // Photos from the Photos app (screenshots, references, proof of work)
+                PhotosPicker(selection: $photoItem, matching: .images) {
+                    Group {
+                        if sendingPhoto { ProgressView() } else { Image(systemName: "photo.on.rectangle.angled").font(.title3) }
+                    }
+                    .frame(width: Hit.min, height: Hit.min)
+                    .background(Color.white.opacity(0.08), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.lift)
+                .disabled(sendingPhoto)
+                .accessibilityLabel("Send a photo")
+                .onChange(of: photoItem) { _, item in
+                    guard let item else { return }
+                    photoItem = nil
+                    Task { await sendPhoto(item) }
+                }
                 TextField("Type a message…", text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .lineLimit(1...5)
@@ -277,6 +297,18 @@ struct ChatView: View {
                 draft = text
                 errorMessage = error.friendlyMessage
             }
+        }
+    }
+
+    private func sendPhoto(_ item: PhotosPickerItem) async {
+        sendingPhoto = true
+        defer { sendingPhoto = false }
+        do {
+            guard let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
+                  let jpeg = image.downscaled(maxSide: 1600).jpegData(compressionQuality: 0.8) else { return }
+            try await chat.sendImage(jpeg)
+        } catch {
+            errorMessage = error.friendlyMessage
         }
     }
 
@@ -406,5 +438,16 @@ private struct OfferComposer: View {
         .padding(32)
         .frame(width: 520)
         .errorAlert("Couldn't send offer", message: $errorMessage)
+    }
+}
+
+private extension UIImage {
+    /// Longest side at most `maxSide` points, so chat photos upload fast
+    func downscaled(maxSide: CGFloat) -> UIImage {
+        let longest = max(size.width, size.height)
+        guard longest > maxSide else { return self }
+        let scale = maxSide / longest
+        let target = CGSize(width: size.width * scale, height: size.height * scale)
+        return UIGraphicsImageRenderer(size: target).image { _ in draw(in: CGRect(origin: .zero, size: target)) }
     }
 }

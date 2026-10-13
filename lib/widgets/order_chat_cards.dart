@@ -1,1313 +1,205 @@
-import '../services/invoice_number.dart';
-import 'dart:ui' show FontFeature;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import '../models/order_model.dart';
-import 'workspace_details_sheet.dart';
 import 'package:intl/intl.dart';
 import '../models/chat_models.dart';
 import '../theme.dart';
+import 'custom_offer.dart';
 
+/// Order events in the chat (order placed, paid, delivered, ...).
+///
+/// These are a short history only: one small card per event, no buttons.
+/// Everything the buyer or seller can do lives in one place, the panel at the top of the chat
+/// (OrderNextStepPanel), so nobody has to wonder which of three "Accept" buttons to press.
 class OrderChatCardBuilder extends StatelessWidget {
   final MessageModel message;
   final bool isCurrentUser;
   final bool isFreelancer;
-
-  final VoidCallback? onSubmitRequirements;
+  final String chatId;
 
   const OrderChatCardBuilder({
     super.key,
     required this.message,
     required this.isCurrentUser,
     this.isFreelancer = false,
-    this.onSubmitRequirements,
+    this.chatId = '',
   });
+
+  static const _purple = Color(0xFF8B5CF6);
 
   @override
   Widget build(BuildContext context) {
     final action = message.actionType ?? message.type;
+    final note = message.text.trim();
 
-    // We wrap all system cards in a Timeline Layout to match the web view
-    return _TimelineWrapper(
-      message: message,
-      actionType: action,
-      child: _buildCardContent(context, action),
-    );
-  }
-
-  Widget _buildCardContent(BuildContext context, String action) {
     switch (action) {
+      case 'order_placed':
+        return _EventCard(
+          message: message,
+          icon: Icons.shopping_bag_outlined,
+          color: Colors.amber.shade700,
+          title: 'Order placed',
+          subtitle: isFreelancer ? 'Waiting for the buyer\'s payment to be confirmed.' : 'We\'re confirming your payment.',
+          showPrice: true,
+        );
       case 'payment_verified':
       case 'offer_accepted':
-        return _PaymentVerifiedCard(
+        return _EventCard(
           message: message,
-          isFreelancer: isFreelancer,
-          onSubmitRequirements: onSubmitRequirements,
+          icon: Icons.verified_user_rounded,
+          color: AppTheme.success,
+          title: 'Payment secured',
+          subtitle: 'Held safely by Reskindev until the order is complete.',
+          showPrice: true,
         );
-      case 'order_placed':
-        return _OrderPlacedCard(message: message, isFreelancer: isFreelancer);
       case 'requirements_submitted':
       case 'requirements':
-        return _RequirementsSubmittedCard(
+        return _EventCard(
           message: message,
-          isFreelancer: isFreelancer,
+          icon: Icons.assignment_outlined,
+          color: AppTheme.info,
+          title: isFreelancer ? 'The buyer shared requirements' : 'You shared requirements',
+          note: note.replaceFirst('The buyer has submitted the requirements.', '').trim(),
+        );
+      case 'custom_offer_accepted':
+        return _EventCard(
+          message: message,
+          icon: Icons.handshake_rounded,
+          color: AppTheme.success,
+          title: 'Custom offer accepted',
+          subtitle: isFreelancer ? 'Your turn: start the work and deliver it here.' : 'The seller can start right away.',
+          showPrice: true,
+        );
+      case 'order_started':
+        return _EventCard(
+          message: message,
+          icon: Icons.rocket_launch_rounded,
+          color: AppTheme.info,
+          title: 'Work started',
         );
       case 'order_delivered':
       case 'delivery':
-        return _OrderDeliveredCard(
+        return _EventCard(
           message: message,
-          isCurrentUser: isCurrentUser,
-          isFreelancer: isFreelancer,
+          icon: Icons.inventory_2_rounded,
+          color: _purple,
+          title: isFreelancer ? 'You delivered' : 'Delivery received',
+          note: note,
         );
       case 'revision_requested':
-        return _RevisionRequestedCard(
+        return _EventCard(
           message: message,
-          isFreelancer: isFreelancer,
+          icon: Icons.edit_note_rounded,
+          color: Colors.orange,
+          title: isFreelancer ? 'The buyer asked for changes' : 'You asked for changes',
+          note: note,
         );
       case 'order_completed':
       case 'review':
-        return _OrderCompletedCard(
+        return _EventCard(
           message: message,
-          isFreelancer: isFreelancer,
+          icon: Icons.celebration_rounded,
+          color: AppTheme.success,
+          title: 'Order completed',
+          subtitle: isFreelancer ? 'Payment is released to you.' : 'Thanks! The payment is released to the seller.',
         );
       case 'reviews_published':
-        return _ReviewsPublishedCard(message: message);
+        final meta = message.metadata ?? {};
+        final buyerRating = (meta['buyerRating'] as num?)?.toDouble() ?? 0;
+        final sellerRating = (meta['sellerRating'] as num?)?.toDouble() ?? 0;
+        return _EventCard(
+          message: message,
+          icon: Icons.star_rounded,
+          color: Colors.amber.shade700,
+          title: 'Reviews published',
+          subtitle: [
+            if (buyerRating > 0) 'Buyer: ${buyerRating.toStringAsFixed(1)}★',
+            if (sellerRating > 0) 'Seller: ${sellerRating.toStringAsFixed(1)}★',
+          ].join('  ·  '),
+          note: (meta['buyerComment'] ?? '').toString(),
+        );
       case 'custom_offer':
       case 'offer':
-        return _CustomOfferCard(message: message, isCurrentUser: isCurrentUser);
-      case 'order_started':
-        return _OrderStartedCard(message: message);
+        return CustomOfferCard(message: message, isMine: isCurrentUser, chatId: chatId);
       default:
-        return _SimpleBannerCard(
+        return _EventCard(
+          message: message,
           icon: Icons.info_outline_rounded,
           color: Colors.grey,
-          title: 'System Notification',
-          subtitle: message.text,
+          title: note.isEmpty ? 'Update' : note,
         );
     }
   }
 }
 
-// Wrapping layout with left timeline indicator
-class _TimelineWrapper extends StatelessWidget {
+String _money(num value) => '\$${value.toStringAsFixed(value % 1 == 0 ? 0 : 2)}';
+
+/// One order event: colored icon, short title, time, and an optional note the person wrote.
+class _EventCard extends StatelessWidget {
   final MessageModel message;
-  final String actionType;
-  final Widget child;
-
-  const _TimelineWrapper({
-    required this.message,
-    required this.actionType,
-    required this.child,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    IconData iconData;
-    Color iconColor;
-
-    switch (actionType) {
-      case 'order_placed':
-        iconData = Icons.schedule_rounded;
-        iconColor = Colors.amber;
-        break;
-      case 'payment_verified':
-      case 'offer_accepted':
-        iconData = Icons.account_balance_wallet_rounded;
-        iconColor = Colors.green;
-        break;
-      case 'requirements_submitted':
-      case 'requirements':
-      case 'order_started':
-        iconData = Icons.list_alt_rounded;
-        iconColor = Colors.blue;
-        break;
-      case 'order_delivered':
-      case 'delivery':
-        iconData = Icons.inventory_2_rounded;
-        iconColor = Colors.purple;
-        break;
-      case 'revision_requested':
-        iconData = Icons.warning_amber_rounded;
-        iconColor = Colors.orange;
-        break;
-      case 'order_completed':
-      case 'review':
-        iconData = Icons.check_circle_rounded;
-        iconColor = const Color(0xFF10B981); // Emerald green like web
-        break;
-      case 'custom_offer':
-      case 'offer':
-        iconData = Icons.local_offer_rounded;
-        iconColor = AppTheme.primary;
-        break;
-      default:
-        iconData = Icons.info_rounded;
-        iconColor = Colors.grey;
-    }
-
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Timeline indicator column
-          SizedBox(
-            width: 44,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Vertical Line
-                Container(
-                  width: 1.5,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        context.themeBorder,
-                        context.themeBorder.withValues(alpha: 0),
-                      ],
-                    ),
-                  ),
-                ),
-                // Icon Bubble
-                Positioned(
-                  top: 24, // align with the top of the card roughly
-                  child: Container(
-                    padding: const EdgeInsets.all(7),
-                    decoration: BoxDecoration(
-                      color: iconColor,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: context.themeBackground,
-                        width: 4,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: iconColor.withValues(alpha: 0.35),
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Icon(iconData, color: Colors.white, size: 15),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Main Card
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.only(right: 16, top: 8, bottom: 8),
-              child: child,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _WebStyleCard extends StatelessWidget {
-  final MessageModel message;
-  final Widget child;
-  final Widget? footer;
-
-  const _WebStyleCard({
-    required this.message,
-    required this.child,
-    this.footer,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final String timeStr = message.createdAt != null
-        ? DateFormat('HH:mm').format(message.createdAt!)
-        : 'Now';
-
-    final String displayId = orderNumber(message.orderId ?? 'UNKNOWN').substring(1);
-
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: context.themeSurface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: context.themeTextDark.withValues(alpha: 0.06),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
-            blurRadius: 28,
-            spreadRadius: -10,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Top Header: Time and View Gig
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      timeStr,
-                      style: GoogleFonts.inter(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: context.themeTextLight,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: () async {
-                        if (message.orderId == null || message.orderId!.isEmpty)
-                          return;
-
-                        // Show loading indicator
-                        showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (_) =>
-                              const Center(child: CircularProgressIndicator()),
-                        );
-
-                        try {
-                          final doc = await FirebaseFirestore.instance
-                              .collection('orders')
-                              .doc(message.orderId)
-                              .get();
-                          if (context.mounted)
-                            Navigator.pop(context); // pop loading
-
-                          if (doc.exists && context.mounted) {
-                            final order = OrderModel.fromFirestore(doc);
-                            // We need to know if current user is seller.
-                            // The message model doesn't directly have this, but we can guess it or pass it.
-                            // However, since we don't have isSeller easily available here without checking,
-                            // we can check if the current user ID matches the order's authorId.
-                            final uid = FirebaseAuth.instance.currentUser?.uid;
-                            final isSeller = uid == order.authorId;
-
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (ctx) => WorkspaceDetailsSheet(
-                                orderId: order.id!,
-
-                                chatId:
-                                    'unknown', // We don't have chatId easily here, but that's okay for display
-                              ),
-                            );
-                          } else if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Order not found')),
-                            );
-                          }
-                        } catch (e) {
-                          if (context.mounted) Navigator.pop(context);
-                        }
-                      },
-                      icon: const Icon(Icons.open_in_new_rounded, size: 14),
-                      label: const Text('View Order'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: context.themeTextDark,
-                        backgroundColor: context.themeTextDark.withValues(
-                          alpha: 0.06,
-                        ),
-                        shape: const StadiumBorder(),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 0,
-                        ),
-                        minimumSize: const Size(0, 32),
-                        textStyle: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Title
-                Text(
-                  'Order #$displayId',
-                  style: GoogleFonts.outfit(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.2,
-                    color: context.themeTextDark,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                // Custom Content
-                child,
-              ],
-            ),
-          ),
-          if (footer != null) footer!,
-        ],
-      ),
-    );
-  }
-}
-
-class _OrderPlacedCard extends StatelessWidget {
-  final MessageModel message;
-  final bool isFreelancer;
-  const _OrderPlacedCard({required this.message, this.isFreelancer = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return _WebStyleCard(
-      message: message,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            isFreelancer ? 'New Order! ⏳' : 'Order Placed! ⏳',
-            style: GoogleFonts.inter(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
-              color: Colors.amber.shade800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              color: Colors.amber.shade50,
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(
-                      Icons.schedule_rounded,
-                      color: Colors.amber.shade800,
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        isFreelancer
-                            ? 'Waiting for Admin Verification'
-                            : 'Pending Verification',
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.bold,
-                          color: Colors.amber.shade800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isFreelancer
-                      ? 'The buyer has placed a new order for "${message.gigTitle ?? 'your gig'}". The payment is currently pending verification by the Admin. Please wait for the payment to be secured before starting work.'
-                      : 'Your order for "${message.gigTitle ?? 'the gig'}" has been created. Please wait while the Admin verifies your payment. Once verified, the funds will be secured in escrow.',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: context.themeTextDark,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// 1. Payment Verified
-
-class _PaymentVerifiedCard extends StatelessWidget {
-  final MessageModel message;
-  final bool isFreelancer;
-  final VoidCallback? onSubmitRequirements;
-  const _PaymentVerifiedCard({
-    required this.message,
-    this.isFreelancer = false,
-    this.onSubmitRequirements,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final price =
-        message.price ??
-        message.offerPrice ??
-        (message.metadata?['price']) ??
-        0.0;
-
-    return _WebStyleCard(
-      message: message,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Payment Secured!',
-            style: GoogleFonts.inter(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
-              color: const Color(0xFF10B981),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF10B981).withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.verified_user_rounded,
-                      color: Color(0xFF10B981),
-                      size: 18,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Payment Verified by Admin',
-                        style: GoogleFonts.inter(
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF10B981),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'The escrow payment for "${message.gigTitle ?? 'your order'}" has been successfully verified.',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    color: context.themeTextDark,
-                    height: 1.4,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  isFreelancer
-                      ? 'You may begin work once the buyer submits their requirements.'
-                      : 'Please submit your requirements to start the order.',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    color: context.themeTextLight,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'ESCROW AMOUNT',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.8,
-                      color: context.themeTextLight,
-                    ),
-                  ),
-                  Text(
-                    '\$${price.toString()}',
-                    style: GoogleFonts.outfit(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      color: context.themeTextDark,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  'HELD IN ESCROW',
-                  style: GoogleFonts.inter(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: const Color(0xFF10B981),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      footer: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: context.themeTextDark.withValues(alpha: 0.035),
-          border: Border(
-            top: BorderSide(
-              color: context.themeTextDark.withValues(alpha: 0.06),
-            ),
-          ),
-        ),
-        child: Column(
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.info_outline_rounded,
-                  size: 16,
-                  color: Color(0xFF10B981),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    "What's next: Buyer needs to submit requirements to start the order.",
-                    style: GoogleFonts.inter(
-                      fontSize: 12.5,
-                      height: 1.4,
-                      color: context.themeTextLight,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (!isFreelancer) ...[
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                height: 44,
-                child: ElevatedButton(
-                  onPressed: onSubmitRequirements,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF10B981),
-                    foregroundColor: Colors.white,
-                    shape: const StadiumBorder(),
-                  ),
-                  child: const Text(
-                    'Submit Requirements',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// 2. Requirements Submitted
-class _RequirementsSubmittedCard extends StatelessWidget {
-  final MessageModel message;
-  final bool isFreelancer;
-  const _RequirementsSubmittedCard({
-    required this.message,
-    this.isFreelancer = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _WebStyleCard(
-      message: message,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Requirements Submitted',
-            style: GoogleFonts.inter(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
-              color: Colors.blue,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              color: Colors.blue.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: SelectableText(
-              isFreelancer
-                  ? 'The buyer has submitted the requirements.\n\n${message.text.replaceFirst('The buyer has submitted the requirements.\n\n', '')}'
-                  : 'You have submitted the requirements.\n\n${message.text.replaceFirst('The buyer has submitted the requirements.\n\n', '')}',
-              style: GoogleFonts.inter(
-                fontSize: 14,
-                color: context.themeTextDark,
-                height: 1.5,
-              ),
-            ),
-          ),
-        ],
-      ),
-      footer: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: context.themeTextDark.withValues(alpha: 0.035),
-          border: Border(
-            top: BorderSide(
-              color: context.themeTextDark.withValues(alpha: 0.06),
-            ),
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(Icons.timer_outlined, size: 16, color: Colors.blue),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                isFreelancer
-                    ? "What's next: The countdown has started. You should start working on the order."
-                    : "What's next: The countdown has started. The seller is working on your order.",
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  height: 1.4,
-                  color: context.themeTextLight,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// 3. Order Delivered
-class _OrderDeliveredCard extends StatelessWidget {
-  final MessageModel message;
-  final bool isCurrentUser;
-  final bool isFreelancer;
-
-  const _OrderDeliveredCard({
-    required this.message,
-    required this.isCurrentUser,
-    this.isFreelancer = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final link = message.metadata?['deliveryLink'] ?? message.imageUrl ?? '';
-
-    return _WebStyleCard(
-      message: message,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            isFreelancer
-                ? 'You Delivered the Final Work'
-                : 'Seller Delivered the Final Work',
-            style: GoogleFonts.inter(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
-              color: Colors.purple,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              color: Colors.purple.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  message.text,
-                  style: GoogleFonts.inter(
-                    color: context.themeTextDark,
-                    height: 1.5,
-                  ),
-                ),
-                if (link.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: context.themeSurface,
-                      borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: context.themeBorder),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.link_rounded,
-                          color: Colors.grey,
-                          size: 16,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'View Delivery File/Link',
-                            style: GoogleFonts.inter(
-                              color: Colors.blue,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 13,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
-      ),
-      footer: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: context.themeTextDark.withValues(alpha: 0.035),
-          border: Border(
-            top: BorderSide(
-              color: context.themeTextDark.withValues(alpha: 0.06),
-            ),
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(
-              Icons.info_outline_rounded,
-              size: 16,
-              color: Colors.purple,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                isFreelancer
-                    ? "What's next: The buyer has 3 days to review your delivery and accept it."
-                    : "What's next: You have 3 days to review the work and accept the delivery or request a revision.",
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  height: 1.4,
-                  color: context.themeTextLight,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// 4. Revision Requested
-class _RevisionRequestedCard extends StatelessWidget {
-  final MessageModel message;
-  final bool isFreelancer;
-  const _RevisionRequestedCard({
-    required this.message,
-    this.isFreelancer = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return _WebStyleCard(
-      message: message,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            isFreelancer
-                ? 'Buyer Requested a Revision'
-                : 'You Requested a Revision',
-            style: GoogleFonts.inter(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
-              color: Colors.orange,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-            decoration: BoxDecoration(
-              color: Colors.orange.withValues(alpha: 0.05),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Text(
-              message.text,
-              style: GoogleFonts.inter(
-                color: context.themeTextDark,
-                height: 1.5,
-              ),
-            ),
-          ),
-        ],
-      ),
-      footer: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: context.themeTextDark.withValues(alpha: 0.035),
-          border: Border(
-            top: BorderSide(
-              color: context.themeTextDark.withValues(alpha: 0.06),
-            ),
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(
-              Icons.warning_amber_rounded,
-              size: 16,
-              color: Colors.orange,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                isFreelancer
-                    ? "What's next: Please review the buyer's notes and deliver the updated work."
-                    : "What's next: The seller will review your notes and deliver the updated work.",
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  height: 1.4,
-                  color: context.themeTextLight,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// 5. Order Completed (Success + Review) MATCHING WEB EXACTLY
-class _OrderCompletedCard extends StatelessWidget {
-  final MessageModel message;
-  final bool isFreelancer;
-  const _OrderCompletedCard({required this.message, this.isFreelancer = false});
-
-  @override
-  Widget build(BuildContext context) {
-    final rating = message.rating ?? message.metadata?['rating'] ?? 0.0;
-    final comment = message.comment ?? message.metadata?['comment'] ?? '';
-    final price =
-        message.price ??
-        message.offerPrice ??
-        message.metadata?['price'] ??
-        0.0;
-    // We will extract buyer initials or use 'BU' as fallback
-    final senderInitials = message.senderName.isNotEmpty
-        ? message.senderName.substring(0, 1).toUpperCase()
-        : 'BU';
-
-    return _WebStyleCard(
-      message: message,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'The buyer has accepted the delivery and payment has been transferred!',
-            style: GoogleFonts.inter(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF10B981),
-              height: 1.4,
-            ),
-          ),
-          if (rating > 0) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-              decoration: BoxDecoration(
-                color: context.themeBackground,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 20,
-                    backgroundColor: context.themeBorder,
-                    child: Text(
-                      senderInitials,
-                      style: GoogleFonts.outfit(
-                        fontWeight: FontWeight.bold,
-                        color: context.themeTextLight,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Row(
-                              children: List.generate(
-                                5,
-                                (index) => Icon(
-                                  Icons.star_rounded,
-                                  color: index < rating
-                                      ? Colors.amber
-                                      : Colors.grey.withValues(alpha: 0.3),
-                                  size: 16,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              rating.toStringAsFixed(1),
-                              style: GoogleFonts.inter(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                                color: context.themeTextDark,
-                              ),
-                            ),
-                          ],
-                        ),
-                        if (comment.isNotEmpty) ...[
-                          const SizedBox(height: 6),
-                          Text(
-                            '"$comment"',
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              color: context.themeTextDark,
-                              fontStyle: FontStyle.italic,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (price > 0) ...[
-            const SizedBox(height: 16),
-            const Divider(height: 1),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'FINAL AMOUNT PAID',
-                      style: GoogleFonts.inter(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.8,
-                        color: context.themeTextLight,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '\$${price.toString()}',
-                      style: GoogleFonts.outfit(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w600,
-                        fontFeatures: const [FontFeature.tabularFigures()],
-                        color: context.themeTextDark,
-                      ),
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withValues(alpha: 0.14),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.check_circle_rounded,
-                        color: Color(0xFF10B981),
-                        size: 16,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Cleared',
-                        style: GoogleFonts.inter(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: const Color(0xFF10B981),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ],
-      ),
-      footer: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        decoration: BoxDecoration(
-          color: context.themeTextDark.withValues(alpha: 0.035),
-          border: Border(
-            top: BorderSide(
-              color: context.themeTextDark.withValues(alpha: 0.06),
-            ),
-          ),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Icon(
-              Icons.info_outline_rounded,
-              size: 16,
-              color: Color(0xFF10B981),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                "What's next: Transaction closed. Thank you for using Reskindev! If you need further revisions, please request a new custom offer.",
-                style: GoogleFonts.inter(
-                  fontSize: 12.5,
-                  height: 1.4,
-                  color: context.themeTextLight,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// Legacy Cards Below (Custom Offer, Order Started, Simple Banner)
-class _CustomOfferCard extends StatelessWidget {
-  final MessageModel message;
-  final bool isCurrentUser;
-  const _CustomOfferCard({required this.message, required this.isCurrentUser});
-
-  @override
-  Widget build(BuildContext context) {
-    return _WebStyleCard(
-      message: message,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.local_offer_rounded,
-                color: AppTheme.primary,
-                size: 20,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Custom Offer',
-                style: GoogleFonts.inter(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: -0.2,
-                  color: AppTheme.primary,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Text(
-            message.offerDescription ?? message.text,
-            style: GoogleFonts.inter(color: context.themeTextDark),
-          ),
-          const SizedBox(height: 16),
-          const Divider(height: 1),
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'PRICE',
-                    style: GoogleFonts.inter(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.8,
-                      color: context.themeTextLight,
-                    ),
-                  ),
-                  Text(
-                    '\$${message.offerPrice ?? 0}',
-                    style: GoogleFonts.outfit(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: context.themeTextDark,
-                    ),
-                  ),
-                ],
-              ),
-              if (!isCurrentUser)
-                ElevatedButton(
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          'Please accept custom offers from the website version for now.',
-                        ),
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primary,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 0,
-                    ),
-                  ),
-                  child: Text(
-                    'Accept Offer',
-                    style: GoogleFonts.inter(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OrderStartedCard extends StatelessWidget {
-  final MessageModel message;
-  const _OrderStartedCard({required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return _WebStyleCard(
-      message: message,
-      child: Center(
-        child: Column(
-          children: [
-            const Icon(
-              Icons.rocket_launch_rounded,
-              color: Colors.blue,
-              size: 32,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Order Started!',
-              style: GoogleFonts.outfit(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: context.themeTextDark,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SimpleBannerCard extends StatelessWidget {
   final IconData icon;
   final Color color;
   final String title;
-  final String subtitle;
+  final String? subtitle;
+  final String? note;
+  final bool showPrice;
 
-  const _SimpleBannerCard({
+  const _EventCard({
+    required this.message,
     required this.icon,
     required this.color,
     required this.title,
-    required this.subtitle,
+    this.subtitle,
+    this.note,
+    this.showPrice = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final time = message.createdAt != null ? DateFormat('h:mm a').format(message.createdAt!) : '';
+
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+      padding: const EdgeInsets.fromLTRB(12, 10, 14, 10),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        color: color.withValues(alpha: context.isDarkMode ? 0.12 : 0.07),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(width: 12),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            child: Icon(icon, size: 14, color: Colors.white),
+          ),
+          const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: GoogleFonts.outfit(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: color,
-                  ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(title,
+                        style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600, color: context.themeTextDark)),
+                    ),
+                    if (showPrice) _Price(message: message),
+                    if (time.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Text(time, style: GoogleFonts.inter(fontSize: 11, color: context.themeTextLight)),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: context.themeTextDark,
-                  ),
-                ),
+                if (subtitle != null && subtitle!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(subtitle!, style: GoogleFonts.inter(fontSize: 12.5, height: 1.35, color: context.themeTextLight)),
+                ],
+                if (note != null && note!.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  SelectableText(note!,
+                    style: GoogleFonts.inter(fontSize: 13.5, height: 1.4, color: context.themeTextDark)),
+                ],
               ],
             ),
           ),
@@ -1317,98 +209,27 @@ class _SimpleBannerCard extends StatelessWidget {
   }
 }
 
-// 6. Reviews Published (Double-Blind Revealed)
-class _ReviewsPublishedCard extends StatelessWidget {
+/// The amount on "Order placed" / "Payment secured". Older messages carry no price, so it falls back to the order.
+class _Price extends StatelessWidget {
   final MessageModel message;
-  const _ReviewsPublishedCard({required this.message});
+  const _Price({required this.message});
 
-  Widget _buildReviewBox(
-    BuildContext context,
-    String title,
-    double rating,
-    String comment,
-  ) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
-      decoration: BoxDecoration(
-        color: context.themeBackground,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              const Icon(Icons.star_rounded, color: Colors.amber, size: 16),
-              const SizedBox(width: 4),
-              Text(
-                rating.toStringAsFixed(1),
-                style: GoogleFonts.inter(fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          if (comment.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text(
-              comment,
-              style: GoogleFonts.inter(
-                fontSize: 13,
-                color: context.themeTextDark,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
+  Widget _text(BuildContext context, num value) => value <= 0
+      ? const SizedBox.shrink()
+      : Text(_money(value),
+          style: GoogleFonts.outfit(fontSize: 14, fontWeight: FontWeight.w700, color: context.themeTextDark));
 
   @override
   Widget build(BuildContext context) {
-    final meta = message.metadata ?? {};
-    final buyerRating = (meta['buyerRating'] as num?)?.toDouble() ?? 0.0;
-    final buyerComment = meta['buyerComment']?.toString() ?? '';
-    final sellerRating = (meta['sellerRating'] as num?)?.toDouble() ?? 0.0;
-    final sellerComment = meta['sellerComment']?.toString() ?? '';
-
-    return _WebStyleCard(
-      message: message,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Both parties have reviewed!',
-            style: GoogleFonts.inter(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              letterSpacing: -0.2,
-              color: const Color(0xFF10B981),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'The reviews are now public.',
-            style: GoogleFonts.inter(
-              fontSize: 13,
-              color: context.themeTextDark,
-            ),
-          ),
-          const SizedBox(height: 16),
-          _buildReviewBox(context, "Buyer's Review", buyerRating, buyerComment),
-          const SizedBox(height: 12),
-          _buildReviewBox(
-            context,
-            "Seller's Review",
-            sellerRating,
-            sellerComment,
-          ),
-        ],
-      ),
+    final num price = message.price ?? message.offerPrice ?? (message.metadata?['price'] as num?) ?? 0;
+    final orderId = message.orderId ?? '';
+    if (price > 0 || orderId.isEmpty) return _text(context, price);
+    return FutureBuilder<DocumentSnapshot>(
+      future: FirebaseFirestore.instance.collection('orders').doc(orderId).get(),
+      builder: (context, snap) {
+        final data = snap.data?.data() as Map<String, dynamic>?;
+        return _text(context, (data?['price'] as num?) ?? 0);
+      },
     );
   }
 }

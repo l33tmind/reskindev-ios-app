@@ -10,9 +10,11 @@ class GigProvider extends ChangeNotifier {
   bool _loading = true;
   AuthProvider? _auth;
 
+  // Admin dashboard uses allGigs to see everything
+  List<GigModel> get allGigs => _gigs;
+
   List<GigModel> get gigs {
-    if (_auth?.isAdmin == true) return _gigs;
-    // Support both 'active' (Web schema) and 'published' (legacy) statuses
+    // Both admins and regular users should only see active/published gigs on the Home/Explore pages!
     return _gigs.where((g) => g.status == 'active' || g.status == 'published').toList();
   }
 
@@ -46,38 +48,14 @@ class GigProvider extends ChangeNotifier {
   }
 
   void _listen() {
-    _db.collection('services').snapshots().listen((snap) async {
+    _db.collection('services').snapshots().listen((snap) {
       final docs = snap.docs.map((d) => GigModel.fromFirestore(d)).toList();
       docs.sort((a, b) => a.order.compareTo(b.order)); 
       _gigs = docs;
       _loading = false;
       notifyListeners();
 
-      // Dynamic Fallback: Check for missing ratings and calculate dynamically
-      for (var gig in docs) {
-        if (gig.averageRating == 0.0 && gig.reviewCount == 0) {
-          try {
-            final revSnap = await _db.collection('services').doc(gig.id).collection('reviews').get();
-            if (revSnap.docs.isNotEmpty) {
-              double total = 0;
-              for (var r in revSnap.docs) {
-                total += (r.data()['rating'] as num?)?.toDouble() ?? 5.0;
-              }
-              final avg = double.parse((total / revSnap.docs.length).toStringAsFixed(1));
-              
-              // Update firestore, which will trigger another snapshot event to update UI
-              await _db.collection('services').doc(gig.id).update({
-                'rating': avg,
-                'averageRating': avg,
-                'reviewCount': revSnap.docs.length,
-              });
-            }
-          } catch (e) {
-            debugPrint("Fallback rating calculation failed for ${gig.id}: $e");
-          }
-        }
-      }
-      notifyListeners();
+      // Ratings come from the server (Cloud Function updateGigRating), not from each phone
     }, onError: (e) {
       debugPrint('Error loading gigs: $e');
       _loading = false;

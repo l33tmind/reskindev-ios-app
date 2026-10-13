@@ -55,7 +55,7 @@
 /* Begin PBXFileReference section */
 		113781DC85FFB4C08DAB5DD6 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/XROS.platform/Developer/SDKs/XROS2.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
 		3A535016FC0E5F083BA135C1 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		3DE4BD643065A5040030D7A6 /* Reskindevpro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Reskindevpro.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3DE4BD643065A5040030D7A6 /* Reskindev.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Reskindev.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DE4BD683065A5040030D7A6 /* RealityKitContent */ = {isa = PBXFileReference; lastKnownFileType = wrapper; path = RealityKitContent; sourceTree = "<group>"; };
 		3DE4BD783065A5070030D7A6 /* ReskindevproTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ReskindevproTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		56B59D447B3980DC400842D0 /* WidgetSnapshot.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WidgetSnapshot.swift; sourceTree = "<group>"; };
@@ -147,7 +147,7 @@
 		3DE4BD653065A5040030D7A6 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				3DE4BD643065A5040030D7A6 /* Reskindevpro.app */,
+				3DE4BD643065A5040030D7A6 /* Reskindev.app */,
 				3DE4BD783065A5070030D7A6 /* ReskindevproTests.xctest */,
 				7E9E95D2B4376A31C4BE6E10 /* ReskindevWidgets.appex */,
 			);
@@ -219,7 +219,7 @@
 				3DE4BD953065A5100030D7A6 /* FirebaseAuth */,
 			);
 			productName = Reskindevpro;
-			productReference = 3DE4BD643065A5040030D7A6 /* Reskindevpro.app */;
+			productReference = 3DE4BD643065A5040030D7A6 /* Reskindev.app */;
 			productType = "com.apple.product-type.application";
 		};
 		3DE4BD773065A5070030D7A6 /* ReskindevproTests */ = {
@@ -379,7 +379,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Reskindevpro.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1.3;
+				CURRENT_PROJECT_VERSION = 1.4;
 				DEVELOPMENT_TEAM = U73JN9WJNB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -390,7 +390,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.reskindevdotcom.reskindev;
 				PRODUCT_MODULE_NAME = Reskindevpro;
 				PRODUCT_NAME = Reskindev;
@@ -402,6 +402,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 7;
+				XROS_DEPLOYMENT_TARGET = 26.6;
 			};
 			name = Debug;
 		};
@@ -412,7 +413,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Reskindevpro.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1.3;
+				CURRENT_PROJECT_VERSION = 1.4;
 				DEVELOPMENT_TEAM = U73JN9WJNB;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -423,7 +424,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.3;
+				MARKETING_VERSION = 1.4;
 				PRODUCT_BUNDLE_IDENTIFIER = com.reskindevdotcom.reskindev;
 				PRODUCT_MODULE_NAME = Reskindevpro;
 				PRODUCT_NAME = Reskindev;
@@ -435,6 +436,7 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 7;
+				XROS_DEPLOYMENT_TARGET = 26.6;
 			};
 			name = Release;
 		};

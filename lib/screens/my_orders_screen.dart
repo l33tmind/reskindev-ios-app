@@ -1,4 +1,5 @@
 import '../services/invoice_number.dart';
+import '../services/order_chat_nav.dart';
 import 'package:confetti/confetti.dart';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -301,7 +302,33 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
   Widget _buildMobileStats(List<OrderModel> orders) {
     final pending = orders.where((o) => o.status == 'pending').length;
     final inProgress = orders.where((o) => o.status == 'in_progress').length;
-    
+    final toApprove = orders.where((o) => o.status == 'delivered').length;
+    if (pending + inProgress == 0) {
+      if (toApprove > 0) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+          child: Row(
+            children: [
+              const Icon(Icons.inventory_2_outlined, size: 18, color: Color(0xFF8B5CF6)),
+              const SizedBox(width: 8),
+              Text(toApprove == 1 ? '1 delivery is waiting for your approval' : '$toApprove deliveries are waiting for your approval',
+                style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w600, color: context.themeTextDark)),
+            ],
+          ),
+        );
+      }
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        child: Row(
+          children: [
+            Icon(Icons.check_circle_outline_rounded, size: 18, color: AppTheme.success),
+            const SizedBox(width: 8),
+            Text('No active orders right now', style: GoogleFonts.inter(fontSize: 13, color: context.themeTextLight)),
+          ],
+        ),
+      );
+    }
+
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -465,7 +492,7 @@ class _MyOrdersScreenState extends State<MyOrdersScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Please sign in with your Google account to view your purchase history and order status.',
+                  'Please sign in or register to view your purchase history and order status.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                       fontSize: 15,
@@ -682,27 +709,17 @@ class _OrderCard extends StatelessWidget {
   final OrderModel order;
   const _OrderCard({required this.order});
 
-  Color _getStatusColor(BuildContext context, String status) {
-    switch (status) {
-      case 'pending': return AppTheme.warning;
-      case 'in_progress': return AppTheme.info;
-      case 'completed': return AppTheme.success;
-      case 'cancelled': return AppTheme.error;
-      default: return context.themeTextLight;
-    }
-  }
-
-  String _formatStatus(String status) {
-    return status.split('_').map((s) => s[0].toUpperCase() + s.substring(1)).join(' ');
-  }
-
   @override
   Widget build(BuildContext context) {
-    final statusColor = _getStatusColor(context, order.status);
+    final statusColor = order.statusColor;
     final date = order.createdAt;
-    final formattedDate = '${date.day}/${date.month}/${date.year}';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final formattedDate = '${date.day} ${months[date.month - 1]} ${date.year}';
 
-    return Container(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _showOrderDetails(context),
+      child: Container(
       decoration: BoxDecoration(
         color: context.themeSurface,
         borderRadius: BorderRadius.circular(20),
@@ -749,7 +766,7 @@ class _OrderCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      Text('Order ${orderNumber(order.id)} · Invoice ${invoiceNo(order.invoiceNumber)}',
+                      Text('Order ${orderNumber(order.id)}${(order.invoiceNumber ?? '').toString().isEmpty ? '' : ' · Invoice ${invoiceNo(order.invoiceNumber)}'}',
                         style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: context.themeTextLight),
                       ),
                       const SizedBox(height: 4),
@@ -772,7 +789,7 @@ class _OrderCard extends StatelessWidget {
                           children: [
                             const Icon(Icons.timer_outlined, size: 14, color: Colors.orange),
                             const SizedBox(width: 4),
-                            LiveTimer(startTime: order.startedAt ?? order.createdAt, deliveryDays: order.deliveryDays),
+                            order.startedAt != null ? LiveTimer(startTime: order.startedAt!, deliveryDays: order.deliveryDays) : Text('Pending Start', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange)),
                           ],
                         )
                       ],
@@ -780,18 +797,15 @@ class _OrderCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '\$${order.price.toStringAsFixed(0)}',
+                  '\$${order.price.toStringAsFixed(order.price % 1 == 0 ? 0 : 2)}',
                   style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.w800, color: AppTheme.primary),
                 ),
               ],
             ),
           ),
           
-          Divider(height: 1),
-
-          // Action / Status Area
           Padding(
-            padding: EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 0, 8, 12),
             child: Row(
               children: [
                 Container(
@@ -801,25 +815,62 @@ class _OrderCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: Text(
-                    _formatStatus(order.status),
+                    order.statusLabel,
                     style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w700, color: statusColor),
                   ),
                 ),
                 const Spacer(),
-                TextButton.icon(
+                TextButton(
                   onPressed: () => _showOrderDetails(context),
-                  icon: const Icon(Icons.info_outline_rounded, size: 16),
-                  label: const Text('Details'),
                   style: TextButton.styleFrom(
-                    foregroundColor: context.themeTextDark,
+                    foregroundColor: AppTheme.primary,
+                    minimumSize: const Size(0, 36),
                     textStyle: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
                   ),
+                  child: const Text('View details  ›'),
                 ),
               ],
             ),
           ),
+          // Delivered: show the seller's note and let the buyer accept right here
+          if (order.status == 'delivered')
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (order.deliveryNote.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 10),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(order.deliveryNote,
+                        style: GoogleFonts.inter(fontSize: 13, color: context.themeTextDark),
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ElevatedButton.icon(
+                    onPressed: () => openOrderChat(context, order),
+                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                    label: const Text('Review delivery'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.success,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 44),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      textStyle: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
+    ),
     );
   }
 
@@ -832,54 +883,6 @@ class _OrderCard extends StatelessWidget {
     );
   }
 }
-
-  void _showRevisionModal(BuildContext context, OrderModel order) {
-    final noteCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (c) => AlertDialog(
-        backgroundColor: context.themeCard,
-        title: Text('Request Revision', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: context.themeTextDark)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('What needs to be changed?', style: GoogleFonts.inter(fontSize: 13, color: context.themeTextLight)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: noteCtrl,
-              maxLines: 4,
-              style: TextStyle(color: context.themeTextDark),
-              decoration: const InputDecoration(hintText: 'Please describe the revisions needed...'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (noteCtrl.text.trim().isEmpty) return;
-              Navigator.pop(c);
-              await FirebaseFirestore.instance.collection('orders').doc(order.id).update({
-                'status': 'revision',
-                'revisionNote': noteCtrl.text.trim(),
-              });
-              await NotificationService.sendAndSaveNotification(
-                userId: order.authorId,
-                title: 'Revision Requested',
-                body: 'The buyer requested a revision for: ${order.gigTitle}',
-              );
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Revision Requested!')));
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-            child: const Text('Submit Request'),
-          ),
-        ],
-      ),
-    );
-  }
 
 void _showSupportModal(BuildContext context, OrderModel order, String reportedBy) {
   final subjCtrl = TextEditingController();
@@ -1026,37 +1029,9 @@ class _OrderDetailsSheet extends StatelessWidget {
                       ),
                     ),
                   ],
-                  if (order.status == 'delivered') ...[
+                  if (order.deliveryNote.isNotEmpty && (order.status == 'delivered' || order.status == 'completed')) ...[
                     const Divider(height: 32),
-                    _buildDetailRow(context, 'Delivery Note', order.deliveryNote.isEmpty ? 'No note provided' : order.deliveryNote),
-                    const SizedBox(height: 24),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          Navigator.pop(ctx); // close details modal
-                          showDialog(
-                            context: context, // use main context
-                            barrierDismissible: false,
-                            builder: (c) => RatingDialog(order: order),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1BCA75), foregroundColor: Colors.white),
-                        child: const Text('Approve & Accept Delivery'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton(
-                        onPressed: () {
-                          Navigator.pop(ctx);
-                          _showRevisionModal(context, order);
-                        },
-                        style: OutlinedButton.styleFrom(foregroundColor: Colors.red, side: const BorderSide(color: Colors.red)),
-                        child: const Text('Request Revision'),
-                      ),
-                    ),
+                    _buildDetailRow(context, 'Delivery Note', order.deliveryNote),
                   ],
                   const SizedBox(height: 16),
                   SizedBox(
@@ -1064,19 +1039,16 @@ class _OrderDetailsSheet extends StatelessWidget {
                     child: ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pop(ctx);
-                        context.push('/chat/new', extra: {
-                          'targetUserId': order.authorId,
-                          'targetUserName': 'Freelancer',
-                          'targetUserAvatar': '',
-                          'orderId': order.id,
-                        });
+                        openOrderChat(context, order);
                       },
                       icon: const Icon(Icons.chat_bubble_outline, size: 18),
-                      label: const Text('Message Seller'),
+                      // Accepting, asking for changes and reviewing all happen in the order chat
+                      label: Text(order.status == 'delivered' ? 'Review delivery in chat' : 'Open order chat'),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                        foregroundColor: AppTheme.primary,
+                        backgroundColor: order.status == 'delivered' ? AppTheme.success : AppTheme.primary.withValues(alpha: 0.1),
+                        foregroundColor: order.status == 'delivered' ? Colors.white : AppTheme.primary,
                         elevation: 0,
+                        minimumSize: const Size(0, 44),
                       ),
                     ),
                   ),
@@ -1175,11 +1147,13 @@ class _OrderDetailsSheet extends StatelessWidget {
             Text(
               title,
               textAlign: TextAlign.center,
+              maxLines: 1,
+              softWrap: false,
+              overflow: TextOverflow.visible,
               style: GoogleFonts.inter(
-                fontSize: 10,
+                fontSize: 11.5,
                 fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
                 color: isActive ? context.themeTextDark : context.themeTextLight,
-                letterSpacing: 0.5,
               ),
             ),
           ],
@@ -1192,11 +1166,11 @@ class _OrderDetailsSheet extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildStep('PAYMENT', isPayment, false, true, isRequirements),
-          _buildStep('REQUIREMENTS', isRequirements, false, false, isProcessing),
-          _buildStep('PROCESSING', isProcessing, false, false, isDelivered),
-          _buildStep('DELIVERED', isDelivered, false, false, isCompleted),
-          _buildStep('COMPLETED', isCompleted, true, false, false),
+          // Same four steps as the order chat bar
+          _buildStep('Paid', isPayment, false, true, isRequirements),
+          _buildStep('Working', isRequirements, false, false, isDelivered),
+          _buildStep('Delivered', isDelivered, false, false, isCompleted),
+          _buildStep('Done', isCompleted, true, false, false),
         ],
       ),
     );
@@ -1228,6 +1202,7 @@ class _RatingDialogState extends State<RatingDialog> {
   double comms = 5.0;
   double quality = 5.0;
   double described = 5.0;
+  bool recommend = true;
   final publicCtrl = TextEditingController();
   final privateCtrl = TextEditingController();
   bool submitting = false;
@@ -1288,6 +1263,18 @@ class _RatingDialogState extends State<RatingDialog> {
               _buildStarRow('Quality of Work', quality, (v) => setState(() => quality = v)),
               _buildStarRow('Service as Described', described, (v) => setState(() => described = v)),
               const SizedBox(height: 16),
+              Row(
+                children: [
+                  Text('Would you recommend?', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const Spacer(),
+                  Switch(
+                    value: recommend,
+                    activeColor: const Color(0xFF1DBF73),
+                    onChanged: (v) => setState(() => recommend = v),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
               TextField(
                 controller: publicCtrl,
                 maxLines: 3,
@@ -1316,16 +1303,28 @@ class _RatingDialogState extends State<RatingDialog> {
                     final overall = (comms + quality + described) / 3.0;
                     
                     // 1. Update Order
+                    final user = FirebaseAuth.instance.currentUser;
+                    final reviewMap = {
+                      'userId': user?.uid ?? '',
+                      'userName': user?.displayName ?? 'Client',
+                      'userImage': user?.photoURL ?? '',
+                      'rating': overall,
+                      'communication': comms,
+                      'quality': quality,
+                      'service': described,
+                      'recommend': recommend,
+                      'comment': publicCtrl.text.trim(),
+                      'privateFeedback': privateCtrl.text.trim(),
+                      'createdAt': FieldValue.serverTimestamp(),
+                    };
+                    
                     await FirebaseFirestore.instance.collection('orders').doc(widget.order.id).update({
                       'status': 'completed',
-                      'hasReview': true,
                       'completedAt': FieldValue.serverTimestamp(),
-                      'ratingCommunication': comms,
-                      'ratingQuality': quality,
-                      'ratingDescribed': described,
-                      'overallRating': overall,
-                      'publicReview': publicCtrl.text.trim(),
-                      'privateFeedback': privateCtrl.text.trim(),
+                      'buyerReview': reviewMap,
+                      'rating': overall,
+                      'isReviewPublic': false,
+                      'hasReview': true,
                     });
                     
                     // Trigger system message
@@ -1340,7 +1339,8 @@ class _RatingDialogState extends State<RatingDialog> {
                           orderId: widget.order.id ?? '',
                           gigTitle: widget.order.gigTitle,
                           actionType: 'order_completed',
-                          text: 'Order Completed! Buyer left a ${overall.toStringAsFixed(1)}-star review.',
+                          text: 'The buyer has accepted the delivery and payment has been transferred!',
+                          price: widget.order.price ?? 0,
                           metadata: {
                             'rating': overall,
                             'comment': publicCtrl.text.trim(),
@@ -1351,34 +1351,9 @@ class _RatingDialogState extends State<RatingDialog> {
                       print('System msg err: $e');
                     }
 
-                    // 2. Add Review to Subcollection
-                    final user = FirebaseAuth.instance.currentUser;
-                    final gigRef = FirebaseFirestore.instance.collection('services').doc(widget.order.gigId);
-                    await gigRef.collection('reviews').add({
-                      'orderId': widget.order.id,
-                      'userId': user?.uid ?? '',
-                      'userName': user?.displayName ?? 'Client',
-                      'userImage': user?.photoURL ?? 'https://ui-avatars.com/api/?name=${Uri.encodeComponent(user?.displayName ?? "Client")}',
-                      'rating': overall,
-                      'comment': publicCtrl.text.trim(),
-                      'createdAt': FieldValue.serverTimestamp(),
-                    });
-
-                    // 3. Fetch all reviews and update Parent Gig
-                    final reviewsSnap = await gigRef.collection('reviews').get();
-                    if (reviewsSnap.docs.isNotEmpty) {
-                      double totalRating = 0;
-                      for (var r in reviewsSnap.docs) {
-                        totalRating += (r.data()['rating'] as num?)?.toDouble() ?? 5.0;
-                      }
-                      final newAvg = double.parse((totalRating / reviewsSnap.docs.length).toStringAsFixed(1));
-                      
-                      await gigRef.update({
-                        'reviewCount': reviewsSnap.docs.length,
-                        'rating': newAvg,
-                        'averageRating': newAvg,
-                      });
-                    }
+                    // 2. Add Review to Subcollection (MOVED TO SELLER DASHBOARD)
+                    // The buyer's review should not be public until the seller also reviews.
+                    // When the seller reviews, it sets isReviewPublic to true and pushes this to the gig.
 
                     if (mounted) {
                       Navigator.pop(context);

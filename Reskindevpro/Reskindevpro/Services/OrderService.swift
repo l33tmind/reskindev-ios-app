@@ -202,6 +202,7 @@ enum OrderService {
         try await db.collection("orders").document(order.id).updateData([
             "status": "delivered",
             "deliveryMessage": message,
+            "deliveryNote": message, // read by the Flutter app
             "deliveryLink": link,
             "deliveredAt": FieldValue.serverTimestamp(),
         ])
@@ -342,20 +343,41 @@ enum OrderService {
         ]
     }
 
-    /// Buyer: accept delivery + (hidden) review → completed
-    static func acceptDelivery(_ order: OrderModel, review: ReviewInput, session: SessionStore) async throws {
+    /// Buyer: accept delivery → completed. The review is optional here (same as the Flutter app):
+    /// without one, the order asks for it later as "Leave a review".
+    static func acceptDelivery(_ order: OrderModel, review: ReviewInput?, session: SessionStore) async throws {
+        guard session.uid != nil else { throw SessionError.signInRequired }
+        var data: [String: Any] = [
+            "status": "completed",
+            "completedAt": FieldValue.serverTimestamp(),
+        ]
+        if let review {
+            data["hasReview"] = true
+            data["isReviewPublic"] = false
+            data["buyerReview"] = reviewData(review, session: session, fallbackName: "Client")
+        }
+        try await db.collection("orders").document(order.id).updateData(data)
+        if review != nil {
+            await notify(order, session: session, actionType: "order_completed",
+                         text: "Buyer has accepted the delivery and left a review! Seller needs to leave a review to unlock it.",
+                         lastMessage: "Order Accepted & Reviewed",
+                         extra: ["rating": 0, "comment": "Hidden review", "isReviewPublic": false])
+        } else {
+            await notify(order, session: session, actionType: "order_completed",
+                         text: "The buyer has accepted the delivery and payment has been transferred!",
+                         lastMessage: "Order Accepted")
+        }
+    }
+
+    /// Buyer: review an order that is already completed (accepted earlier without a review)
+    static func submitBuyerReview(_ order: OrderModel, review: ReviewInput, session: SessionStore) async throws {
         guard session.uid != nil else { throw SessionError.signInRequired }
         try await db.collection("orders").document(order.id).updateData([
-            "status": "completed",
             "hasReview": true,
             "isReviewPublic": false,
-            "completedAt": FieldValue.serverTimestamp(),
             "buyerReview": reviewData(review, session: session, fallbackName: "Client"),
         ])
-        await notify(order, session: session, actionType: "order_completed",
-                     text: "Buyer has accepted the delivery and left a review! Seller needs to leave a review to unlock it.",
-                     lastMessage: "Order Accepted & Reviewed",
-                     extra: ["rating": 0, "comment": "Hidden review", "isReviewPublic": false])
+        // No chat card, same as the Flutter app: the order already shows "Order completed"
     }
 
     /// Seller: review the buyer → both reviews become public

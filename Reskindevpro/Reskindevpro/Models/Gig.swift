@@ -44,15 +44,15 @@ struct GigModel: Identifiable, Hashable {
     var ratingText: String {
         reviewCount > 0
             ? String(format: "%.1f · %ld Reviews", averageRating, reviewCount)
-            : "Rising Talent"   // same label as the website for gigs without reviews yet
+            : "New"   // same label as the website and the Flutter app for gigs without reviews yet
     }
 
-    /// Short form for small cards: "4.9 (14)" or "Rising Talent"
+    /// Short form for small cards: "4.9 (14)" or "New"
     var ratingShort: String {
-        reviewCount > 0 ? String(format: "%.1f (%ld)", averageRating, reviewCount) : "Rising Talent"
+        reviewCount > 0 ? String(format: "%.1f (%ld)", averageRating, reviewCount) : "New"
     }
 
-    /// Star once there are reviews, sparkles for Rising Talent
+    /// Star once there are reviews, sparkles for gigs without reviews
     var ratingIcon: String { reviewCount > 0 ? "star.fill" : "sparkles" }
 
     /// All images for the detail gallery, without duplicates

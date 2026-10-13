@@ -15,10 +15,13 @@ import 'screens/favorites_screen.dart';
 import 'screens/seller_profile_screen.dart';
 import 'screens/inbox_screen.dart';
 import 'screens/earnings_screen.dart';
+import 'screens/wallet_screen.dart';
 import 'screens/chat_screen.dart';
 import 'screens/my_orders_screen.dart';
 import 'screens/admin_dashboard_screen.dart';
 import 'screens/seller_dashboard_screen.dart';
+import 'screens/order_chat_opener.dart';
+import 'screens/offer_checkout_screen.dart';
 import 'screens/dynamic_page_screen.dart';
 import 'screens/mobile_shell.dart';
 import 'models/gig_model.dart';
@@ -98,6 +101,8 @@ final GoRouter appRouter = GoRouter(
           GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
           GoRoute(path: '/my-orders', builder: (_, __) => const MyOrdersScreen()),
           GoRoute(path: '/inbox', builder: (_, __) => const InboxScreen()),
+          GoRoute(path: '/wallet', builder: (_, __) => const WalletScreen()),
+          GoRoute(path: '/seller', builder: (_, __) => const SellerDashboardScreen()),
         ],
       ),
     // ── Web-only: plain top-level routes ───────────────────────────
@@ -113,6 +118,7 @@ final GoRouter appRouter = GoRouter(
       GoRoute(path: '/profile', builder: (_, __) => const ProfileScreen()),
       GoRoute(path: '/my-orders', builder: (_, __) => const MyOrdersScreen()),
       GoRoute(path: '/inbox', builder: (_, __) => const InboxScreen()),
+      GoRoute(path: '/wallet', builder: (_, __) => const WalletScreen()),
     ],
 
     // ── Shared routes (both web & mobile) ──────────────────────────
@@ -176,6 +182,19 @@ final GoRouter appRouter = GoRouter(
     ),
     GoRoute(
       parentNavigatorKey: rootNavigatorKey,
+      path: '/offer-checkout/:chatId/:msgId',
+      builder: (context, state) => OfferCheckoutScreen(
+        chatId: state.pathParameters['chatId']!,
+        msgId: state.pathParameters['msgId']!,
+      ),
+    ),
+    GoRoute(
+      parentNavigatorKey: rootNavigatorKey,
+      path: '/order-chat/:orderId',
+      builder: (context, state) => OrderChatOpener(orderId: state.pathParameters['orderId']!),
+    ),
+    GoRoute(
+      parentNavigatorKey: rootNavigatorKey,
       path: '/order/:gigId/:pkg',
       pageBuilder: (context, state) => buildPageWithDefaultTransition(
         context: context,
@@ -200,22 +219,12 @@ final GoRouter appRouter = GoRouter(
     GoRoute(
       parentNavigatorKey: rootNavigatorKey,
       path: '/quick-replies',
-      builder: (_, __) => const QuickRepliesScreen(),
+      builder: (_, state) => QuickRepliesScreen(initialRole: state.extra as String?),
     ),
     GoRoute(
       parentNavigatorKey: rootNavigatorKey,
-      path: '/seller',
-      pageBuilder: (context, state) => buildPageWithDefaultTransition(
-        context: context,
-        state: state,
-        child: const SellerDashboardScreen(),
-      ),
-      routes: [
-        GoRoute(
-          path: 'edit-gig',
-          builder: (context, state) => GigEditorScreen(gig: state.extra as GigModel?),
-        ),
-      ],
+      path: '/seller/edit-gig',
+      builder: (context, state) => GigEditorScreen(gig: state.extra as GigModel?),
     ),
     GoRoute(
       parentNavigatorKey: rootNavigatorKey,

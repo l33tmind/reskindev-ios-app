@@ -64,7 +64,8 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
       appBar: AppBar(
         backgroundColor: context.themeSurface,
         elevation: 0,
-        leading: IconButton(
+        automaticallyImplyLeading: false,
+        leading: !GoRouter.of(context).canPop() ? null : IconButton(
           icon: Icon(Icons.arrow_back_ios_new, color: context.themeTextDark, size: 20),
           onPressed: () {
             if (GoRouter.of(context).canPop()) {
@@ -75,7 +76,7 @@ class _AllServicesScreenState extends State<AllServicesScreen> {
           },
         ),
         title: Text(
-          'All Services',
+          'Explore',
           style: GoogleFonts.outfit(
             color: context.themeTextDark,
             fontWeight: FontWeight.bold,

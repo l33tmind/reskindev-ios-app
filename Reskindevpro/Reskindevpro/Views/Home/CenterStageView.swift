@@ -123,6 +123,8 @@ struct CenterStageView: View {
         let title: String
         let icon: String
         let gigs: [GigModel]
+        /// Big cards (Recently Viewed) or the small ones
+        var large = false
     }
 
     /// Searching / filtering: one results row. Otherwise: All Services, Recently Viewed, one row per category,
@@ -133,22 +135,23 @@ struct CenterStageView: View {
         if isFiltering {
             return [GigSection(title: "Results (\(gigs.count))", icon: "magnifyingglass", gigs: gigs)]
         }
-        // All Services first, then what you looked at recently, then each category
-        var rows = [GigSection(title: "All Services", icon: "square.grid.2x2.fill", gigs: gigs)]
+        // Recently Viewed (big cards) first, then Popular Services, then each category,
+        // and last "Recommended for You": the best rated of the gigs you looked at
+        var rows: [GigSection] = []
         let recent = store.recentIDs.compactMap { store.gig(id: $0) }
         if !recent.isEmpty {
-            rows.append(GigSection(title: "Recently Viewed", icon: "clock.arrow.circlepath", gigs: recent))
+            rows.append(GigSection(title: "Recently Viewed", icon: "clock.arrow.circlepath", gigs: recent, large: true))
         }
+        rows.append(GigSection(title: "Popular Services", icon: "flame.fill", gigs: gigs))
         for category in store.categories {
             let inCategory = gigs.filter { $0.category == category }
             if !inCategory.isEmpty {
                 rows.append(GigSection(title: category, icon: FilterPill.icon(for: category), gigs: inCategory))
             }
         }
-        // Last row: everything on your wishlist, newest save first
-        let saved = session.savedGigIDs.reversed().compactMap { store.gig(id: $0) }
-        if !saved.isEmpty {
-            rows.append(GigSection(title: "Saved", icon: "heart.fill", gigs: saved))
+        if !recent.isEmpty {
+            let best = recent.sorted { $0.averageRating > $1.averageRating }
+            rows.append(GigSection(title: "Recommended for You", icon: "sparkles", gigs: best))
         }
         return rows
     }
@@ -174,7 +177,11 @@ struct CenterStageView: View {
                         Button {
                             openWindow(id: WindowID.gigDetail, value: gig.id)
                         } label: {
-                            CompactGigCard(gig: gig)
+                            if section.large {
+                                GigCardView(gig: gig, isFocused: true)
+                            } else {
+                                CompactGigCard(gig: gig)
+                            }
                         }
                         .buttonStyle(.plain)
                         .gazeLift(scale: 1.10, radius: Radius.medium)
@@ -183,7 +190,7 @@ struct CenterStageView: View {
                 .padding(.vertical, 10)
                 .padding(.horizontal, 12)
             }
-            .frame(height: 280)
+            .frame(height: section.large ? 440 : 280)
             // Soft left/right edges: cards slide in and out instead of being chopped off
             .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.04),
                                          .init(color: .black, location: 0.94), .init(color: .clear, location: 1)],

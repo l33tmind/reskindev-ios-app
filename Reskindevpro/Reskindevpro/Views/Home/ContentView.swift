@@ -59,6 +59,60 @@ struct ContentView: View {
             if args.contains("-DeliveryDemo") {
                 openWindow(id: WindowID.deliveryBox)
             }
+            // `-TestOrderGig "<part of a gig title>"`: place an offline-payment order on that gig through
+            // the normal checkout code (simulator tests; the visionOS simulator can't be tapped from scripts)
+            if let i = args.firstIndex(of: "-TestOrderGig"), i + 1 < args.count {
+                Task { await placeTestOrder(titleContains: args[i + 1]) }
+            }
+            // `-OpenOrderChat <order number without #> [-SendPhotoDemo]`: open that order's chat
+            // (and send a small test photo through ChatStore.sendImage, to check the Storage upload)
+            if let i = args.firstIndex(of: "-OpenOrderChat"), i + 1 < args.count {
+                Task {
+                    let number = args[i + 1].uppercased()
+                    var found: Conversation?
+                    for _ in 0..<40 where found == nil {
+                        found = chat.conversations.first { ($0.orderId ?? "").uppercased().hasSuffix(number) }
+                        if found == nil { try? await Task.sleep(for: .milliseconds(500)) }
+                    }
+                    guard let conversation = found else {
+                        print("OrderChat: no chat for #\(number) in \(chat.conversations.map { $0.orderId ?? "-" })"); return
+                    }
+                    chat.activeChatID = conversation.id
+                    open(.messages)
+                    guard args.contains("-SendPhotoDemo") else { return }
+                    try? await Task.sleep(for: .seconds(3))
+                    let image = UIGraphicsImageRenderer(size: CGSize(width: 600, height: 400)).image { ctx in
+                        UIColor(red: 0.13, green: 0.7, blue: 0.5, alpha: 1).setFill()
+                        ctx.fill(CGRect(x: 0, y: 0, width: 600, height: 400))
+                        ("Test photo from Vision Pro" as NSString).draw(at: CGPoint(x: 40, y: 170), withAttributes: [
+                            .font: UIFont.boldSystemFont(ofSize: 40), .foregroundColor: UIColor.white])
+                    }
+                    do {
+                        try await chat.sendImage(image.jpegData(compressionQuality: 0.8)!)
+                        print("OrderChat: photo sent")
+                    } catch {
+                        print("OrderChat: photo failed \(error)")
+                    }
+                }
+            }
+            // `-CheckoutGig "<part of a gig title>"`: open that gig; its page runs the real checkout
+            if let i = args.firstIndex(of: "-CheckoutGig"), i + 1 < args.count {
+                Task {
+                    for _ in 0..<40 where !session.isSignedIn { try? await Task.sleep(for: .milliseconds(500)) }
+                    if let gig = gigStore.gigs.first(where: { $0.title.localizedCaseInsensitiveContains(args[i + 1]) }) {
+                        print("CheckoutGig: \(gig.title) by \(gig.sellerName)")
+                        openWindow(id: WindowID.gigDetail, value: gig.id)
+                    } else {
+                        print("CheckoutGig: no gig matching \"\(args[i + 1])\"")
+                    }
+                }
+            }
+        }
+        // `-GuestDemo`: sign in as a guest on launch (the visionOS simulator can't be tapped from scripts)
+        .task {
+            if ProcessInfo.processInfo.arguments.contains("-GuestDemo"), !session.isSignedIn {
+                try? await session.signInAsGuest()
+            }
         }
         .task {
             if ProcessInfo.processInfo.arguments.contains("-ShowroomDemo"), appModel.immersiveSpaceState == .closed {
@@ -186,6 +240,41 @@ extension ContentView {
             }
         }
     }
+
+    #if DEBUG
+    /// `-TestOrderGig`: one order per gig, as the signed-in person, through OrderService.placeOrder
+    fileprivate func placeTestOrder(titleContains fragment: String) async {
+        // The guest sign-in (`-GuestDemo`) and the orders listener may still be starting
+        for _ in 0..<40 where !session.isSignedIn || session.ordersLoading {
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        guard let gig = gigStore.gigs.first(where: { $0.title.localizedCaseInsensitiveContains(fragment) }),
+              let package = gig.packages.first else {
+            print("TestOrder: no gig matching \"\(fragment)\"")
+            return
+        }
+        print("TestOrder: \(gig.title) status=\(gig.status) seller=\(gig.sellerName)")
+        guard gig.isVisible else { print("TestOrder: gig is not live yet (needs admin approval)"); return }
+        if session.orders.contains(where: { $0.gigId == gig.id }) {
+            print("TestOrder: already ordered")
+            open(.orders)
+            return
+        }
+        var form = OrderService.CheckoutForm()
+        form.phone = "+8801000000000"
+        form.requirements = "Test order from a Vision Pro guest. A simple logo with the letter R in green, please."
+        let fee = await OrderService.serviceFeePercent()
+        do {
+            let result = try await OrderService.placeOrder(gig: gig, package: package, form: form,
+                                                           pricing: .init(base: package.price, discount: 0, feePercent: fee),
+                                                           coupon: nil, session: session)
+            print("TestOrder: placed \(result.orderID)")
+            open(.orders)
+        } catch {
+            print("TestOrder: failed \(error)")
+        }
+    }
+    #endif
 
     func closeEverything() {
         if appModel.showOrders { dismissWindow(id: WindowID.orders, value: WindowID.single) }

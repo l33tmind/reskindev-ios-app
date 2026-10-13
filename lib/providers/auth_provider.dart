@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import 'dart:async';
@@ -8,6 +9,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:sign_in_with_apple/sign_in_with_apple.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../main.dart';
 import '../models/order_model.dart';
 
@@ -18,9 +21,19 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
   User? _currentUser;
   User? get user => _currentUser;
   bool get isLoggedIn => _currentUser != null;
+  bool get isGuest => _currentUser?.isAnonymous ?? false;
   List<String> _blockedUsers = [];
   List<String> get blockedUsers => _blockedUsers;
   bool get isAdmin => _currentUser?.email?.toLowerCase() == 'mdrobiussany1225@gmail.com';
+
+  bool _isSellerMode = false;
+  bool get isSellerMode => _isSellerMode;
+
+  void toggleSellerMode(bool val) {
+    _isSellerMode = val;
+    notifyListeners();
+  }
+
 
   AuthProvider() {
     WidgetsBinding.instance.addObserver(this);
@@ -73,7 +86,15 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
     _orderSubscription = null;
   }
 
+  DateTime? _lastAdminNotificationTime;
+
   Future<void> _showLocalNotification(OrderModel order) async {
+    final now = DateTime.now();
+    if (_lastAdminNotificationTime != null && now.difference(_lastAdminNotificationTime!).inSeconds < 2) {
+      return; // Rate limit to prevent spam
+    }
+    _lastAdminNotificationTime = now;
+
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
       'high_importance_channel',
@@ -119,8 +140,12 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
   String? _address;
   String? _photoUrl;
   String? _username;
-  String? _role; // 'admin', 'freelancer', 'buyer'
+  String? _role;
+  double _averageRating = 0.0;
+  int _reviewCount = 0; // 'admin', 'freelancer', 'buyer'
   bool _profileLoaded = false;
+  double _walletBalance = 0.0;
+  double _availableToWithdraw = 0.0;
   Timer? _heartbeatTimer;
 
   String get displayName => user?.displayName ?? '';
@@ -131,7 +156,11 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
   String? get address => _address;
   String? get username => _username;
   String? get role => _role;
+  double get averageRating => _averageRating;
+  int get reviewCount => _reviewCount;
   bool get profileLoaded => _profileLoaded;
+  double get walletBalance => _walletBalance;
+  double get availableToWithdraw => _availableToWithdraw;
   bool get isFreelancer => _role == 'freelancer' || _role == 'admin' || isAdmin;
 
   Stream<User?> get authState => _auth.authStateChanges();
@@ -153,7 +182,10 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
         );
         await _auth.signInWithCredential(credential);
       } else {
-        final GoogleSignIn googleSignIn = GoogleSignIn();
+        final GoogleSignIn googleSignIn = GoogleSignIn(
+          serverClientId: '652374646493-9lu1tt5u5ssmtmeedqralfpa0ulttcjh.apps.googleusercontent.com',
+          clientId: !kIsWeb && Platform.isIOS ? '652374646493-kbhqc8o82h70378uatdk498mv1ulqae4.apps.googleusercontent.com' : null,
+        );
         final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
         if (googleUser == null) return; 
         final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
@@ -232,6 +264,48 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Guest login: a Firebase anonymous account named "Guest 1234", so the guest
+  /// can order, sell and chat without an email or password.
+  Future<void> signInAsGuest() async {
+    try {
+      final cred = await _auth.signInAnonymously();
+      final u = cred.user;
+      if (u != null && (u.displayName ?? '').isEmpty) {
+        final tag = (1000 + math.Random().nextInt(9000)).toString();
+        await u.updateDisplayName('Guest $tag');
+        await u.reload();
+        _currentUser = _auth.currentUser;
+      }
+      await _saveUserToFirestore();
+      await loadProfile();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Guest Sign-In error: $e');
+      rethrow;
+    }
+  }
+
+  /// Pick a photo from the gallery and make it the profile picture everywhere (chat, inbox, orders, website).
+  /// Returns false when the person cancelled.
+  Future<bool> pickAndUploadProfilePhoto({VoidCallback? onUploading}) async {
+    final u = _auth.currentUser;
+    if (u == null) return false;
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery, maxWidth: 512, maxHeight: 512, imageQuality: 85);
+    if (picked == null) return false;
+    onUploading?.call();
+    final bytes = await picked.readAsBytes();
+    // One file per person, replaced on every change, so old photos don't pile up
+    final ref = FirebaseStorage.instance.ref('profile_pictures/${u.uid}.jpg');
+    await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+    // A new query string makes every phone fetch the new picture instead of the cached old one
+    final url = '${await ref.getDownloadURL()}&v=${DateTime.now().millisecondsSinceEpoch}';
+    await _db.collection('users').doc(u.uid).set({'photoUrl': url}, SetOptions(merge: true));
+    await u.updatePhotoURL(url);
+    _photoUrl = url;
+    notifyListeners();
+    return true;
+  }
+
   Future<void> resetPassword(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email.trim());
@@ -270,7 +344,11 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
         _photoUrl = data['photoUrl'] as String? ?? u.photoURL ?? '';
         _username = data['username'] as String?;
         _role = data['role'] as String?;
+        _averageRating = (data['averageRating'] as num?)?.toDouble() ?? 0.0;
+        _reviewCount = (data['reviewCount'] as num?)?.toInt() ?? 0;
         _blockedUsers = List<String>.from(data['blockedUsers'] ?? []);
+        _walletBalance = (data['walletBalance'] ?? 0.0).toDouble();
+        _availableToWithdraw = (data['availableToWithdraw'] ?? 0.0).toDouble();
       }
       _setPresence(true);
     } catch (e) {
@@ -278,6 +356,22 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
     _profileLoaded = true;
     notifyListeners();
+  }
+
+  Future<void> refreshWallet() async {
+    final u = _auth.currentUser;
+    if (u == null) return;
+    try {
+      final doc = await _db.collection('users').doc(u.uid).get();
+      if (doc.exists) {
+        final data = doc.data()!;
+        _walletBalance = (data['walletBalance'] ?? 0.0).toDouble();
+        _availableToWithdraw = (data['availableToWithdraw'] ?? 0.0).toDouble();
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error refreshing wallet: $e');
+    }
   }
 
   /// Update profile data in Firestore
@@ -327,6 +421,7 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
     final doc = await _db.collection('users').doc(u.uid).get();
     Map<String, dynamic> updateData = {
       'uid': u.uid,
+      if (u.isAnonymous) 'isGuest': true,
       'name': u.displayName ?? '',
       'displayName': u.displayName ?? '',
       'email': u.email ?? '',
@@ -343,7 +438,8 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
 
     if (!doc.exists || !(doc.data()?.containsKey('username') ?? false)) {
       final email = u.email ?? '';
-      final base = email.split('@').first.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
+      var base = email.split('@').first.toLowerCase().replaceAll(RegExp(r'[^a-z0-9_]'), '');
+      if (base.isEmpty) base = u.isAnonymous ? 'guest' : 'user';
       final randomNum = (1000 + math.Random().nextInt(9000)).toString();
       updateData['username'] = '${base}_$randomNum';
     }

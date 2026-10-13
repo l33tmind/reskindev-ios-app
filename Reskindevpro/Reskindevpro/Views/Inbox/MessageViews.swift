@@ -57,9 +57,20 @@ private struct TextBubble: View {
                         .frame(width: 260, height: 150)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 }
-                Text(linkified(message.text))
-                    .font(.body)
-                    .textSelection(.enabled)
+                if let photo = message.imageUrl, let url = URL(string: photo) {
+                    Link(destination: url) {
+                        CachedImage(url: photo)
+                            .frame(width: 320, height: 240)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Photo. Opens full size")
+                }
+                if !message.text.isEmpty {
+                    Text(linkified(message.text))
+                        .font(.body)
+                        .textSelection(.enabled)
+                }
                 if let date = message.createdAt {
                     Text(date.formatted(date: .omitted, time: .shortened))
                         .font(.caption2)

@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../providers/auth_provider.dart' as ap;
 import '../providers/connectivity_provider.dart';
 import '../providers/chat_provider.dart';
+import '../widgets/user_avatar.dart';
 
 /// The persistent bottom navigation shell for the Android app.
 class MobileShell extends StatefulWidget {
@@ -31,13 +32,14 @@ class _MobileShellState extends State<MobileShell>
     with SingleTickerProviderStateMixin {
   late AnimationController _animController;
 
-  int get _selectedIndex {
+  int _getSelectedIndex(bool isSeller) {
     final path = widget.currentPath;
     if (path.startsWith('/all-services')) return 1;
-    if (path.startsWith('/my-orders')) return 2;
+    if (path.startsWith('/seller')) return 2; // Seller Mode Maps to index 2
+    if (path.startsWith('/my-orders')) return 2; // Buyer Mode Maps to index 2
     if (path.startsWith('/inbox')) return 3;
     if (path.startsWith('/profile')) return 4;
-    return 0; // Home / Services
+    return 0;
   }
 
   @override
@@ -55,24 +57,20 @@ class _MobileShellState extends State<MobileShell>
     super.dispose();
   }
 
-  void _onTabTap(int index) {
+  void _onTabTap(int index, bool isSeller) {
     HapticFeedback.selectionClick();
     switch (index) {
-      case 0:
-        context.go('/');
-        break;
-      case 1:
-        context.go('/all-services');
-        break;
+      case 0: context.go('/'); break;
+      case 1: context.go('/all-services'); break;
       case 2:
-        context.go('/my-orders');
+        if (isSeller) {
+          context.go('/seller');
+        } else {
+          context.go('/my-orders');
+        }
         break;
-      case 3:
-        context.go('/inbox');
-        break;
-      case 4:
-        context.go('/profile');
-        break;
+      case 3: context.go('/inbox'); break;
+      case 4: context.go('/profile'); break;
     }
   }
 
@@ -124,8 +122,9 @@ class _MobileShellState extends State<MobileShell>
                 }
               }
               return _BottomNav(
-                selectedIndex: _selectedIndex,
-                onTap: _onTabTap,
+                selectedIndex: _getSelectedIndex(auth.isSellerMode),
+                onTap: (index) => _onTabTap(index, auth.isSellerMode),
+                isSellerMode: auth.isSellerMode,
                 orderBadge: pendingCount,
                 chatBadge: unreadChatCount,
                 isLoggedIn: auth.isLoggedIn,
@@ -146,6 +145,7 @@ class _BottomNav extends StatelessWidget {
   final int chatBadge;
   final bool isLoggedIn;
   final String? photoUrl;
+  final bool isSellerMode;
 
   const _BottomNav({
     required this.selectedIndex,
@@ -154,6 +154,7 @@ class _BottomNav extends StatelessWidget {
     this.chatBadge = 0,
     required this.isLoggedIn,
     this.photoUrl,
+    this.isSellerMode = false,
   });
 
   @override
@@ -171,10 +172,10 @@ class _BottomNav extends StatelessWidget {
         backgroundColor: context.themeSurface,
         selectedItemColor: AppTheme.primary, // Facebook-like blue
         unselectedItemColor: context.isDarkMode ? Colors.white54 : Colors.black87,
-        showSelectedLabels: false,
-        showUnselectedLabels: false,
+        showSelectedLabels: true,
+        showUnselectedLabels: true,
         type: BottomNavigationBarType.fixed,
-        iconSize: 28,
+        iconSize: 24,
         elevation: 0,
         selectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600),
         unselectedLabelStyle: const TextStyle(fontSize: 10, fontWeight: FontWeight.w500),
@@ -187,40 +188,41 @@ class _BottomNav extends StatelessWidget {
           const BottomNavigationBarItem(
             icon: Icon(Icons.search_outlined),
             activeIcon: Icon(Icons.search),
-            label: 'Search',
+            label: 'Explore',
           ),
           BottomNavigationBarItem(
-            icon: orderBadge > 0
+            icon: isSellerMode ? const Icon(Icons.storefront_outlined) : (orderBadge > 0
                   ? Badge.count(count: orderBadge, child: const Icon(Icons.receipt_long_outlined))
-                  : const Icon(Icons.receipt_long_outlined),
-            activeIcon: const Icon(Icons.receipt_long),
-            label: 'Orders',
+                  : const Icon(Icons.receipt_long_outlined)),
+            activeIcon: isSellerMode ? const Icon(Icons.storefront) : const Icon(Icons.receipt_long),
+            label: isSellerMode ? 'Dashboard' : 'Orders',
           ),
           BottomNavigationBarItem(
             icon: chatBadge > 0
                 ? Badge.count(count: chatBadge, child: const Icon(Icons.chat_bubble_outline))
                 : const Icon(Icons.chat_bubble_outline),
             activeIcon: const Icon(Icons.chat_bubble),
-            label: 'Inbox',
+            label: 'Messages',
           ),
           BottomNavigationBarItem(
             icon: isLoggedIn && photoUrl != null
-                  ? CircleAvatar(
+                  ? UserAvatar(
+                      name: 'Profile',
+                      photoUrl: photoUrl,
                       radius: 12,
-                      backgroundColor: Colors.grey.shade200,
-                      backgroundImage: NetworkImage(photoUrl!),
                     )
                   : const Icon(Icons.person_outline),
             activeIcon: isLoggedIn && photoUrl != null
                   ? Container(
+                      padding: const EdgeInsets.all(1.5),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         border: Border.all(color: AppTheme.primary, width: 2),
                       ),
-                      child: CircleAvatar(
-                        radius: 12,
-                        backgroundColor: Colors.grey.shade200,
-                        backgroundImage: NetworkImage(photoUrl!),
+                      child: UserAvatar(
+                        name: 'Profile',
+                        photoUrl: photoUrl,
+                        radius: 10,
                       ),
                     )
                   : const Icon(Icons.person),

@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../theme.dart';
 import '../models/gig_model.dart';
 import '../models/order_model.dart';
 import '../models/user_model.dart';
 import '../widgets/gig_card.dart';
+import '../widgets/user_avatar.dart';
 
 class SellerProfileScreen extends StatefulWidget {
   final String sellerId;
@@ -216,14 +216,11 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(color: context.themeSurface, shape: BoxShape.circle),
-                    child: CircleAvatar(
+                    child: UserAvatar(
+                      uid: user.uid,
+                      name: user.displayName.isNotEmpty ? user.displayName : 'Verified Seller',
+                      photoUrl: user.photoUrl.isNotEmpty ? user.photoUrl : null,
                       radius: 50,
-                      backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                      backgroundImage: user.photoUrl.isNotEmpty ? NetworkImage(user.photoUrl) : null,
-                      child: user.photoUrl.isEmpty
-                          ? Text(user.displayName.isNotEmpty ? user.displayName[0].toUpperCase() : 'S',
-                              style: const TextStyle(fontSize: 36, color: AppTheme.primary, fontWeight: FontWeight.bold))
-                          : null,
                     ),
                   ),
                 ),
@@ -342,7 +339,9 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
         // Client-side filtering to avoid composite index requirements
         final docs = snapshot.data!.docs.where((doc) {
           final data = doc.data() as Map<String, dynamic>;
-          return data['status'] != 'pending';
+          final status = data['status'] as String?;
+          final isActive = data['isActive'] as bool? ?? true;
+          return status != 'pending' && status != 'deleted' && isActive;
         }).toList();
 
         if (docs.isEmpty) return const Center(child: Text('No active gigs found.'));
@@ -369,39 +368,26 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
   }
 
   Widget _buildPortfolio(BuildContext context, String uid) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('orders').where('authorId', isEqualTo: uid).snapshots(),
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _fetchAllSellerReviews(uid),
       builder: (context, snapshot) {
         if (snapshot.hasError) return Center(child: Text('Error loading portfolio: ${snapshot.error}'));
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator.adaptive());
         
-        final docs = snapshot.data?.docs ?? [];
-        // Client-side filtering and sorting to avoid complex composite index requirements
-        var portfolioDocs = docs.where((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          final isCompleted = data['status'] == 'completed';
-          final hasReview = data['publicReview'] != null && data['publicReview'].toString().isNotEmpty;
-          return isCompleted && hasReview;
-        }).toList();
-        
-        portfolioDocs.sort((a, b) {
-          final dataA = a.data() as Map<String, dynamic>;
-          final dataB = b.data() as Map<String, dynamic>;
-          final timeA = dataA['completedAt'] as Timestamp?;
-          final timeB = dataB['completedAt'] as Timestamp?;
-          if (timeA == null && timeB == null) return 0;
-          if (timeA == null) return 1;
-          if (timeB == null) return -1;
-          return timeB.compareTo(timeA); // descending
-        });
-
-        if (portfolioDocs.isEmpty) return const Center(child: Text('No reviews yet.'));
+        final reviews = snapshot.data ?? [];
+        if (reviews.isEmpty) return const Center(child: Text('No reviews yet.'));
 
         return ListView.builder(
           padding: const EdgeInsets.all(16),
-          itemCount: portfolioDocs.length,
+          itemCount: reviews.length,
           itemBuilder: (context, index) {
-            final order = OrderModel.fromFirestore(portfolioDocs[index]);
+            final reviewData = reviews[index];
+            final title = reviewData['gigTitle'] as String? ?? 'Service';
+            final comment = reviewData['comment'] as String? ?? reviewData['review'] as String? ?? reviewData['publicReview'] as String? ?? '';
+            final rating = (reviewData['rating'] as num?)?.toDouble() ?? (reviewData['overallRating'] as num?)?.toDouble() ?? 5.0;
+            final createdAt = reviewData['createdAt'] as Timestamp?;
+            final dateStr = createdAt != null ? '${createdAt.toDate().day}/${createdAt.toDate().month}/${createdAt.toDate().year}' : '';
+
             return Card(
               margin: const EdgeInsets.only(bottom: 16),
               color: context.themeSurface,
@@ -412,25 +398,24 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(order.gigTitle, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: context.themeTextDark)),
+                    Text(title, style: GoogleFonts.outfit(fontSize: 16, fontWeight: FontWeight.bold, color: context.themeTextDark)),
                     const SizedBox(height: 8),
                     Row(
                       children: [
                         const Icon(Icons.star_rounded, color: Colors.orange, size: 20),
                         const SizedBox(width: 4),
-                        Text('${order.overallRating?.toStringAsFixed(1) ?? "5.0"}', style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: context.themeTextDark)),
+                        Text(rating.toStringAsFixed(1), style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: context.themeTextDark)),
                         const SizedBox(width: 12),
-                        if (order.completedAt != null)
-                          Text('${order.completedAt!.day}/${order.completedAt!.month}/${order.completedAt!.year}', style: GoogleFonts.inter(fontSize: 12, color: context.themeTextLight)),
+                        if (dateStr.isNotEmpty)
+                          Text(dateStr, style: GoogleFonts.inter(fontSize: 12, color: context.themeTextLight)),
                       ],
                     ),
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(color: context.themeBackground, borderRadius: BorderRadius.circular(8)),
-                      child: Text('"${order.publicReview}"', style: GoogleFonts.inter(fontStyle: FontStyle.italic, color: context.themeTextDark)),
+                      child: Text('"$comment"', style: GoogleFonts.inter(fontStyle: FontStyle.italic, color: context.themeTextDark)),
                     ),
-
                   ],
                 ),
               ),
@@ -439,6 +424,34 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
         );
       },
     );
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchAllSellerReviews(String uid) async {
+    final List<Map<String, dynamic>> allReviews = [];
+    final gigsSnap = await FirebaseFirestore.instance.collection('services').where('authorId', isEqualTo: uid).get();
+    
+    for (var gigDoc in gigsSnap.docs) {
+      final gigData = gigDoc.data();
+      final gigTitle = gigData['title'] ?? 'Service';
+      
+      final reviewsSnap = await gigDoc.reference.collection('reviews').orderBy('createdAt', descending: true).get();
+      for (var revDoc in reviewsSnap.docs) {
+        final rData = revDoc.data();
+        rData['gigTitle'] = gigTitle; // Inject gig title
+        allReviews.add(rData);
+      }
+    }
+    
+    allReviews.sort((a, b) {
+      final timeA = a['createdAt'] as Timestamp?;
+      final timeB = b['createdAt'] as Timestamp?;
+      if (timeA == null && timeB == null) return 0;
+      if (timeA == null) return 1;
+      if (timeB == null) return -1;
+      return timeB.compareTo(timeA); // descending
+    });
+    
+    return allReviews;
   }
 }
 

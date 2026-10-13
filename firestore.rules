@@ -1,55 +1,134 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Allow users to read and write their own data
+
+    // Shared by the Next.js website, the Flutter app and the Admin SDK (server actions bypass rules).
+    // Hardened conservatively: only rules verified against both clients' code paths are tightened.
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ---------- Users ----------
     match /users/{userId} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == userId;
-    }
-    
-    // Allow anyone to read gigs (services), but only authenticated users can write
-    match /services/{serviceId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-    
-    // Orders rules
-    match /orders/{orderId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Reports rules (New UGC Feature)
-    match /reports/{reportId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Support tickets
-    match /support_tickets/{ticketId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Withdrawals
-    match /withdrawals/{withdrawalId} {
-      allow read, write: if request.auth != null;
-    }
-    
-    // Allow reading public pages (Privacy Policy, Terms, etc.)
-    match /pages/{pageId} {
-      allow read: if true;
-    }
-    
-    // Messages/Chats
-    match /conversations/{chatId} {
-      allow read, write: if request.auth != null;
-      match /messages/{messageId} {
-        allow read, write: if request.auth != null;
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isAdmin();
+
+      // reviews, notifications, ... are written by other users/admin/functions.
+      match /{subcollection}/{docId} {
+        allow read, write: if isAuthenticated();
       }
     }
-    
-    // Global settings and default fallback
+
+    // ---------- Services ----------
+    match /services/{serviceId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+
+      match /reviews/{reviewId} {
+        allow read: if true;
+        allow write: if isAuthenticated();
+      }
+    }
+
+    // ---------- Orders: only buyer, seller or admin can read ----------
+    match /orders/{orderId} {
+      function isParticipant() {
+        return request.auth.uid == resource.data.get('userId', '')
+            || request.auth.uid == resource.data.get('authorId', '')
+            || request.auth.uid == resource.data.get('freelancerId', '')
+            || request.auth.uid == resource.data.get('clientUid', '');
+      }
+
+      allow read: if isAuthenticated() && (isParticipant() || isAdmin());
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && (
+        isParticipant() || isAdmin() ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['sellerReview', 'isReviewPublic'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Chat ----------
+    match /conversations/{chatId} {
+      allow read, write: if isAuthenticated();
+      match /messages/{messageId} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // ---------- Moderation / support (kept as before) ----------
+    match /reports/{reportId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /support_tickets/{ticketId} {
+      allow read, write: if isAuthenticated();
+    }
+    match /notifications/{notificationId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // ---------- Withdrawals: owner can create/read, only admin can change ----------
+    match /withdrawals/{withdrawalId} {
+      allow read: if isAuthenticated() && (
+        resource.data.get('freelancerId', '') == request.auth.uid ||
+        resource.data.get('userId', '') == request.auth.uid ||
+        isAdmin()
+      );
+      allow create: if isAuthenticated() && (
+        request.resource.data.get('freelancerId', '') == request.auth.uid ||
+        request.resource.data.get('userId', '') == request.auth.uid
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------- Site configuration: admin-only writes ----------
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /pages/{pageId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /categories/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /coupons/{couponId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    // 'categories' is public (home page); the rest (e.g. fcm_config) needs a signed-in user.
+    match /admin_settings/{docId} {
+      allow read: if docId == 'categories' || isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ---------- Admin-only data ----------
+    match /dispute_resolutions/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;   // written by the server action only
+    }
+    match /dispute_notes/{noteId} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+    match /admin_logs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false;   // written by the server action only
+    }
+
+    // Anything not listed above is denied.
     match /{document=**} {
-      allow read, write: if request.auth != null;
+      allow read, write: if false;
     }
   }
 }

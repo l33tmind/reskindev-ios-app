@@ -89,6 +89,7 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+
   Future<void> _appleSignIn() async {
     setState(() => _loading = true);
     try {
@@ -285,6 +286,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
                   
+
                   const SizedBox(height: 32),
                   
                   TextButton(
