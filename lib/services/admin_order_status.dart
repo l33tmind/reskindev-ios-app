@@ -64,7 +64,19 @@ class AdminOrderStatus {
           refund = amount;
           update['isRefunded'] = true;
           update['refundedAmount'] = amount;
-          tx.update(db.collection('users').doc(buyerId), {'walletBalance': FieldValue.increment(amount)});
+          final amountBdt = ((d['amountBdt'] ?? 0) as num).toDouble();
+          if (d['paidCurrency'] == 'BDT' && amountBdt > 0) {
+            // Paid in taka (website): the taka goes back to the taka wallet
+            final refundBdt = (amountBdt * 100).round() / 100;
+            update['refundedBdt'] = refundBdt;
+            tx.update(db.collection('users').doc(buyerId), {'walletBdt': FieldValue.increment(refundBdt)});
+            tx.set(db.collection('wallet_transactions').doc(), {
+              'uid': buyerId, 'type': 'order_refund', 'amountBdt': refundBdt, 'amountUsd': 0, 'feeBdt': 0,
+              'rate': d['bdtRate'], 'refId': id, 'createdAt': FieldValue.serverTimestamp(),
+            });
+          } else {
+            tx.update(db.collection('users').doc(buyerId), {'walletBalance': FieldValue.increment(amount)});
+          }
         }
       }
       tx.update(orderRef, update);
