@@ -91,11 +91,11 @@ const ORDER_EVENTS = {
  * One in-app notification, in the shared `notifications` collection that the website bell and the
  * Vision Pro app already read (the Flutter app reads it too). `link` is the website page, `route` the app page.
  */
-async function saveNotification(db, uid, { title, message, type, chatId, orderId, orderNumber, invoiceNumber, route }) {
+async function saveNotification(db, uid, { title, message, type, chatId, orderId, orderNumber, invoiceNumber, route, link }) {
     await db.collection("notifications").add({
         userId: uid,
         title, message, type,
-        link: chatId ? `/inbox?chat=${chatId}` : "/profile/orders",
+        link: link || (chatId ? `/inbox?chat=${chatId}` : "/profile/orders"),
         route: route || (chatId ? `/chat/${chatId}` : "/my-orders"),
         chatId: chatId || null,
         orderId: orderId || null,
@@ -135,6 +135,19 @@ async function sendToUser(db, uid, { title, subtitle, body, route, data }) {
                 await userDoc.ref.update({ fcmTokens: admin.firestore.FieldValue.arrayRemove(token) });
             }
         }
+    }
+}
+
+/**
+ * Every admin gets it: bell + push in the iOS / Android app (route opens the app's admin dashboard),
+ * and the website bell links to the admin page. `skipUid` = the admin who caused it, if any.
+ */
+async function notifyAdmins(db, { title, body, type, link, data, skipUid }) {
+    const admins = await db.collection("users").where("role", "==", "admin").get();
+    for (const doc of admins.docs) {
+        if (doc.id === skipUid) continue;
+        await saveNotification(db, doc.id, { title, message: body, type, route: "/admin", link });
+        await sendToUser(db, doc.id, { title, body, route: "/admin", data: data || {} });
     }
 }
 
@@ -339,7 +352,23 @@ exports.onOrderCreated = onDocumentCreated("orders/{orderId}", async (event) => 
         });
     }
 
-    // 2. Notify Buyer
+    // 2. Notify the admins: offline payments wait for them, so every new order is their to-do
+    try {
+        await notifyAdmins(db, {
+            title: `New order ${orderNo}${priceStr ? " · " + priceStr : ""}`,
+            body: order.status === "pending_payment"
+                ? `${order.userName || "A buyer"} ordered "${gigTitle}". Verify the payment to start it.`
+                : `${order.userName || "A buyer"} ordered "${gigTitle}" (paid from wallet).`,
+            type: "admin_order",
+            link: order.status === "pending_payment" ? "/admin/orders?filter=pending_payment" : "/admin/orders",
+            data: { orderId },
+            skipUid: buyerId,
+        });
+    } catch (e) {
+        console.error("Admin order notification failed:", e);
+    }
+
+    // 3. Notify Buyer
     if (buyerId) {
         const title = `Order Placed Successfully · ${orderNo}`;
         const body = order.status === "pending_payment"
@@ -369,6 +398,29 @@ exports.onOrderCreated = onDocumentCreated("orders/{orderId}", async (event) => 
  * Trigger: whenever a gig/service document is updated.
  * Action: sends immediate push notification when admin approves or rejects a gig.
  */
+async function notifyAdminsGigPending(db, gig, gigId) {
+    const seller = gig.sellerName || gig.authorName || "A seller";
+    await notifyAdmins(db, {
+        title: "New gig to review",
+        body: `${seller} submitted "${gig.title || "a service"}" for approval.`,
+        type: "admin_gig",
+        link: "/admin/services",
+        data: { gigId },
+        skipUid: gig.authorId,
+    });
+}
+
+exports.onServiceCreated = onDocumentCreated("services/{gigId}", async (event) => {
+    const gig = event.data ? event.data.data() : null;
+    if (!gig || gig.status !== "pending") return null;
+    try {
+        await notifyAdminsGigPending(admin.firestore(), gig, event.params.gigId);
+    } catch (e) {
+        console.error("Admin gig notification failed:", e);
+    }
+    return null;
+});
+
 exports.onServiceUpdated = onDocumentUpdated("services/{gigId}", async (event) => {
     const before = event.data && event.data.before ? event.data.before.data() : null;
     const after = event.data && event.data.after ? event.data.after.data() : null;
@@ -378,6 +430,16 @@ exports.onServiceUpdated = onDocumentUpdated("services/{gigId}", async (event) =
     const db = admin.firestore();
     const authorId = after.authorId;
     if (!authorId) return null;
+
+    // Sent (back) for approval, e.g. edited after a rejection
+    if (before.status !== "pending" && after.status === "pending") {
+        try {
+            await notifyAdminsGigPending(db, after, gigId);
+        } catch (e) {
+            console.error("Admin gig notification failed:", e);
+        }
+        return null;
+    }
 
     // Gig Approved (status changed to active)
     if (before.status !== "active" && after.status === "active") {
