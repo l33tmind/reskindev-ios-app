@@ -146,6 +146,10 @@ class ProfileScreen extends StatelessWidget {
                                   style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: context.themeTextDark),
                                 ),
                               ),
+                              if (auth.isVerified) ...[
+                                const SizedBox(width: 6),
+                                const VerifiedTick(size: 18),
+                              ],
                               if (auth.isPro) ...[
                                 const SizedBox(width: 8),
                                 const ProBadge(fontSize: 11),
@@ -212,6 +216,44 @@ class ProfileScreen extends StatelessWidget {
                         Text('Active', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.success))
                       else
                         const ProBadge(fontSize: 10.5),
+                      const SizedBox(width: 8),
+                      Icon(Icons.arrow_forward_ios, size: 16, color: context.themeTextLight.withValues(alpha: 0.5)),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                _buildListTile(
+                  context: context,
+                  icon: Icons.verified_rounded,
+                  iconColor: VerifiedTick.blue,
+                  title: 'Identity verification',
+                  subtitle: auth.isVerified
+                      ? 'Your blue tick is showing'
+                      : auth.verificationStatus == 'pending'
+                          ? 'We\'re checking your documents'
+                          : auth.verificationStatus == 'rejected'
+                              ? 'Not approved, you can send it again'
+                              : 'Free for Reskindev Pro members',
+                  onTap: () => context.push('/verification'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        auth.isVerified
+                            ? 'Verified ✓'
+                            : auth.verificationStatus == 'pending'
+                                ? 'Under review'
+                                : 'Get the blue tick',
+                        style: GoogleFonts.inter(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                          color: auth.isVerified
+                              ? VerifiedTick.blue
+                              : auth.verificationStatus == 'pending'
+                                  ? AppTheme.warning
+                                  : context.themeTextLight,
+                        ),
+                      ),
                       const SizedBox(width: 8),
                       Icon(Icons.arrow_forward_ios, size: 16, color: context.themeTextLight.withValues(alpha: 0.5)),
                     ],

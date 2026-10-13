@@ -463,10 +463,12 @@ class _ChatScreenState extends State<ChatScreen> {
             String displayAvatar = _targetUserAvatar;
             String displayName = _targetUserName;
             bool targetIsPro = false;
+            bool targetVerified = false;
             
             if (userSnapshot.hasData && userSnapshot.data != null && userSnapshot.data!.exists) {
               final data = userSnapshot.data!.data() as Map<String, dynamic>?;
               targetIsPro = isPro(data);
+              targetVerified = data?['verified'] == true;
               if (data != null) {
                 displayAvatar = data['photoUrl'] ?? data['profilePicture'] ?? displayAvatar;
                 final n = data['name'] ?? data['displayName'] ?? data['username'] ?? '';
@@ -506,6 +508,10 @@ class _ChatScreenState extends State<ChatScreen> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
+                          if (targetVerified) ...[
+                            const SizedBox(width: 4),
+                            const VerifiedTick(size: 15),
+                          ],
                           if (targetIsPro) ...[
                             const SizedBox(width: 6),
                             const ProBadge(fontSize: 9),

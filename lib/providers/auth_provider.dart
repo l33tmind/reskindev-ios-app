@@ -78,6 +78,13 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Pro is on: pro.active && pro.expiresAt > now.
   bool get isPro => pro_svc.isPro(_userDoc);
   DateTime? get proExpiresAt => pro_svc.proExpiresAt(_userDoc);
+  /// Blue tick: users/{uid}.verified (written only by Cloud Functions / admins).
+  bool get isVerified => _userDoc?['verified'] == true;
+  /// users/{uid}.verificationStatus: pending | approved | rejected | revoked (null when never applied).
+  String? get verificationStatus {
+    final s = _userDoc?['verificationStatus'];
+    return s is String && s.isNotEmpty ? s : null;
+  }
 
   void _listenToUserDoc(String uid) {
     if (_userDocUid == uid && _userDocSub != null) return;
@@ -86,9 +93,14 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
     _userDocSub = _db.collection('users').doc(uid).snapshots().listen((snap) {
       final wasPro = isPro;
       final oldExp = proExpiresAt;
+      final wasVerified = isVerified;
+      final oldVerification = verificationStatus;
       _userDoc = snap.data();
       _scheduleProExpiryCheck();
-      if (wasPro != isPro || oldExp != proExpiresAt) notifyListeners();
+      if (wasPro != isPro || oldExp != proExpiresAt ||
+          wasVerified != isVerified || oldVerification != verificationStatus) {
+        notifyListeners();
+      }
     }, onError: (e) => debugPrint('users doc listener error: $e'));
   }
 

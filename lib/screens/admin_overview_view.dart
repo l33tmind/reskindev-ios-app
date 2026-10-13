@@ -9,7 +9,7 @@ import 'admin_users_view.dart';
 
 /// What needs the admin now, then how the business is doing. Every number is live and tappable.
 class AdminOverviewView extends StatelessWidget {
-  /// Opens a tab of the dashboard: 'orders:<filter>', 'users', 'gigs', 'tickets'
+  /// Opens a tab of the dashboard: 'orders:<filter>', 'users', 'gigs', 'tickets', 'verifications'
   final void Function(String target)? onOpen;
   const AdminOverviewView({super.key, this.onOpen});
 
@@ -25,7 +25,9 @@ class AdminOverviewView extends StatelessWidget {
           stream: db.collection('services').where('status', isEqualTo: 'pending').snapshots(),
           builder: (context, gigSnap) => StreamBuilder<QuerySnapshot>(
             stream: db.collection('support_tickets').snapshots(),
-            builder: (context, ticketSnap) {
+            builder: (context, ticketSnap) => StreamBuilder<QuerySnapshot>(
+            stream: db.collection('verifications').where('status', isEqualTo: 'pending').snapshots(),
+            builder: (context, verificationSnap) {
               final error = orderSnap.error ?? userSnap.error;
               if (error != null) return AdminErrorBox(error: error);
               if (!orderSnap.hasData || !userSnap.hasData) {
@@ -40,6 +42,7 @@ class AdminOverviewView extends StatelessWidget {
               final delivered = count((o) => o.status == 'delivered');
               final active = count((o) => const ['requirements', 'processing', 'in_progress', 'revision'].contains(o.status));
               final pendingGigs = gigSnap.data?.docs.length ?? 0;
+              final pendingVerifications = verificationSnap.data?.docs.length ?? 0;
               final openTickets = (ticketSnap.data?.docs ?? [])
                   .where((d) => ((d.data() as Map<String, dynamic>)['status'] ?? 'open') == 'open').length;
 
@@ -58,6 +61,7 @@ class AdminOverviewView extends StatelessWidget {
                 _Todo('Orders to verify', toVerify, Icons.payments_outlined, Colors.orange, 'orders:To verify'),
                 _Todo('Problems / disputes', problems, Icons.report_gmailerrorred_rounded, AppTheme.error, 'orders:Problems'),
                 _Todo('Gigs to approve', pendingGigs, Icons.work_outline_rounded, Colors.purple, 'gigs'),
+                _Todo('Verifications to review', pendingVerifications, Icons.verified_user_outlined, const Color(0xFF1D9BF0), 'verifications'),
                 _Todo('Open support tickets', openTickets, Icons.support_agent_rounded, AppTheme.info, 'tickets'),
               ].where((t) => t.count > 0).toList();
 
@@ -129,6 +133,7 @@ class AdminOverviewView extends StatelessWidget {
                 ],
               );
             },
+          ),
           ),
         ),
       ),

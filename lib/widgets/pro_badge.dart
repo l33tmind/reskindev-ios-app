@@ -5,7 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../services/pro_service.dart';
 
 /// Small amber "PRO" pill with a bolt, shown next to a Reskindev Pro member's name.
-/// (The blue tick for identity verification is a separate thing.)
+/// (The blue tick for identity verification is [VerifiedTick].)
 class ProBadge extends StatelessWidget {
   final double fontSize;
   const ProBadge({super.key, this.fontSize = 10});
@@ -42,13 +42,29 @@ class ProBadge extends StatelessWidget {
   }
 }
 
-/// [ProBadge] for someone known only by uid: streams users/{uid} and shows the badge while they're Pro.
-/// [leading] is the gap placed before the badge (only when it shows).
+/// Small blue tick for an identity-verified person (users/{uid}.verified == true).
+class VerifiedTick extends StatelessWidget {
+  final double size;
+  const VerifiedTick({super.key, this.size = 15});
+
+  static const Color blue = Color(0xFF1D9BF0);
+
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: 'Identity verified',
+        child: Icon(Icons.verified_rounded, size: size, color: blue),
+      );
+}
+
+/// [ProBadge] for someone known only by uid: streams users/{uid} and shows the blue tick (when verified)
+/// and the PRO badge (while they're Pro). [leading] is the gap placed before the first badge (only when one shows).
 class LiveProBadge extends StatelessWidget {
   final String uid;
   final double fontSize;
   final double leading;
-  const LiveProBadge({super.key, required this.uid, this.fontSize = 10, this.leading = 6});
+  /// Also show the blue tick for verified people.
+  final bool showVerified;
+  const LiveProBadge({super.key, required this.uid, this.fontSize = 10, this.leading = 6, this.showVerified = true});
 
   @override
   Widget build(BuildContext context) {
@@ -57,10 +73,19 @@ class LiveProBadge extends StatelessWidget {
       stream: FirebaseFirestore.instance.collection('users').doc(uid).snapshots(),
       builder: (context, snap) {
         final data = snap.data?.data() as Map<String, dynamic>?;
-        if (!isPro(data)) return const SizedBox.shrink();
+        final verified = showVerified && data?['verified'] == true;
+        final pro = isPro(data);
+        if (!verified && !pro) return const SizedBox.shrink();
         return Padding(
           padding: EdgeInsets.only(left: leading),
-          child: ProBadge(fontSize: fontSize),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (verified) VerifiedTick(size: fontSize * 1.55),
+              if (verified && pro) SizedBox(width: fontSize * 0.4),
+              if (pro) ProBadge(fontSize: fontSize),
+            ],
+          ),
         );
       },
     );

@@ -23,7 +23,7 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         isAdmin() ||
         (request.auth.uid == userId
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pro', 'verified']))
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pro', 'verified', 'verificationStatus', 'verifiedAt']))
       );
       allow delete: if isAdmin();
 
@@ -74,6 +74,12 @@ service cloud.firestore {
     match /reports/{reportId} {
       allow read, write: if isAuthenticated();
     }
+    // Identity verification requests: the person and admins can read; only Cloud Functions write
+    match /verifications/{uid} {
+      allow read: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      allow write: if false;
+    }
+
     match /support_tickets/{ticketId} {
       allow read, write: if isAuthenticated();
     }

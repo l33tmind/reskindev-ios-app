@@ -20,6 +20,7 @@ import 'admin_coupons_view.dart';
 import 'admin_reports_view.dart';
 import 'admin_support_tickets_view.dart';
 import 'admin_orders_view.dart';
+import 'admin_verifications_view.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -40,15 +41,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       .where('status', isEqualTo: 'pending').snapshots();
   final _openTickets = FirebaseFirestore.instance.collection('support_tickets')
       .where('status', isEqualTo: 'open').snapshots();
+  final _pendingVerifications = FirebaseFirestore.instance.collection('verifications')
+      .where('status', isEqualTo: 'pending').snapshots();
 
-  /// From the overview: 'orders:<filter>', 'users', 'gigs', 'tickets'
+  /// From the overview: 'orders:<filter>', 'users', 'gigs', 'tickets', 'verifications'
   void _open(String target) {
     setState(() {
       if (target.startsWith('orders')) {
         _ordersFilter = target.contains(':') ? target.split(':').last : 'All';
         _selectedIndex = 1;
       } else {
-        _selectedIndex = {'users': 2, 'gigs': 3, 'tickets': 7}[target] ?? 0;
+        _selectedIndex = {'users': 2, 'gigs': 3, 'tickets': 7, 'verifications': 9}[target] ?? 0;
       }
     });
   }
@@ -63,6 +66,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case 5: return const AdminCouponsView();
       case 6: return _buildSettingsTab();
       case 7: return const AdminSupportTicketsView();
+      case 9: return const AdminVerificationsView();
       default: return const AdminReportsView();
     }
   }
@@ -119,6 +123,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   _badgeTab('Overview', 0, null),
                   _badgeTab('Orders', 1, _toVerify),
                   _badgeTab('Users', 2, null),
+                  _badgeTab('Verifications', 9, _pendingVerifications),
                   _badgeTab('Gigs', 3, _pendingGigs),
                   _badgeTab('Tickets', 7, _openTickets),
                   _badgeTab('Reports', 8, null),
@@ -167,6 +172,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   label: 'Users',
                   isActive: _selectedIndex == 2,
                   onTap: () => setState(() => _selectedIndex = 2),
+                ),
+                StreamBuilder<QuerySnapshot>(
+                  stream: _pendingVerifications,
+                  builder: (_, snap) => _SidebarItem(
+                    icon: Icons.verified_user_outlined,
+                    label: 'Verifications',
+                    count: snap.data?.docs.length ?? 0,
+                    isActive: _selectedIndex == 9,
+                    onTap: () => setState(() => _selectedIndex = 9),
+                  ),
                 ),
                 _SidebarItem(
                   icon: Icons.design_services,
@@ -1105,8 +1120,10 @@ class _SidebarItem extends StatelessWidget {
   final String label;
   final bool isActive;
   final VoidCallback? onTap;
+  /// Red badge (e.g. requests waiting); hidden when 0.
+  final int count;
 
-  const _SidebarItem({required this.icon, required this.label, required this.isActive, this.onTap});
+  const _SidebarItem({required this.icon, required this.label, required this.isActive, this.onTap, this.count = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -1122,6 +1139,13 @@ class _SidebarItem extends StatelessWidget {
             color: isActive ? AppTheme.primary : context.themeTextLight,
           ),
         ),
+        trailing: count > 0
+            ? Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(color: AppTheme.error, borderRadius: BorderRadius.circular(10)),
+                child: Text('$count', style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w800, color: Colors.white)),
+              )
+            : null,
         contentPadding: const EdgeInsets.symmetric(horizontal: 24),
         onTap: onTap,
       ),

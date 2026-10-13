@@ -8,6 +8,8 @@ import 'admin_orders_view.dart';
 import '../services/pro_service.dart';
 import '../services/pro_service.dart' as pro_svc show isPro;
 import '../widgets/pro_badge.dart';
+import '../services/verification_service.dart';
+import 'admin_verifications_view.dart';
 
 /// One row of users/{uid}, read the same way on every platform
 class AdminUser {
@@ -199,7 +201,7 @@ class _UserRow extends StatelessWidget {
                       ),
                       if (user.verified) ...[
                         const SizedBox(width: 4),
-                        const Icon(Icons.verified_rounded, size: 15, color: AppTheme.info),
+                        const VerifiedTick(size: 15),
                       ],
                       if (user.isPro) ...[
                         const SizedBox(width: 6),
@@ -351,6 +353,7 @@ class _UserSheet extends StatelessWidget {
                         ),
                       ]),
                     _ProAdminBox(user: u),
+                    _VerificationAdminBox(uid: u.uid, verified: u.verified, name: u.name),
                     _Section(title: 'Orders as buyer (${bought.length})'),
                     if (bought.isEmpty) const AdminEmpty(text: 'No orders placed.'),
                     for (final o in bought.take(20)) AdminOrderRow(order: o, compact: true),
@@ -549,6 +552,54 @@ class _ProAdminBoxState extends State<_ProAdminBox> {
           ],
         ]),
       ],
+    );
+  }
+}
+
+/// Identity verification status of one person + a link to their request.
+class _VerificationAdminBox extends StatelessWidget {
+  final String uid;
+  final bool verified;
+  final String name;
+  const _VerificationAdminBox({required this.uid, required this.verified, required this.name});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot<Map<String, dynamic>>>(
+      stream: VerificationService.docFor(uid).snapshots(),
+      builder: (context, snap) {
+        final exists = snap.data?.exists == true;
+        final req = exists ? VerificationRequest.fromDoc(snap.data!) : null;
+        final status = req?.status ?? (verified ? 'approved' : '');
+        final String text;
+        if (snap.hasError) {
+          text = verified ? 'Verified' : 'Could not load the request';
+        } else if (req == null) {
+          text = verified ? 'Verified (set by an admin, no request)' : 'No request yet';
+        } else {
+          text = '${verificationLabel(req.status)}'
+              '${req.submittedAt != null ? ' · sent ${adminDate(req.submittedAt!)}' : ''}'
+              '${req.reviewedAt != null && req.status != 'pending' ? ' · reviewed ${adminDate(req.reviewedAt!)}' : ''}';
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const _Section(title: 'Identity verification'),
+            Row(children: [
+              Icon(Icons.verified_rounded, size: 18, color: status.isEmpty ? context.themeTextLight : verificationColor(status)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(text, style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.themeTextDark)),
+              ),
+              if (req != null)
+                TextButton(
+                  onPressed: () => showAdminVerificationSheet(context, uid),
+                  child: Text(req.status == 'pending' ? 'Review request' : 'Open request'),
+                ),
+            ]),
+          ],
+        );
+      },
     );
   }
 }

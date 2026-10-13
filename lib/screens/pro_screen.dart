@@ -301,8 +301,8 @@ class _ProScreenState extends State<ProScreen> {
   }
 
   Widget _benefits(BuildContext context) {
-    Widget row(IconData icon, String title, String sub, {bool soon = false}) {
-      return Padding(
+    Widget row(IconData icon, String title, String sub, {bool soon = false, VoidCallback? onTap}) {
+      final content = Padding(
         padding: const EdgeInsets.symmetric(vertical: 8),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -344,9 +344,16 @@ class _ProScreenState extends State<ProScreen> {
                 ],
               ),
             ),
+            if (onTap != null)
+              Padding(
+                padding: const EdgeInsets.only(left: 8, top: 8),
+                child: Icon(Icons.arrow_forward_ios, size: 14, color: context.themeTextLight.withValues(alpha: 0.6)),
+              ),
           ],
         ),
       );
+      if (onTap == null) return content;
+      return InkWell(borderRadius: BorderRadius.circular(12), onTap: onTap, child: content);
     }
 
     return _card(
@@ -361,8 +368,9 @@ class _ProScreenState extends State<ProScreen> {
           row(Icons.chat_bubble_outline_rounded, 'Message any seller', 'Start a direct chat with any seller, no order needed.'),
           row(Icons.perm_media_outlined, 'Photos and videos in every chat',
               'Send photos (up to 5 MB) and videos (up to 100 MB) before you pay.'),
-          row(Icons.verified_outlined, 'Free identity verification', 'Get the blue tick at no extra cost.', soon: true),
-          row(Icons.support_agent_rounded, 'Priority support', 'Your questions go to the front of the line.', soon: true),
+          row(Icons.verified_outlined, 'Free identity verification', 'Get the blue tick at no extra cost.',
+              onTap: () => context.push('/verification')),
+          row(Icons.support_agent_rounded, 'Priority support', 'Your questions go to the front of the line.'),
         ],
       ),
     );

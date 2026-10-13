@@ -29,6 +29,7 @@ import 'screens/gig_editor_screen.dart';
 import 'screens/all_services_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/pro_screen.dart';
+import 'screens/verification_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page transition helper
@@ -152,6 +153,11 @@ final GoRouter appRouter = GoRouter(
       parentNavigatorKey: rootNavigatorKey,
       path: '/pro',
       builder: (_, __) => const ProScreen(),
+    ),
+    GoRoute(
+      parentNavigatorKey: rootNavigatorKey,
+      path: '/verification',
+      builder: (_, __) => const VerificationScreen(),
     ),
     GoRoute(
       parentNavigatorKey: rootNavigatorKey,
