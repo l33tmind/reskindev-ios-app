@@ -9,6 +9,7 @@ import '../providers/chat_provider.dart';
 import '../models/chat_models.dart';
 
 import '../theme.dart';
+import '../widgets/pro_badge.dart';
 import '../widgets/user_avatar.dart';
 
 class InboxScreen extends StatefulWidget {
@@ -196,13 +197,14 @@ class _InboxScreenState extends State<InboxScreen> {
                       },
                       title: Row(
                         children: [
-                          Expanded(
+                          Flexible(
                             child: LiveUserName(
                               uid: otherUserId,
                               fallback: name,
                               style: GoogleFonts.outfit(fontWeight: unread > 0 ? FontWeight.bold : FontWeight.w500, fontSize: 16, color: context.themeTextDark),
                             ),
                           ),
+                          LiveProBadge(uid: otherUserId, fontSize: 9),
                         ],
                       ),
                       // Live profile photo (or colored initials), with a green dot when they're online

@@ -16,6 +16,7 @@ import 'providers/settings_provider.dart';
 import 'providers/page_provider.dart';
 import 'providers/connectivity_provider.dart';
 import 'providers/chat_provider.dart';
+import 'services/pro_service.dart';
 import 'router.dart';
 import 'screens/chat_screen.dart';
 
@@ -206,6 +207,8 @@ class MyApp extends StatelessWidget {
           ChangeNotifierProvider(create: (_) => PageProvider()),
           ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
           ChangeNotifierProvider(create: (_) => ChatProvider()),
+          // Created at launch so store transactions (renewals, pending purchases) are picked up right away
+          ChangeNotifierProvider(lazy: false, create: (_) => ProService()),
         ],
         child: const _AppRouter(),
       ),

@@ -24,6 +24,7 @@ final class ChatStore {
         let photoUrl: String
         let isOnline: Bool
         let blockedUsers: [String]
+        var isPro = false
     }
 
     /// Chat open in the Inbox window
@@ -61,6 +62,8 @@ final class ChatStore {
             Task { [weak self] in
                 guard let d = try? await Firestore.firestore().collection("users").document(uid).getDocument().data() else { return }
                 self?.photos[uid] = FS.string(d["photoURL"]) ?? FS.string(d["photoUrl"]) ?? ""
+                // Same read tells us whether they're Pro (badge on inbox rows)
+                ProDirectory.shared.record(uid: uid, isPro: ProStatus.isPro(d))
             }
         }
         return photos[uid] ?? ""
@@ -113,9 +116,13 @@ final class ChatStore {
         return chatOrders.first
     }
 
-    /// Photos and videos are for delivery work, so they open up once the chat's order is paid
+    /// Set by the app from the session: Reskindev Pro members can send media in any chat
+    var iAmPro = false
+
+    /// Photos and videos open up once the chat's order is paid, or in any chat for Reskindev Pro members
     /// (same rule on the website, iOS and Android)
     var canSendMedia: Bool {
+        if iAmPro, activeChat != nil { return true }
         guard let id = activeChat?.orderId, let order = chatOrders.first(where: { $0.id == id }) else { return false }
         return ["requirements", "processing", "in_progress", "revision", "delivered", "completed", "disputed"].contains(order.status)
     }
@@ -196,8 +203,10 @@ final class ChatStore {
                 name: FS.string(d["displayName"]) ?? FS.string(d["name"]) ?? chat.title(me: uid),
                 photoUrl: FS.string(d["photoURL"]) ?? FS.string(d["photoUrl"]) ?? "",
                 isOnline: d["isOnline"] as? Bool ?? false,
-                blockedUsers: d["blockedUsers"] as? [String] ?? []
+                blockedUsers: d["blockedUsers"] as? [String] ?? [],
+                isPro: ProStatus.isPro(d)
             )
+            ProDirectory.shared.record(uid: other, isPro: ProStatus.isPro(d))
         })
 
         Task { [weak self] in await self?.loadQuickReplies() }

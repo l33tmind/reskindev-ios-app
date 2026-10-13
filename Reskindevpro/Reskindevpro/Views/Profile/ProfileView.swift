@@ -23,7 +23,20 @@ struct ProfileView: View {
                     List(selection: Binding($appModel.profileTab)) {
                         Section {
                             ForEach(AppModel.ProfileTab.allCases.filter(isVisible)) { tab in
-                                Label(tab.rawValue, systemImage: tab.icon).tag(tab)
+                                if tab == .pro {
+                                    HStack {
+                                        Label(tab.rawValue, systemImage: tab.icon)
+                                        Spacer()
+                                        if session.isPro {
+                                            Text("Active").font(.caption.weight(.semibold)).foregroundStyle(Color.proAmber)
+                                        } else {
+                                            ProBadge(size: .small)
+                                        }
+                                    }
+                                    .tag(tab)
+                                } else {
+                                    Label(tab.rawValue, systemImage: tab.icon).tag(tab)
+                                }
                             }
                         }
                         Section {
@@ -47,6 +60,7 @@ struct ProfileView: View {
                     case .settings: ProfileSettingsView()
                     case .myGigs: MyGigsView()
                     case .earnings: EarningsView()
+                    case .pro: ProView()
                     }
                 }
             } else {
@@ -95,7 +109,14 @@ private struct ProfileOverview: View {
                     UserAvatar(name: session.displayName, photoUrl: session.photoUrl, size: 110)
                         .shadow(color: Color.brandGreen.opacity(0.5), radius: 18)
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(session.nameOrFallback).font(.extraLargeTitle2.weight(.semibold))
+                        HStack(spacing: 12) {
+                            Text(session.nameOrFallback).font(.extraLargeTitle2.weight(.semibold))
+                            if session.isVerified {
+                                Image(systemName: "checkmark.seal.fill").font(.title2).foregroundStyle(.blue)
+                                    .accessibilityLabel("Verified")
+                            }
+                            if session.isPro { ProBadge(size: .large) }
+                        }
                         if !session.username.isEmpty {
                             Text("@\(session.username)").font(.title3).foregroundStyle(.secondary)
                         }

@@ -17,8 +17,14 @@ service cloud.firestore {
     // ---------- Users ----------
     match /users/{userId} {
       allow read: if isAuthenticated();
-      allow create: if isAuthenticated() && request.auth.uid == userId;
-      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      // pro (Reskindev Pro subscription) and verified are written only by Cloud Functions / admins
+      allow create: if isAuthenticated() && request.auth.uid == userId
+                    && !('pro' in request.resource.data) && !('verified' in request.resource.data);
+      allow update: if isAuthenticated() && (
+        isAdmin() ||
+        (request.auth.uid == userId
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pro', 'verified']))
+      );
       allow delete: if isAdmin();
 
       // reviews, notifications, ... are written by other users/admin/functions.

@@ -116,8 +116,11 @@ struct ChatView: View {
         return HStack(alignment: .center, spacing: 16) {
             UserAvatar(name: name, photoUrl: chat.photo(for: conversation.otherID(me: me)), size: 52)
             VStack(alignment: .leading, spacing: 4) {
-                (Text("WorkStream with ").foregroundStyle(.secondary) + Text(name).bold())
-                    .font(.title3)
+                HStack(spacing: 8) {
+                    (Text("WorkStream with ").foregroundStyle(.secondary) + Text(name).bold())
+                        .font(.title3)
+                    if chat.otherUser?.isPro == true { ProBadge() }
+                }
                 if let order {
                     Text(order.gigTitle).font(.headline).foregroundStyle(Color.brandGreen).lineLimit(1)
                 } else {
@@ -257,7 +260,7 @@ struct ChatView: View {
             }
 
             HStack(spacing: 12) {
-                // Photos (5 MB) and videos (100 MB) for the delivery work, once the order is paid
+                // Photos (5 MB) and videos (100 MB): once the order is paid, or any chat for Reskindev Pro members
                 if chat.canSendMedia {
                     PhotosPicker(selection: $photoItem, matching: .any(of: [.images, .videos])) {
                         Group {

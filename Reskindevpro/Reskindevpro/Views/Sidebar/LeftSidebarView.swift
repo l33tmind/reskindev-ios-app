@@ -38,6 +38,7 @@ struct LeftSidebarView: View {
                     if session.isVerified {
                         Image(systemName: "checkmark.seal.fill").foregroundStyle(.blue).accessibilityLabel("Verified")
                     }
+                    if session.isPro { ProBadge(size: .small) }
                 }
 
                 if !session.isSignedIn {
@@ -67,6 +68,9 @@ struct LeftSidebarView: View {
                 }
                 SidebarNavItem(icon: "heart", text: "Saved Services") { openProfile(.saved) }
                 SidebarNavItem(icon: "gearshape", text: "Settings") { openProfile(.settings) }
+                if session.isSignedIn {
+                    SidebarNavItem(icon: "bolt.fill", text: "Reskindev Pro") { openProfile(.pro) }
+                }
                 SidebarNavItem(icon: "questionmark.circle", text: "Help & Policies") {
                     openWindow(id: WindowID.page, value: WindowID.single)
                 }

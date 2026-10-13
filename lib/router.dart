@@ -28,6 +28,7 @@ import 'models/gig_model.dart';
 import 'screens/gig_editor_screen.dart';
 import 'screens/all_services_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/pro_screen.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Page transition helper
@@ -146,6 +147,11 @@ final GoRouter appRouter = GoRouter(
       parentNavigatorKey: rootNavigatorKey,
       path: '/appearance',
       builder: (_, __) => const AppearanceScreen(),
+    ),
+    GoRoute(
+      parentNavigatorKey: rootNavigatorKey,
+      path: '/pro',
+      builder: (_, __) => const ProScreen(),
     ),
     GoRoute(
       parentNavigatorKey: rootNavigatorKey,

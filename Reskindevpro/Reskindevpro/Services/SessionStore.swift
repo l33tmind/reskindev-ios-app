@@ -27,6 +27,12 @@ final class SessionStore {
     /// Admin → Users: status "blocked" / verified badge
     private(set) var accountStatus = "active"
     private(set) var isVerified = false
+    /// Reskindev Pro (users/{uid}.pro, written only by Cloud Functions)
+    private(set) var pro = ProStatus()
+    var isPro: Bool { pro.isPro }
+    var proPlan: String? { pro.plan }
+    var proSource: String? { pro.source }
+    var proExpiresAt: Date? { pro.expiresAt }
     /// Admin order updates (notifications) + broadcasts (users/{uid}/notifications)
     private(set) var notifications: [AppNotification] = []
     var unreadNotifications: Int { notifications.filter { !$0.read }.count }
@@ -230,6 +236,7 @@ final class SessionStore {
         notifications = []
         accountStatus = "active"
         isVerified = false
+        pro = ProStatus()
 
         uid = user?.uid
         email = user?.email ?? ""
@@ -273,6 +280,8 @@ final class SessionStore {
             self.memberSince = FS.date(d["createdAt"])
             self.accountStatus = FS.string(d["status"]) ?? "active"
             self.isVerified = d["verified"] as? Bool ?? false
+            self.pro = ProStatus(userData: d)
+            ProDirectory.shared.record(uid: user.uid, isPro: self.pro.isPro)
             if (d["isOnline"] as? Bool) != true {
                 ref.setData(["isOnline": true, "lastLogin": FieldValue.serverTimestamp()], merge: true)
             }

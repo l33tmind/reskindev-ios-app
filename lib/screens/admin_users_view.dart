@@ -5,6 +5,9 @@ import '../theme.dart';
 import '../models/order_model.dart';
 import '../widgets/user_avatar.dart';
 import 'admin_orders_view.dart';
+import '../services/pro_service.dart';
+import '../services/pro_service.dart' as pro_svc show isPro;
+import '../widgets/pro_badge.dart';
 
 /// One row of users/{uid}, read the same way on every platform
 class AdminUser {
@@ -22,6 +25,11 @@ class AdminUser {
   final DateTime? lastLogin;
   final String phone;
   final String country;
+  /// Reskindev Pro: active and not expired
+  final bool isPro;
+  final DateTime? proExpires;
+  final String proSource;
+  final String proPlan;
 
   AdminUser.fromDoc(DocumentSnapshot doc)
       : uid = doc.id,
@@ -38,7 +46,11 @@ class AdminUser {
         joined = _date(_map(doc)['createdAt']),
         lastLogin = _date(_map(doc)['lastLogin']),
         phone = _str(doc, ['phone']),
-        country = _str(doc, ['country']);
+        country = _str(doc, ['country']),
+        isPro = pro_svc.isPro(_map(doc)),
+        proExpires = proExpiresAt(_map(doc)),
+        proSource = (proOf(_map(doc))?['source'] ?? '').toString(),
+        proPlan = (proOf(_map(doc))?['plan'] ?? '').toString();
 
   bool get isAdmin => role == 'admin';
   bool get isSeller => role == 'freelancer' || role == 'admin';
@@ -86,7 +98,7 @@ class AdminUsersView extends StatefulWidget {
 }
 
 class _AdminUsersViewState extends State<AdminUsersView> {
-  static const _filters = ['All', 'Buyers', 'Sellers', 'Admins', 'Guests', 'Blocked'];
+  static const _filters = ['All', 'Buyers', 'Sellers', 'Pro', 'Admins', 'Guests', 'Blocked'];
   String _filter = 'All';
   String _query = '';
   late final Stream<QuerySnapshot> _users = FirebaseFirestore.instance.collection('users').snapshots();
@@ -95,6 +107,7 @@ class _AdminUsersViewState extends State<AdminUsersView> {
     switch (filter) {
       case 'Buyers': return !u.isSeller && !u.isGuest;
       case 'Sellers': return u.role == 'freelancer' && !u.isGuest;
+      case 'Pro': return u.isPro;
       case 'Admins': return u.isAdmin;
       case 'Guests': return u.isGuest;
       case 'Blocked': return u.blocked;
@@ -188,6 +201,10 @@ class _UserRow extends StatelessWidget {
                         const SizedBox(width: 4),
                         const Icon(Icons.verified_rounded, size: 15, color: AppTheme.info),
                       ],
+                      if (user.isPro) ...[
+                        const SizedBox(width: 6),
+                        const ProBadge(fontSize: 9),
+                      ],
                     ],
                   ),
                   Text(user.email.isNotEmpty ? user.email : (user.username.isNotEmpty ? '@${user.username}' : 'No email'),
@@ -276,6 +293,7 @@ class _UserSheet extends StatelessWidget {
                                 AdminPill(text: roleLabel(u), color: roleColor(u)),
                                 if (u.blocked) const AdminPill(text: 'Blocked', color: AppTheme.error),
                                 if (u.verified) const AdminPill(text: 'Verified', color: AppTheme.info),
+                                if (u.isPro) const ProBadge(fontSize: 10.5),
                               ]),
                             ],
                           ),
@@ -332,6 +350,7 @@ class _UserSheet extends StatelessWidget {
                           ),
                         ),
                       ]),
+                    _ProAdminBox(user: u),
                     _Section(title: 'Orders as buyer (${bought.length})'),
                     if (bought.isEmpty) const AdminEmpty(text: 'No orders placed.'),
                     for (final o in bought.take(20)) AdminOrderRow(order: o, compact: true),
@@ -437,4 +456,99 @@ class _Section extends StatelessWidget {
         child: Text(title.toUpperCase(),
             style: GoogleFonts.inter(fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 0.6, color: context.themeTextLight)),
       );
+}
+
+/// Reskindev Pro status of one person + Give / Remove (adminSetPro callable).
+class _ProAdminBox extends StatefulWidget {
+  final AdminUser user;
+  const _ProAdminBox({required this.user});
+
+  @override
+  State<_ProAdminBox> createState() => _ProAdminBoxState();
+}
+
+class _ProAdminBoxState extends State<_ProAdminBox> {
+  bool _busy = false;
+
+  Future<void> _run(Future<void> Function() action, String done) async {
+    setState(() => _busy = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await action();
+      messenger.showSnackBar(SnackBar(content: Text(done)));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(proErrorMessage(e)), backgroundColor: AppTheme.error));
+    }
+    if (mounted) setState(() => _busy = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final u = widget.user;
+    final source = switch (u.proSource) {
+      'apple' => 'App Store',
+      'google' => 'Google Play',
+      'wallet' => 'wallet',
+      'admin' => 'admin gift',
+      _ => u.proSource,
+    };
+    final String status;
+    if (u.isPro) {
+      status = 'Pro${u.proPlan.isNotEmpty ? ' · ${u.proPlan}' : ''}${source.isNotEmpty ? ' · $source' : ''}'
+          '${u.proExpires != null ? ' · until ${adminDate(u.proExpires!)}' : ''}';
+    } else if (u.proExpires != null) {
+      status = 'Not Pro · ended ${adminDate(u.proExpires!)}';
+    } else {
+      status = 'Not Pro';
+    }
+
+    ButtonStyle outlined(Color c) => OutlinedButton.styleFrom(
+          foregroundColor: c,
+          side: BorderSide(color: c.withValues(alpha: 0.5)),
+          minimumSize: const Size(0, 40),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const _Section(title: 'Reskindev Pro'),
+        Row(children: [
+          Icon(Icons.bolt_rounded, size: 18, color: u.isPro ? ProBadge.amber : context.themeTextLight),
+          const SizedBox(width: 8),
+          Expanded(child: Text(status, style: GoogleFonts.inter(fontSize: 13.5, fontWeight: FontWeight.w600, color: context.themeTextDark))),
+          if (_busy) const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primary)),
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(
+            child: OutlinedButton(
+              onPressed: _busy ? null : () => _run(() => ProService.adminGivePro(u.uid, 30), '${u.name} has Pro for 30 days.'),
+              style: outlined(ProBadge.amberDark),
+              child: const Text('Give Pro 30 days', textAlign: TextAlign.center),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: OutlinedButton(
+              onPressed: _busy ? null : () => _run(() => ProService.adminGivePro(u.uid, 365), '${u.name} has Pro for 1 year.'),
+              style: outlined(ProBadge.amberDark),
+              child: const Text('Give Pro 1 year', textAlign: TextAlign.center),
+            ),
+          ),
+          if (u.isPro) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _busy ? null : () => _run(() => ProService.adminRemovePro(u.uid), 'Pro removed from ${u.name}.'),
+                style: outlined(AppTheme.error),
+                child: const Text('Remove Pro', textAlign: TextAlign.center),
+              ),
+            ),
+          ],
+        ]),
+      ],
+    );
+  }
 }

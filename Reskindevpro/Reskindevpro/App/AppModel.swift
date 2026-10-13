@@ -25,6 +25,7 @@ class AppModel {
         case settings = "Settings"
         case myGigs = "My Gigs"
         case earnings = "Earnings"
+        case pro = "Reskindev Pro"
         var id: String { rawValue }
         var icon: String {
             switch self {
@@ -33,6 +34,7 @@ class AppModel {
             case .settings: "gearshape"
             case .myGigs: "square.stack.3d.up"
             case .earnings: "dollarsign.circle"
+            case .pro: "bolt.fill"
             }
         }
         var sellerOnly: Bool { self == .myGigs || self == .earnings }

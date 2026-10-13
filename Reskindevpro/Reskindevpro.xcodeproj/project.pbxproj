@@ -69,6 +69,7 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
+				Resources/ReskindevPro.storekit,
 			);
 			target = 3DE4BD633065A5040030D7A6 /* Reskindevpro */;
 		};

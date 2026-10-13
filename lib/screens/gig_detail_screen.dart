@@ -5,6 +5,7 @@ import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:html/dom.dart' as dom;
+import '../widgets/pro_badge.dart';
 import '../widgets/gig_description.dart';
 import '../widgets/gig_cover.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -1279,7 +1280,16 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(gig.authorName.isNotEmpty ? gig.authorName : 'Verified Seller', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16, color: context.themeTextDark)),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(gig.authorName.isNotEmpty ? gig.authorName : 'Verified Seller',
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16, color: context.themeTextDark)),
+                        ),
+                        LiveProBadge(uid: gig.authorId),
+                      ],
+                    ),
                     const SizedBox(height: 4),
                     Text('Tap to view profile & past work', style: GoogleFonts.inter(color: AppTheme.primary, fontSize: 13)),
                   ],

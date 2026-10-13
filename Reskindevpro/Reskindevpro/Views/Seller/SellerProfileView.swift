@@ -71,6 +71,7 @@ struct SellerProfileView: View {
                         Image(systemName: "checkmark.seal.fill").font(.title2).foregroundStyle(.blue)
                             .accessibilityLabel("Verified")
                     }
+                    if profile.isPro { ProBadge(size: .large) }
                 }
                 if !profile.username.isEmpty {
                     Text("@\(profile.username)").font(.title3).foregroundStyle(.secondary)
@@ -203,6 +204,7 @@ private struct PublicProfile {
     let verified: Bool
     let isOnline: Bool
     let memberSince: Date?
+    let isPro: Bool
 
     init(data d: [String: Any], fallbackName: String) {
         name = FS.string(d["displayName"]) ?? FS.string(d["name"]) ?? fallbackName
@@ -213,6 +215,7 @@ private struct PublicProfile {
         verified = d["verified"] as? Bool ?? false
         isOnline = d["isOnline"] as? Bool ?? false
         memberSince = FS.date(d["createdAt"])
+        isPro = ProStatus.isPro(d)
     }
 }
 

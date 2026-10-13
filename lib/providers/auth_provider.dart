@@ -13,6 +13,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import '../main.dart';
 import '../models/order_model.dart';
+import '../services/pro_service.dart' as pro_svc;
 
 class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
   final _auth = FirebaseAuth.instance;
@@ -41,6 +42,7 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
     _auth.authStateChanges().listen((firebaseUser) async {
       _currentUser = firebaseUser;
       if (firebaseUser != null) {
+        _listenToUserDoc(firebaseUser.uid);
         await loadProfile();
         await _updateFcmToken();
         if (isAdmin) {
@@ -56,6 +58,7 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
         _username = null;
         _blockedUsers.clear();
         _profileLoaded = false;
+        _stopUserDocListener();
         _stopAdminOrderListener();
       }
       notifyListeners();
@@ -63,6 +66,49 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   StreamSubscription? _orderSubscription;
+
+  // Live users/{uid} doc — Reskindev Pro status comes from here (written only by Cloud Functions).
+  StreamSubscription<DocumentSnapshot<Map<String, dynamic>>>? _userDocSub;
+  String? _userDocUid;
+  Map<String, dynamic>? _userDoc;
+  Timer? _proExpiryTimer;
+
+  /// users/{uid}.pro of the signed-in person (null when they never had Pro).
+  Map<String, dynamic>? get pro => pro_svc.proOf(_userDoc);
+  /// Pro is on: pro.active && pro.expiresAt > now.
+  bool get isPro => pro_svc.isPro(_userDoc);
+  DateTime? get proExpiresAt => pro_svc.proExpiresAt(_userDoc);
+
+  void _listenToUserDoc(String uid) {
+    if (_userDocUid == uid && _userDocSub != null) return;
+    _stopUserDocListener();
+    _userDocUid = uid;
+    _userDocSub = _db.collection('users').doc(uid).snapshots().listen((snap) {
+      final wasPro = isPro;
+      final oldExp = proExpiresAt;
+      _userDoc = snap.data();
+      _scheduleProExpiryCheck();
+      if (wasPro != isPro || oldExp != proExpiresAt) notifyListeners();
+    }, onError: (e) => debugPrint('users doc listener error: $e'));
+  }
+
+  // Pro ends at expiresAt even if nothing writes to the doc — refresh the UI then.
+  void _scheduleProExpiryCheck() {
+    _proExpiryTimer?.cancel();
+    final exp = proExpiresAt;
+    if (exp == null || !isPro) return;
+    final wait = exp.difference(DateTime.now());
+    if (wait > const Duration(days: 20)) return; // checked again on the next doc change / app start
+    _proExpiryTimer = Timer(wait + const Duration(seconds: 1), notifyListeners);
+  }
+
+  void _stopUserDocListener() {
+    _userDocSub?.cancel();
+    _userDocSub = null;
+    _userDocUid = null;
+    _userDoc = null;
+    _proExpiryTimer?.cancel();
+  }
 
   void _startAdminOrderListener() {
     _stopAdminOrderListener(); // Ensure no double listeners
@@ -118,6 +164,7 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _stopAdminOrderListener();
+    _stopUserDocListener();
     super.dispose();
   }
 

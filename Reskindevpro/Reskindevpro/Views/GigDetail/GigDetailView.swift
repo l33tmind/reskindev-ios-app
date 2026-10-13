@@ -272,6 +272,7 @@ private struct GigDetailContent: View {
                         UserAvatar(name: gig.sellerName, photoUrl: "", size: 36)
                         Text(gig.sellerName.isEmpty ? "Seller" : gig.sellerName)
                             .font(.headline)
+                        ProBadgeFor(uid: gig.authorId)
                         Image(systemName: "chevron.right").font(.caption.weight(.bold)).foregroundStyle(.secondary)
                     }
                     .padding(.vertical, 6)

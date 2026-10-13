@@ -8,6 +8,7 @@ import '../services/soft_sound.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'pro_badge.dart';
 
 class GigCard extends StatelessWidget {
   final GigModel gig;
@@ -104,11 +105,18 @@ class GigCard extends StatelessWidget {
                         ),
                         const SizedBox(width: 6),
                         Expanded(
-                          child: Text(
-                            gig.authorName.isNotEmpty ? gig.authorName : 'Verified Seller',
-                            style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: context.themeTextDark),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  gig.authorName.isNotEmpty ? gig.authorName : 'Verified Seller',
+                                  style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: context.themeTextDark),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              LiveProBadge(uid: gig.authorId, fontSize: 8.5, leading: 4),
+                            ],
                           ),
                         ),
                         // A long seller name ends with "..." before it reaches the heart

@@ -10,6 +10,7 @@ struct ReskindevproApp: App {
     @State private var chat: ChatStore
     @State private var seller = SellerStore()
     @State private var appModel = AppModel()
+    @State private var proStore = ProStore()
 
     init() {
         FirebaseApp.configure()
@@ -28,6 +29,8 @@ struct ReskindevproApp: App {
                 .onChange(of: session.uid, initial: true) {
                     chat.bind(uid: session.uid, name: session.displayName)
                     seller.bind(uid: session.uid)
+                    // Listens for renewals and quietly re-sends active App Store subscriptions on sign-in
+                    proStore.bind(uid: session.uid)
                     if session.isSignedIn {
                         PushService.shared.requestPermissionIfNeeded()
                         PushService.shared.saveToken()
@@ -35,6 +38,8 @@ struct ReskindevproApp: App {
                 }
                 .onChange(of: session.displayName) { chat.bind(uid: session.uid, name: session.displayName) }
                 .onChange(of: session.blockedUsers, initial: true) { chat.blockedByMe = session.blockedUsers }
+                // Reskindev Pro: photos and videos in any chat
+                .onChange(of: session.isPro, initial: true) { chat.iAmPro = session.isPro }
                 // Order Board / Desk widgets follow orders, chats and sign-in
                 .task(id: widgetKey) {
                     try? await Task.sleep(for: .seconds(2))   // let bursts of updates settle
@@ -161,6 +166,7 @@ struct ReskindevproApp: App {
             .environment(chat)
             .environment(seller)
             .environment(appModel)
+            .environment(proStore)
             // Idempotent, so any window restored first still gets live data
             .onAppear {
                 gigStore.start()

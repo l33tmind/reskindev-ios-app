@@ -73,6 +73,7 @@ struct GigCardView: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                    ProBadgeFor(uid: gig.authorId, size: .small)
                 }
 
                 // Title
@@ -189,6 +190,7 @@ struct CompactGigCard: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
+                ProBadgeFor(uid: gig.authorId, size: .small)
             }
 
             // Always two lines tall, so every card in a row lines up

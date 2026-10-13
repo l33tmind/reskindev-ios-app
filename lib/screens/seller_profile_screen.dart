@@ -7,6 +7,7 @@ import '../theme.dart';
 import '../models/gig_model.dart';
 import '../models/order_model.dart';
 import '../models/user_model.dart';
+import '../widgets/pro_badge.dart';
 import '../widgets/gig_card.dart';
 import '../widgets/user_avatar.dart';
 
@@ -230,8 +231,20 @@ class _SellerProfileScreenState extends State<SellerProfileScreen> {
           const SizedBox(height: 16),
           
           // Name & Bio
-          Text(user.displayName.isNotEmpty ? user.displayName : 'Verified Seller',
-              style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: context.themeTextDark)),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(
+                  child: Text(user.displayName.isNotEmpty ? user.displayName : 'Verified Seller',
+                      maxLines: 1, overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.bold, color: context.themeTextDark)),
+                ),
+                LiveProBadge(uid: user.uid, fontSize: 11.5, leading: 8),
+              ],
+            ),
+          ),
           if (user.bio.isNotEmpty) ...[
             const SizedBox(height: 8),
             Padding(

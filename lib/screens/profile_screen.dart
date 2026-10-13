@@ -15,6 +15,7 @@ import '../providers/page_provider.dart';
 import '../theme.dart';
 import '../widgets/web_nav_bar.dart';
 import '../widgets/user_avatar.dart';
+import '../widgets/pro_badge.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -135,9 +136,21 @@ class ProfileScreen extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            auth.user?.displayName ?? 'No Name',
-                            style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: context.themeTextDark),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  auth.user?.displayName ?? 'No Name',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.w700, color: context.themeTextDark),
+                                ),
+                              ),
+                              if (auth.isPro) ...[
+                                const SizedBox(width: 8),
+                                const ProBadge(fontSize: 11),
+                              ],
+                            ],
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -185,6 +198,26 @@ class ProfileScreen extends StatelessWidget {
               // Group 1: Account & Earnings
               _buildSectionHeader(context, 'Account & Earnings'),
               _buildSettingsCard(context, [
+                _buildListTile(
+                  context: context,
+                  icon: Icons.bolt_rounded,
+                  iconColor: ProBadge.amber,
+                  title: 'Reskindev Pro',
+                  subtitle: auth.isPro ? 'PRO badge, message any seller, media in every chat' : 'Get the PRO badge and more',
+                  onTap: () => context.push('/pro'),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (auth.isPro)
+                        Text('Active', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.success))
+                      else
+                        const ProBadge(fontSize: 10.5),
+                      const SizedBox(width: 8),
+                      Icon(Icons.arrow_forward_ios, size: 16, color: context.themeTextLight.withValues(alpha: 0.5)),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
                 _buildListTile(
                   context: context,
                   icon: Icons.person_outline,
@@ -418,9 +451,10 @@ class ProfileScreen extends StatelessWidget {
     bool isDanger = false,
     Widget? trailing,
     String? subtitle,
+    Color? iconColor,
   }) {
     final color = isDanger ? Colors.red : context.themeTextDark;
-    final iconColor = isDanger ? Colors.red : AppTheme.primary;
+    iconColor ??= isDanger ? Colors.red : AppTheme.primary;
     return Material(
       color: Colors.transparent,
       child: InkWell(

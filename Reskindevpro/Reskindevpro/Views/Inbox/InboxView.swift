@@ -85,6 +85,7 @@ private struct ConversationRow: View {
                     Text(conversation.title(me: me))
                         .font(.headline)
                         .lineLimit(1)
+                    ProBadgeFor(uid: conversation.otherID(me: me), size: .small)
                     Spacer()
                     if let date = conversation.updatedAt {
                         Text(date, format: .relative(presentation: .numeric, unitsStyle: .abbreviated))

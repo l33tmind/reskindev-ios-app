@@ -20,6 +20,8 @@ import '../widgets/chat_bubble.dart';
 import '../widgets/order_chat_cards.dart';
 import '../widgets/order_next_step_panel.dart';
 import '../widgets/user_avatar.dart';
+import '../widgets/pro_badge.dart';
+import '../services/pro_service.dart' show isPro;
 import '../widgets/custom_offer.dart';
 import '../widgets/chat_media_preview.dart';
 import 'quick_replies_screen.dart' show QuickReplyDefaults;
@@ -460,9 +462,11 @@ class _ChatScreenState extends State<ChatScreen> {
           builder: (context, userSnapshot) {
             String displayAvatar = _targetUserAvatar;
             String displayName = _targetUserName;
+            bool targetIsPro = false;
             
             if (userSnapshot.hasData && userSnapshot.data != null && userSnapshot.data!.exists) {
               final data = userSnapshot.data!.data() as Map<String, dynamic>?;
+              targetIsPro = isPro(data);
               if (data != null) {
                 displayAvatar = data['photoUrl'] ?? data['profilePicture'] ?? displayAvatar;
                 final n = data['name'] ?? data['displayName'] ?? data['username'] ?? '';
@@ -488,14 +492,25 @@ class _ChatScreenState extends State<ChatScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        displayName,
-                        style: GoogleFonts.outfit(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                          color: context.themeTextDark,
-                        ),
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              displayName,
+                              style: GoogleFonts.outfit(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: context.themeTextDark,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (targetIsPro) ...[
+                            const SizedBox(width: 6),
+                            const ProBadge(fontSize: 9),
+                          ],
+                        ],
                       ),
                   if (_chatId.isNotEmpty && _chatId != 'new')
                     StreamBuilder<DocumentSnapshot>(
@@ -1079,11 +1094,13 @@ class _ChatScreenState extends State<ChatScreen> {
     'requirements', 'processing', 'in_progress', 'revision', 'delivered', 'completed', 'disputed',
   };
 
-  /// Photos and videos only in an order chat whose order is paid (buyer and seller).
+  /// Photos and videos in an order chat whose order is paid (buyer and seller),
+  /// or in any conversation (direct chats too) when I'm a Reskindev Pro member.
   bool get _canSendMedia =>
-      (_currentOrderId ?? widget.orderId ?? '').isNotEmpty &&
-      _orderStatus != null &&
-      _paidOrderStatuses.contains(_orderStatus);
+      ((_currentOrderId ?? widget.orderId ?? '').isNotEmpty &&
+          _orderStatus != null &&
+          _paidOrderStatuses.contains(_orderStatus)) ||
+      (_chatId.isNotEmpty && _chatId != 'new' && Provider.of<AuthProvider>(context, listen: false).isPro);
 
   static const int _maxPhotoBytes = 5 * 1024 * 1024;
   static const int _maxVideoBytes = 100 * 1024 * 1024;
@@ -1113,7 +1130,7 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  /// The "+" menu next to the message box: Photo / Video in a paid order chat, Create offer for the seller.
+  /// The "+" menu next to the message box: Photo / Video in a paid order chat (any chat for Pro), Create offer for the seller.
   void _showAttachMenu() {
     showModalBottomSheet<void>(
       context: context,
