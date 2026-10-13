@@ -6,7 +6,7 @@
  * Firestore (all money fields are written ONLY here; rules block clients):
  *   users/{uid}.walletBdt                 taka balance (number, 2 decimals)
  *   users/{uid}.walletBalance             dollar balance (existing)
- *   settings/bdtWallet                    { bdtPerUsd, rateMode: "live"|"manual" (live = refreshBdtRate every 6 h), convertFeePercent, minDepositBdt, maxDepositBdt, enabled,
+ *   settings/bdtWallet                    { bdtPerUsd, rateMode: "live"|"manual" (live = refreshBdtRate every hour), convertFeePercent, minDepositBdt, maxDepositBdt, enabled,
  *                                           methods: [{ id, type: "bank"|"bkash"|"nagad"|"rocket", title,
  *                                                       accountName, accountNumber, bankName?, branch?, routing?, note? }] }
  *                                         (admins edit it from the admin panel; anyone signed in can read)
@@ -53,8 +53,8 @@ async function refreshLiveRate() {
     return rate;
 }
 
-/** Every 6 hours: keep the live rate fresh (the last good rate stays if the source is down) */
-exports.refreshBdtRate = onSchedule({ schedule: "every 6 hours", region: REGION }, async () => {
+/** Every hour: keep the live rate fresh (the last good rate stays if the source is down) */
+exports.refreshBdtRate = onSchedule({ schedule: "every 60 minutes", region: REGION }, async () => {
     try { await refreshLiveRate(); } catch (e) { console.error("BDT rate refresh failed", e); }
 });
 
@@ -183,6 +183,8 @@ exports.quoteBdtToUsd = onCall({ region: REGION }, async (request) => {
 /** Person: taka → dollars, fee kept in taka. Rounds dollars down to the cent. */
 exports.convertBdtToUsd = onCall({ region: REGION }, async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Please sign in first.");
+    // Turned off: taka is spent as taka (orders, Pro), there is no taka→dollar conversion any more
+    throw new HttpsError("failed-precondition", "Taka can't be converted to dollars. Pay for services in taka directly.");
     const uid = request.auth.uid;
     const s = await settings();
     if (!(s.bdtPerUsd > 0)) throw new HttpsError("unavailable", "Conversion is not set up yet.");
