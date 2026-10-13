@@ -238,8 +238,8 @@ struct ProView: View {
     }
 
     private var termsText: String {
-        let monthly = store.monthly?.displayPrice ?? "$7.99"
-        let yearly = store.yearly?.displayPrice ?? "$79.99"
+        let monthly = store.monthly?.displayPrice ?? "$9.99"
+        let yearly = store.yearly?.displayPrice ?? "$99.99"
         return "Reskindev Pro is an auto-renewing subscription: \(monthly) per month or \(yearly) per year. "
             + "Payment is charged to your Apple Account when you confirm. The subscription renews automatically "
             + "at the same price unless it's cancelled at least 24 hours before the end of the current period. "

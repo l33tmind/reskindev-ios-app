@@ -12,8 +12,8 @@ const String kProYearlyId = 'reskindev.pro.yearly';
 const Set<String> kProProductIds = {kProMonthlyId, kProYearlyId};
 
 /// Fallback prices shown when the store products can't be loaded.
-const String kProMonthlyFallbackPrice = '\$7.99';
-const String kProYearlyFallbackPrice = '\$79.99';
+const String kProMonthlyFallbackPrice = '\$9.99';
+const String kProYearlyFallbackPrice = '\$99.99';
 
 /// The Cloud Functions region every Pro callable lives in.
 FirebaseFunctions get proFunctions => FirebaseFunctions.instanceFor(region: 'asia-south1');

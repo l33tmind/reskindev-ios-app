@@ -33,8 +33,8 @@ const ANDROID_PACKAGE = "com.reskindevdotcom.reskindev";
 const APPLE_APP_ID = defineString("APPLE_APP_ID", { default: "" });
 
 const PLANS = {
-    monthly: { productId: "reskindev.pro.monthly", price: 7.99, days: 30 },
-    yearly: { productId: "reskindev.pro.yearly", price: 79.99, days: 365 },
+    monthly: { productId: "reskindev.pro.monthly", price: 9.99, days: 30 },
+    yearly: { productId: "reskindev.pro.yearly", price: 99.99, days: 365 },
 };
 const planForProduct = (productId) =>
     Object.keys(PLANS).find((k) => PLANS[k].productId === productId) || null;
