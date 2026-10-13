@@ -134,12 +134,18 @@ struct SignInView: View {
     private func finishApple(_ result: Result<ASAuthorization, Error>) async {
         switch result {
         case .failure(let error):
-            if (error as? ASAuthorizationError)?.code != .canceled { errorMessage = error.friendlyMessage }
+            if (error as? ASAuthorizationError)?.code != .canceled { errorMessage = SocialSignIn.appleMessage(for: error) }
         case .success(let authorization):
-            await run {
+            isWorking = true
+            errorMessage = nil
+            do {
                 let (credential, name) = try SocialSignIn.appleCredential(from: authorization, rawNonce: appleNonce)
                 try await session.signIn(with: credential, fallbackName: name, role: role)
+                finish()
+            } catch {
+                errorMessage = SocialSignIn.appleMessage(for: error)
             }
+            isWorking = false
         }
     }
 

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/chat_models.dart';
 import '../theme.dart';
+import '../services/chat_media_saver.dart';
 
 class ChatBubble extends StatelessWidget {
   final MessageModel message;
@@ -301,6 +302,7 @@ class ChatBubble extends StatelessWidget {
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
         onTap: url.isEmpty ? null : () => openChatVideoPlayer(context, url),
+        onLongPress: url.isEmpty ? null : () => showSaveMediaSheet(context, url, isVideo: true),
         child: Container(
           margin: EdgeInsets.only(
             top: isFirstInGroup ? 8 : 1,
@@ -400,6 +402,9 @@ class ChatBubble extends StatelessWidget {
                 onTap: (message.imageUrl ?? '').isEmpty
                     ? null
                     : () => openChatImageViewer(context, message.imageUrl!),
+                onLongPress: (message.imageUrl ?? '').isEmpty
+                    ? null
+                    : () => showSaveMediaSheet(context, message.imageUrl!, isVideo: false),
                 child: CachedNetworkImage(
                   imageUrl: message.imageUrl ?? '',
                   fit: BoxFit.cover,
@@ -689,13 +694,23 @@ class _ChatImageViewer extends StatelessWidget {
           ),
           SafeArea(
             child: Align(
-              alignment: Alignment.topLeft,
+              alignment: Alignment.topCenter,
               child: Padding(
                 padding: const EdgeInsets.all(8),
-                child: IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
-                  tooltip: 'Close',
-                  onPressed: () => Navigator.of(context).pop(),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.download_rounded, color: Colors.white, size: 26),
+                      tooltip: 'Save to Photos',
+                      onPressed: () => saveChatMediaToPhotos(context, imageUrl, isVideo: false),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -832,13 +847,23 @@ class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
                 ),
               ),
             Align(
-              alignment: Alignment.topLeft,
+              alignment: Alignment.topCenter,
               child: Padding(
                 padding: const EdgeInsets.all(8),
-                child: IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
-                  tooltip: 'Close',
-                  onPressed: () => Navigator.of(context).pop(),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+                      tooltip: 'Close',
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.download_rounded, color: Colors.white, size: 26),
+                      tooltip: 'Save to Photos',
+                      onPressed: () => saveChatMediaToPhotos(context, widget.videoUrl, isVideo: true),
+                    ),
+                  ],
                 ),
               ),
             ),

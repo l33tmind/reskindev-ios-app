@@ -38,6 +38,38 @@ enum SocialSignIn {
         return (credential, name?.isEmpty == false ? name : nil)
     }
 
+    /// Apple sign-in failures in plain words, with the code so support can tell them apart.
+    /// (The generic mapping showed "Email or password isn't right" for an Apple credential problem.)
+    static func appleMessage(for error: Error) -> String {
+        let ns = error as NSError
+        print("🍎 Apple sign-in failed: \(ns.domain) \(ns.code) \(ns.userInfo)")
+        if let apple = error as? ASAuthorizationError {
+            switch apple.code {
+            case .unknown, .notHandled, .failed:
+                return "Apple sign-in isn't available on this device right now. Check that you're signed in to your Apple Account in Settings, then try again. (Apple \(ns.code))"
+            case .invalidResponse:
+                return "Apple sent back an answer we couldn't read. Please try again. (Apple \(ns.code))"
+            default:
+                return "Apple sign-in didn't finish. Please try again. (Apple \(ns.code))"
+            }
+        }
+        if ns.domain == AuthErrorDomain, let code = AuthErrorCode(rawValue: ns.code) {
+            switch code {
+            case .accountExistsWithDifferentCredential, .emailAlreadyInUse, .credentialAlreadyInUse:
+                return "This email already has a Reskindev account that uses Google or a password. Sign in that way instead."
+            case .invalidCredential, .missingOrInvalidNonce:
+                return "Apple's sign-in couldn't be checked by our server. Please try again; if it keeps happening, use Google or email for now. (Auth \(ns.code))"
+            case .operationNotAllowed:
+                return "Sign in with Apple is switched off for Reskindev right now. Use Google or email for now."
+            default: break
+            }
+        }
+        if case .missingToken? = error as? SocialSignInError {
+            return "Apple didn't send a sign-in token. Please try again."
+        }
+        return error.friendlyMessage
+    }
+
     // MARK: Google
 
     @MainActor

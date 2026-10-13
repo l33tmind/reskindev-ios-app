@@ -28,6 +28,8 @@
 			<string>reskin dev pro</string>
 		</dict>
 	</array>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Reskindev saves photos and videos from your chats to your library.</string>
 	<key>NSSupportsGroupActivities</key>
 	<true/>
 	<key>NSUserActivityTypes</key>

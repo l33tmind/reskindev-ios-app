@@ -21,6 +21,7 @@ import '../widgets/order_chat_cards.dart';
 import '../widgets/order_next_step_panel.dart';
 import '../widgets/user_avatar.dart';
 import '../widgets/custom_offer.dart';
+import '../widgets/chat_media_preview.dart';
 import 'quick_replies_screen.dart' show QuickReplyDefaults;
 import '../services/notification_feed.dart';
 import '../widgets/workspace_details_sheet.dart';
@@ -1153,7 +1154,15 @@ class _ChatScreenState extends State<ChatScreen> {
         imageQuality: 80,
       );
       if (picked == null || !mounted) return;
-      // Size after image_picker compression
+      // Preview first; the size check (after image_picker compression) is shown there and disables Send
+      final send = await showChatMediaPreview(
+        context,
+        file: picked,
+        isVideo: false,
+        maxBytes: _maxPhotoBytes,
+        tooLargeMessage: 'Photos up to 5 MB',
+      );
+      if (!send || !mounted) return;
       if (await picked.length() > _maxPhotoBytes) {
         _showMediaSnack('Photos up to 5 MB');
         return;
@@ -1198,6 +1207,14 @@ class _ChatScreenState extends State<ChatScreen> {
     try {
       final picked = await ImagePicker().pickVideo(source: ImageSource.gallery);
       if (picked == null || !mounted) return;
+      final send = await showChatMediaPreview(
+        context,
+        file: picked,
+        isVideo: true,
+        maxBytes: _maxVideoBytes,
+        tooLargeMessage: 'Videos up to 100 MB, or share a Google Drive / WeTransfer link',
+      );
+      if (!send || !mounted) return;
       if (await picked.length() > _maxVideoBytes) {
         _showMediaSnack('Videos up to 100 MB, or share a Google Drive / WeTransfer link');
         return;

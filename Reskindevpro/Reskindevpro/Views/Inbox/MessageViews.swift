@@ -1,5 +1,6 @@
 import SwiftUI
 import AVKit
+import Photos
 
 /// One message: text bubble, system card or custom offer card
 struct MessageRow: View {
@@ -9,6 +10,8 @@ struct MessageRow: View {
     var onReply: (ChatMessage) -> Void = { _ in }
     var onAction: (OrderAction) -> Void = { _ in }
     var onError: (String) -> Void = { _ in }
+    /// Good news ("Saved to Photos."), shown as a toast instead of an alert
+    var onNotice: (String) -> Void = { _ in }
     @Environment(ChatStore.self) private var chat
 
     var body: some View {
@@ -24,6 +27,19 @@ struct MessageRow: View {
                 .contextMenu {
                     Button { onReply(message) } label: { Label("Reply", systemImage: "arrowshape.turn.up.left") }
                     Button { UIPasteboard.general.string = message.text } label: { Label("Copy", systemImage: "doc.on.doc") }
+                    if let photo = message.imageUrl ?? message.videoUrl, let url = URL(string: photo) {
+                        Button {
+                            Task {
+                                do {
+                                    try await MediaSaver.saveToPhotos(url, isVideo: message.videoUrl != nil)
+                                    onNotice("Saved to Photos.")
+                                } catch {
+                                    onError(error.friendlyMessage)
+                                }
+                            }
+                        } label: { Label("Save to Photos", systemImage: "square.and.arrow.down") }
+                        ShareLink(item: url) { Label("Share / Download", systemImage: "square.and.arrow.up") }
+                    }
                 }
         }
     }
@@ -558,6 +574,32 @@ private struct CardCopy {
             quote = message.text.isEmpty ? nil : message.text
         default:
             break
+        }
+    }
+}
+
+/// Downloads a chat photo or video and adds it to the Photos library
+enum MediaSaver {
+    enum SaveError: LocalizedError {
+        case noAccess
+        var errorDescription: String? { "Allow Reskindev to add to Photos in Settings, then try again." }
+    }
+
+    static func saveToPhotos(_ remote: URL, isVideo: Bool) async throws {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else { throw SaveError.noAccess }
+        let (tmp, _) = try await URLSession.shared.download(from: remote)
+        let file = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(isVideo ? (remote.pathExtension.isEmpty ? "mp4" : remote.pathExtension) : "jpg")
+        try FileManager.default.moveItem(at: tmp, to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        try await PHPhotoLibrary.shared().performChanges {
+            if isVideo {
+                PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: file)
+            } else {
+                PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: file)
+            }
         }
     }
 }

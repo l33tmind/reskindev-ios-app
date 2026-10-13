@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import UniformTypeIdentifiers
+import AVKit
 
 /// The open WorkStream: header, messages, quick replies, composer —
 /// with the workspace details floating beside the window as an ornament
@@ -20,6 +21,8 @@ struct ChatView: View {
     @State private var sendingPhoto = false
     /// 0...1 while a video uploads
     @State private var videoProgress: Double?
+    /// Picked but not sent yet: shown in a preview with Send / Cancel
+    @State private var pending: PendingMedia?
 
     var body: some View {
         if let conversation = chat.activeChat, let uid = session.uid {
@@ -80,6 +83,14 @@ struct ChatView: View {
                 }
             }
             .sheet(isPresented: $showOffer) { OfferComposer().sheetPresence() }
+            .sheet(item: $pending) { media in
+                MediaPreviewSheet(media: media) {
+                    if case .video(let url, _) = media { try? FileManager.default.removeItem(at: url) }
+                    pending = nil
+                } onSend: {
+                    Task { await sendPending(media) }
+                }
+            }
             .alert("Report user", isPresented: $showReport) {
                 ReportButtons { reason in
                     Task {
@@ -189,7 +200,8 @@ struct ChatView: View {
                         MessageRow(message: message, me: me, conversation: conversation,
                                    onReply: { replyTo = $0; composerFocused = true },
                                    onAction: { sheetAction = $0 },
-                                   onError: { errorMessage = $0 })
+                                   onError: { errorMessage = $0 },
+                                   onNotice: { show($0) })
                             .id(message.id)
                     }
                     if conversation.isOtherTyping(me: me) {
@@ -311,35 +323,43 @@ struct ChatView: View {
         }
     }
 
+    /// Load the picked item for the preview; nothing is uploaded until Send
     private func sendMedia(_ item: PhotosPickerItem) async {
-        if let type = item.supportedContentTypes.first(where: { $0.conforms(to: .movie) }) {
-            await sendVideo(item, contentType: type.preferredMIMEType ?? "video/mp4")
-        } else {
-            await sendPhoto(item)
-        }
-    }
-
-    private func sendVideo(_ item: PhotosPickerItem, contentType: String) async {
-        videoProgress = 0
-        defer { videoProgress = nil }
+        sendingPhoto = true
+        defer { sendingPhoto = false }
         do {
-            guard let movie = try await item.loadTransferable(type: ChatMovie.self) else { return }
-            defer { try? FileManager.default.removeItem(at: movie.url) }
-            try await chat.sendVideo(fileURL: movie.url, contentType: contentType) { p in
-                Task { @MainActor in videoProgress = p }
+            if let type = item.supportedContentTypes.first(where: { $0.conforms(to: .movie) }) {
+                guard let movie = try await item.loadTransferable(type: ChatMovie.self) else { return }
+                pending = .video(movie.url, contentType: type.preferredMIMEType ?? "video/mp4")
+            } else {
+                guard let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
+                      let jpeg = image.downscaled(maxSide: 1600).jpegData(compressionQuality: 0.8) else { return }
+                pending = .photo(jpeg, image)
             }
         } catch {
             errorMessage = error.friendlyMessage
         }
     }
 
-    private func sendPhoto(_ item: PhotosPickerItem) async {
-        sendingPhoto = true
-        defer { sendingPhoto = false }
+    /// Send pressed in the preview
+    private func sendPending(_ media: PendingMedia) async {
+        pending = nil
         do {
-            guard let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
-                  let jpeg = image.downscaled(maxSide: 1600).jpegData(compressionQuality: 0.8) else { return }
-            try await chat.sendImage(jpeg)
+            switch media {
+            case .photo(let jpeg, _):
+                sendingPhoto = true
+                defer { sendingPhoto = false }
+                try await chat.sendImage(jpeg)
+            case .video(let url, let contentType):
+                videoProgress = 0
+                defer {
+                    videoProgress = nil
+                    try? FileManager.default.removeItem(at: url)
+                }
+                try await chat.sendVideo(fileURL: url, contentType: contentType) { p in
+                    Task { @MainActor in videoProgress = p }
+                }
+            }
         } catch {
             errorMessage = error.friendlyMessage
         }
@@ -499,5 +519,77 @@ private struct ChatMovie: Transferable {
             try FileManager.default.copyItem(at: received.file, to: copy)
             return Self(url: copy)
         }
+    }
+}
+
+/// A photo or video picked in the chat, waiting for Send
+enum PendingMedia: Identifiable {
+    case photo(Data, UIImage)
+    case video(URL, contentType: String)
+
+    var id: String {
+        switch self {
+        case .photo(let data, _): "photo-\(data.count)"
+        case .video(let url, _): url.absoluteString
+        }
+    }
+
+    var byteCount: Int {
+        switch self {
+        case .photo(let data, _): data.count
+        case .video(let url, _): (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        }
+    }
+
+    /// Size problem shown before anything is uploaded
+    var limitMessage: String? {
+        switch self {
+        case .photo: byteCount > ChatStore.maxPhotoBytes ? "Photos can be up to 5 MB." : nil
+        case .video: byteCount > ChatStore.maxVideoBytes ? "Videos can be up to 100 MB. For bigger files, share a Google Drive or WeTransfer link." : nil
+        }
+    }
+}
+
+/// Look before you send: the picked photo or video, its size, Cancel and Send
+struct MediaPreviewSheet: View {
+    let media: PendingMedia
+    var onCancel: () -> Void
+    var onSend: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Send this?").font(.title2.weight(.semibold))
+            Group {
+                switch media {
+                case .photo(_, let image):
+                    Image(uiImage: image).resizable().scaledToFit()
+                case .video(let url, _):
+                    VideoPlayer(player: AVPlayer(url: url))
+                }
+            }
+            .frame(maxWidth: 640, maxHeight: 400)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+            Text(ByteCountFormatter.string(fromByteCount: Int64(media.byteCount), countStyle: .file))
+                .font(.callout).foregroundStyle(.secondary)
+            if let problem = media.limitMessage {
+                Label(problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+            }
+            HStack(spacing: 12) {
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(GlassOutlineButtonStyle())
+                Button(action: onSend) {
+                    Label("Send", systemImage: "paperplane.fill")
+                }
+                .buttonStyle(GlassOutlineButtonStyle(prominent: true))
+                .disabled(media.limitMessage != nil)
+            }
+            .frame(maxWidth: 480)
+        }
+        .padding(32)
+        .frame(width: 720)
+        .sheetPresence()
     }
 }
