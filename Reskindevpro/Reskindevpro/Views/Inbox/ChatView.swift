@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI
+import UniformTypeIdentifiers
 
 /// The open WorkStream: header, messages, quick replies, composer —
 /// with the workspace details floating beside the window as an ornament
@@ -17,6 +18,8 @@ struct ChatView: View {
     @FocusState private var composerFocused: Bool
     @State private var photoItem: PhotosPickerItem?
     @State private var sendingPhoto = false
+    /// 0...1 while a video uploads
+    @State private var videoProgress: Double?
 
     var body: some View {
         if let conversation = chat.activeChat, let uid = session.uid {
@@ -242,22 +245,30 @@ struct ChatView: View {
             }
 
             HStack(spacing: 12) {
-                // Photos from the Photos app (screenshots, references, proof of work)
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    Group {
-                        if sendingPhoto { ProgressView() } else { Image(systemName: "photo.on.rectangle.angled").font(.title3) }
+                // Photos (5 MB) and videos (100 MB) for the delivery work, once the order is paid
+                if chat.canSendMedia {
+                    PhotosPicker(selection: $photoItem, matching: .any(of: [.images, .videos])) {
+                        Group {
+                            if let videoProgress {
+                                Text("\(Int(videoProgress * 100))%").font(.caption.weight(.bold)).monospacedDigit()
+                            } else if sendingPhoto {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "photo.on.rectangle.angled").font(.title3)
+                            }
+                        }
+                        .frame(width: Hit.min, height: Hit.min)
+                        .background(Color.white.opacity(0.08), in: Circle())
                     }
-                    .frame(width: Hit.min, height: Hit.min)
-                    .background(Color.white.opacity(0.08), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .hoverEffect(.lift)
-                .disabled(sendingPhoto)
-                .accessibilityLabel("Send a photo")
-                .onChange(of: photoItem) { _, item in
-                    guard let item else { return }
-                    photoItem = nil
-                    Task { await sendPhoto(item) }
+                    .buttonStyle(.plain)
+                    .hoverEffect(.lift)
+                    .disabled(sendingPhoto || videoProgress != nil)
+                    .accessibilityLabel("Send a photo or video")
+                    .onChange(of: photoItem) { _, item in
+                        guard let item else { return }
+                        photoItem = nil
+                        Task { await sendMedia(item) }
+                    }
                 }
                 TextField("Type a message…", text: $draft, axis: .vertical)
                     .textFieldStyle(.plain)
@@ -297,6 +308,28 @@ struct ChatView: View {
                 draft = text
                 errorMessage = error.friendlyMessage
             }
+        }
+    }
+
+    private func sendMedia(_ item: PhotosPickerItem) async {
+        if let type = item.supportedContentTypes.first(where: { $0.conforms(to: .movie) }) {
+            await sendVideo(item, contentType: type.preferredMIMEType ?? "video/mp4")
+        } else {
+            await sendPhoto(item)
+        }
+    }
+
+    private func sendVideo(_ item: PhotosPickerItem, contentType: String) async {
+        videoProgress = 0
+        defer { videoProgress = nil }
+        do {
+            guard let movie = try await item.loadTransferable(type: ChatMovie.self) else { return }
+            defer { try? FileManager.default.removeItem(at: movie.url) }
+            try await chat.sendVideo(fileURL: movie.url, contentType: contentType) { p in
+                Task { @MainActor in videoProgress = p }
+            }
+        } catch {
+            errorMessage = error.friendlyMessage
         }
     }
 
@@ -449,5 +482,22 @@ private extension UIImage {
         let scale = maxSide / longest
         let target = CGSize(width: size.width * scale, height: size.height * scale)
         return UIGraphicsImageRenderer(size: target).image { _ in draw(in: CGRect(origin: .zero, size: target)) }
+    }
+}
+
+/// A picked video copied into tmp, so it can be uploaded as a file (not loaded into memory)
+private struct ChatMovie: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .movie) { movie in
+            SentTransferredFile(movie.url)
+        } importing: { received in
+            let copy = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(received.file.pathExtension.isEmpty ? "mov" : received.file.pathExtension)
+            try FileManager.default.copyItem(at: received.file, to: copy)
+            return Self(url: copy)
+        }
     }
 }

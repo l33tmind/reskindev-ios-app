@@ -238,12 +238,32 @@ class ProfileScreen extends StatelessWidget {
 
                 if (auth.isAdmin) ...[
                   const Divider(height: 1),
-                  _buildListTile(
-                    context: context,
-                    icon: Icons.grid_view_rounded,
-                    title: 'Admin Dashboard',
-                    onTap: () => context.push('/admin'),
-                    showArrow: true,
+                  // Red count = orders waiting for payment verification + gigs waiting for approval
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance.collection('orders')
+                        .where('status', whereIn: ['pending_payment', 'pending']).snapshots(),
+                    builder: (context, orderSnap) => StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance.collection('services')
+                          .where('status', isEqualTo: 'pending').snapshots(),
+                      builder: (context, gigSnap) {
+                        final waiting = (orderSnap.data?.docs.length ?? 0) + (gigSnap.data?.docs.length ?? 0);
+                        return _buildListTile(
+                          context: context,
+                          icon: Icons.grid_view_rounded,
+                          title: 'Admin Dashboard',
+                          subtitle: waiting > 0 ? '$waiting waiting for you' : null,
+                          onTap: () => context.push('/admin'),
+                          trailing: waiting > 0
+                              ? Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(color: AppTheme.error, borderRadius: BorderRadius.circular(12)),
+                                  child: Text('$waiting', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.white)),
+                                )
+                              : null,
+                          showArrow: waiting == 0,
+                        );
+                      },
+                    ),
                   ),
                 ],
                 if (auth.role == 'freelancer' || auth.isAdmin) ...[

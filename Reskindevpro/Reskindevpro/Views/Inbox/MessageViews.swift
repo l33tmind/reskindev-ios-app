@@ -1,4 +1,5 @@
 import SwiftUI
+import AVKit
 
 /// One message: text bubble, system card or custom offer card
 struct MessageRow: View {
@@ -65,6 +66,12 @@ private struct TextBubble: View {
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Photo. Opens full size")
+                }
+                if let video = message.videoUrl, let url = URL(string: video) {
+                    VideoPlayer(player: AVPlayer(url: url))
+                        .frame(width: 400, height: 225)
+                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        .accessibilityLabel("Video")
                 }
                 if !message.text.isEmpty {
                     Text(linkified(message.text))

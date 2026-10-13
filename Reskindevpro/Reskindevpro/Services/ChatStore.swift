@@ -113,6 +113,16 @@ final class ChatStore {
         return chatOrders.first
     }
 
+    /// Photos and videos are for delivery work, so they open up once the chat's order is paid
+    /// (same rule on the website, iOS and Android)
+    var canSendMedia: Bool {
+        guard let id = activeChat?.orderId, let order = chatOrders.first(where: { $0.id == id }) else { return false }
+        return ["requirements", "processing", "in_progress", "revision", "delivered", "completed", "disputed"].contains(order.status)
+    }
+
+    static let maxPhotoBytes = 5 * 1024 * 1024
+    static let maxVideoBytes = 100 * 1024 * 1024
+
     var amIBuyer: Bool {
         guard let uid else { return false }
         if !chatOrders.isEmpty { return chatOrders.contains { $0.isBuyer(uid) } }
@@ -272,6 +282,7 @@ final class ChatStore {
     /// `imageUrl`, which the iOS / Android app already shows as a picture bubble
     func sendImage(_ jpeg: Data) async throws {
         guard let uid, let chat = activeChat else { return }
+        guard jpeg.count <= Self.maxPhotoBytes else { throw ChatMediaError.photoTooBig }
         let ref = Storage.storage().reference().child("chat_images/\(chat.id)/\(UUID().uuidString).jpg")
         let metadata = StorageMetadata()
         metadata.contentType = "image/jpeg"
@@ -289,6 +300,43 @@ final class ChatStore {
         ])
         var update: [String: Any] = [
             "lastMessage": "📷 Photo",
+            "updatedAt": Date(),
+            "msgCount": FieldValue.increment(Int64(1)),
+        ]
+        if let other = chat.otherID(me: uid) { update["unreadCount.\(other)"] = FieldValue.increment(Int64(1)) }
+        try await chatRef.updateData(update)
+    }
+
+    /// Video message (type "video" + videoUrl), up to 100 MB, uploaded as-is to chat_videos/{chatID}/…
+    func sendVideo(fileURL: URL, contentType: String, progress: @escaping (Double) -> Void) async throws {
+        guard let uid, let chat = activeChat else { return }
+        let size = (try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard size <= Self.maxVideoBytes else { throw ChatMediaError.videoTooBig }
+        let ext = fileURL.pathExtension.isEmpty ? "mp4" : fileURL.pathExtension.lowercased()
+        let ref = Storage.storage().reference().child("chat_videos/\(chat.id)/\(UUID().uuidString).\(ext)")
+        let metadata = StorageMetadata()
+        metadata.contentType = contentType
+        let task = ref.putFile(from: fileURL, metadata: metadata)
+        task.observe(.progress) { snap in
+            if let p = snap.progress, p.totalUnitCount > 0 { progress(Double(p.completedUnitCount) / Double(p.totalUnitCount)) }
+        }
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            task.observe(.success) { _ in cont.resume() }
+            task.observe(.failure) { snap in cont.resume(throwing: snap.error ?? ChatMediaError.uploadFailed) }
+        }
+        let url = try await ref.downloadURL().absoluteString
+
+        let chatRef = db.collection("conversations").document(chat.id)
+        try await chatRef.collection("messages").addDocument(data: [
+            "text": "",
+            "type": "video",
+            "videoUrl": url,
+            "senderId": uid,
+            "senderName": myName,
+            "createdAt": Date(),
+        ])
+        var update: [String: Any] = [
+            "lastMessage": "🎬 Video",
             "updatedAt": Date(),
             "msgCount": FieldValue.increment(Int64(1)),
         ]
@@ -410,6 +458,18 @@ enum ChatError: LocalizedError {
         switch self {
         case .messageYourself: "You cannot message yourself."
         case .unknown: "Something went wrong. Please try again."
+        }
+    }
+}
+
+enum ChatMediaError: LocalizedError {
+    case photoTooBig, videoTooBig, uploadFailed
+
+    var errorDescription: String? {
+        switch self {
+        case .photoTooBig: "Photos can be up to 5 MB."
+        case .videoTooBig: "Videos can be up to 100 MB. For bigger files, share a Google Drive or WeTransfer link."
+        case .uploadFailed: "The upload didn't finish. Please try again."
         }
     }
 }

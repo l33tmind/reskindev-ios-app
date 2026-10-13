@@ -69,6 +69,7 @@ class ChatProvider extends ChangeNotifier {
     String? offerTitle,
     List<String>? offerFeatures,
     String? imageUrl,
+    String? videoUrl,
     String? replyToId,
     String? replyToText,
     String? replyToSender,
@@ -92,6 +93,7 @@ class ChatProvider extends ChangeNotifier {
       if (offerFeatures != null) 'offerFeatures': offerFeatures,
       if (type == 'offer') 'offerStatus': 'pending',
       if (imageUrl != null) 'imageUrl': imageUrl,
+      if (videoUrl != null) 'videoUrl': videoUrl,
       if (replyToId != null) 'replyToId': replyToId,
       if (replyToText != null) 'replyToText': replyToText,
       if (replyToSender != null) 'replyToSender': replyToSender,
@@ -114,7 +116,13 @@ class ChatProvider extends ChangeNotifier {
 
     // Update parent conversation
     batch.update(chatRef, {
-      'lastMessage': text,
+      'lastMessage': text.trim().isNotEmpty
+          ? text
+          : type == 'image'
+              ? '📷 Photo'
+              : type == 'video'
+                  ? '🎬 Video'
+                  : text,
       'updatedAt': FieldValue.serverTimestamp(),
       'archivedBy': [],
       'unreadCount': unreadCount,

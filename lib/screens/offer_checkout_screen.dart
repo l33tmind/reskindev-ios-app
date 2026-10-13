@@ -292,7 +292,29 @@ class _OfferCheckoutScreenState extends State<OfferCheckoutScreen> {
                   style: style,
                   minLines: 3,
                   maxLines: 8,
-                  decoration: _input('Requirements, links, references…', Icons.edit_note_rounded).copyWith(alignLabelWithHint: true),
+                  decoration: _input('Requirements, links, references…', Icons.edit_note_rounded).copyWith(
+                    alignLabelWithHint: true,
+                    hintText: 'Describe what you need. Share files with a link, e.g. Google Drive or WeTransfer',
+                    hintMaxLines: 3,
+                    hintStyle: GoogleFonts.inter(fontSize: 13.5, color: context.themeTextLight),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 1),
+                      child: Icon(Icons.link_rounded, size: 15, color: context.themeTextLight),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Tip: upload big files to Google Drive or WeTransfer, then paste the share link here.',
+                        style: GoogleFonts.inter(fontSize: 12, color: context.themeTextLight, height: 1.4),
+                      ),
+                    ),
+                  ],
                 ),
 
                 _section('Payment method', 'Your money is held safely until you approve the delivery', Icons.lock_outline_rounded),

@@ -1,5 +1,7 @@
 import 'package:any_link_preview/any_link_preview.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -37,6 +39,9 @@ class ChatBubble extends StatelessWidget {
     }
     if (message.type == 'image') {
       return _buildImageBubble(context);
+    }
+    if (message.type == 'video') {
+      return _buildVideoBubble(context);
     }
     return _buildTextBubble(context);
   }
@@ -289,6 +294,85 @@ class ChatBubble extends StatelessWidget {
     );
   }
 
+  /// Video message: a dark card with a play button. Tapping opens the full-screen player.
+  Widget _buildVideoBubble(BuildContext context) {
+    final url = message.videoUrl ?? '';
+    return Align(
+      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      child: GestureDetector(
+        onTap: url.isEmpty ? null : () => openChatVideoPlayer(context, url),
+        child: Container(
+          margin: EdgeInsets.only(
+            top: isFirstInGroup ? 8 : 1,
+            bottom: isLastInGroup ? 8 : 1,
+            left: 16,
+            right: 16,
+          ),
+          width: 230,
+          height: 150,
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF1F2937), Color(0xFF111827)],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: isMe ? null : Border.all(color: context.themeBorder),
+          ),
+          child: Stack(
+            children: [
+              Center(
+                child: Container(
+                  width: 54,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.18),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 1.5),
+                  ),
+                  child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 34),
+                ),
+              ),
+              Positioned(
+                left: 12,
+                bottom: 10,
+                child: Row(
+                  children: [
+                    const Icon(Icons.videocam_rounded, color: Colors.white70, size: 16),
+                    const SizedBox(width: 4),
+                    Text('Video', style: GoogleFonts.inter(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
+                  ],
+                ),
+              ),
+              Positioned(
+                right: 10,
+                bottom: 10,
+                child: Row(
+                  children: [
+                    Text(
+                      message.createdAt != null ? DateFormat('h:mm a').format(message.createdAt!) : 'Sending...',
+                      style: GoogleFonts.inter(color: Colors.white70, fontSize: 10),
+                    ),
+                    if (isMe) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        message.createdAt == null
+                            ? Icons.access_time
+                            : (isRead ? Icons.done_all : Icons.check),
+                        size: 14,
+                        color: isRead ? Colors.lightBlueAccent : Colors.white70,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildImageBubble(BuildContext context) {
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
@@ -301,6 +385,7 @@ class ChatBubble extends StatelessWidget {
         ),
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.7,
+          maxHeight: 340,
         ),
         decoration: BoxDecoration(
           color: isMe ? AppTheme.primary : context.themeSurface,
@@ -311,15 +396,30 @@ class ChatBubble extends StatelessWidget {
           borderRadius: BorderRadius.circular(15),
           child: Stack(
             children: [
-              CachedNetworkImage(
-                imageUrl: message.imageUrl ?? '',
-                fit: BoxFit.cover,
-                placeholder: (context, url) =>
-                    Container(height: 200, color: Colors.grey.withOpacity(0.2)),
-                errorWidget: (context, url, error) => Container(
-                  height: 150,
-                  color: Colors.grey.withOpacity(0.2),
-                  child: const Icon(Icons.broken_image),
+              GestureDetector(
+                onTap: (message.imageUrl ?? '').isEmpty
+                    ? null
+                    : () => openChatImageViewer(context, message.imageUrl!),
+                child: CachedNetworkImage(
+                  imageUrl: message.imageUrl ?? '',
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(
+                    height: 200,
+                    width: 200,
+                    color: Colors.grey.withOpacity(0.2),
+                    alignment: Alignment.center,
+                    child: const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    height: 150,
+                    width: 200,
+                    color: Colors.grey.withOpacity(0.2),
+                    child: const Icon(Icons.broken_image),
+                  ),
                 ),
               ),
               Positioned(
@@ -541,5 +641,216 @@ class ChatBubble extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+/// Opens a chat photo full screen. Pinch to zoom, tap the close button to go back.
+void openChatImageViewer(BuildContext context, String imageUrl) {
+  Navigator.of(context).push(
+    PageRouteBuilder(
+      opaque: false,
+      barrierColor: Colors.black,
+      pageBuilder: (_, _, _) => _ChatImageViewer(imageUrl: imageUrl),
+      transitionsBuilder: (_, anim, _, child) =>
+          FadeTransition(opacity: anim, child: child),
+    ),
+  );
+}
+
+class _ChatImageViewer extends StatelessWidget {
+  final String imageUrl;
+  const _ChatImageViewer({required this.imageUrl});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: InteractiveViewer(
+              minScale: 1,
+              maxScale: 5,
+              child: Center(
+                child: CachedNetworkImage(
+                  imageUrl: imageUrl,
+                  fit: BoxFit.contain,
+                  placeholder: (_, _) => const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
+                  errorWidget: (_, _, _) => const Icon(
+                    Icons.broken_image,
+                    color: Colors.white54,
+                    size: 48,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Opens a chat video in a full-screen player (tap to play / pause, progress bar, close button).
+void openChatVideoPlayer(BuildContext context, String videoUrl) {
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _ChatVideoPlayer(videoUrl: videoUrl),
+    ),
+  );
+}
+
+class _ChatVideoPlayer extends StatefulWidget {
+  final String videoUrl;
+  const _ChatVideoPlayer({required this.videoUrl});
+
+  @override
+  State<_ChatVideoPlayer> createState() => _ChatVideoPlayerState();
+}
+
+class _ChatVideoPlayerState extends State<_ChatVideoPlayer> {
+  late final VideoPlayerController _controller;
+  bool _failed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // The app is portrait only; allow landscape while watching a video.
+    SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl));
+    _controller.initialize().then((_) {
+      if (!mounted) return;
+      setState(() {});
+      _controller.play();
+    }).catchError((Object e) {
+      debugPrint('Chat video failed to load: $e');
+      if (mounted) setState(() => _failed = true);
+    });
+    _controller.addListener(_onTick);
+  }
+
+  void _onTick() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    _controller.removeListener(_onTick);
+    _controller.dispose();
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+    super.dispose();
+  }
+
+  void _togglePlay() {
+    if (!_controller.value.isInitialized) return;
+    _controller.value.isPlaying ? _controller.pause() : _controller.play();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = _controller.value;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: _togglePlay,
+                child: Center(
+                  child: _failed
+                      ? Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: Colors.white54, size: 44),
+                            const SizedBox(height: 8),
+                            Text('Could not play this video',
+                                style: GoogleFonts.inter(color: Colors.white70, fontSize: 14)),
+                          ],
+                        )
+                      : v.isInitialized
+                          ? AspectRatio(aspectRatio: v.aspectRatio, child: VideoPlayer(_controller))
+                          : const CircularProgressIndicator(color: Colors.white),
+                ),
+              ),
+            ),
+            if (v.isInitialized && !v.isPlaying && !_failed)
+              IgnorePointer(
+                child: Center(
+                  child: Container(
+                    width: 68,
+                    height: 68,
+                    decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                    child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 44),
+                  ),
+                ),
+              ),
+            if (v.isInitialized)
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 12,
+                child: Row(
+                  children: [
+                    Text(_fmt(v.position), style: GoogleFonts.inter(color: Colors.white70, fontSize: 12)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: VideoProgressIndicator(
+                        _controller,
+                        allowScrubbing: true,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        colors: VideoProgressColors(
+                          playedColor: AppTheme.primary,
+                          bufferedColor: Colors.white38,
+                          backgroundColor: Colors.white12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(_fmt(v.duration), style: GoogleFonts.inter(color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
+              ),
+            Align(
+              alignment: Alignment.topLeft,
+              child: Padding(
+                padding: const EdgeInsets.all(8),
+                child: IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+                  tooltip: 'Close',
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _fmt(Duration d) {
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return d.inHours > 0 ? '${d.inHours}:$m:$s' : '$m:$s';
   }
 }

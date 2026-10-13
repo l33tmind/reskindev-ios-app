@@ -46,7 +46,7 @@
 	<key>NSMicrophoneUsageDescription</key>
 	<string>This app requires access to the microphone for recording videos.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>This app requires access to the photo library to upload profile pictures and gig images.</string>
+	<string>Reskindev uses your photo library so you can add a profile picture, gig images and send photos and videos in chat.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

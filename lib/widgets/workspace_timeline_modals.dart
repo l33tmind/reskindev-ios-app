@@ -42,13 +42,26 @@ class WorkspaceActionModals {
       context: context,
       builder: (c) => AlertDialog(
         title: Text('Submit Requirements', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: Theme.of(context).brightness == Brightness.dark ? Colors.white : Colors.black87)),
-        content: TextField(
-          controller: ctrl,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            hintText: 'Provide details about your project...',
-            border: OutlineInputBorder(),
-          ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: ctrl,
+              maxLines: 4,
+              decoration: InputDecoration(
+                hintText: 'Describe what you need. Share files with a link, e.g. Google Drive or WeTransfer',
+                hintMaxLines: 3,
+                hintStyle: GoogleFonts.inter(fontSize: 13.5, color: context.themeTextLight),
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Tip: upload big files to Google Drive or WeTransfer, then paste the share link here.',
+              style: GoogleFonts.inter(fontSize: 12, color: context.themeTextLight, height: 1.4),
+            ),
+          ],
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),

@@ -2,7 +2,10 @@
 import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:go_router/go_router.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:image_picker/image_picker.dart';
 import 'dart:async';
+import 'dart:io' show File;
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -68,6 +71,11 @@ class _ChatScreenState extends State<ChatScreen> {
   Timer? _typingTimer;
   int _messageLimit = 20;
   List<String> _chatSuggestions = [];
+  bool _uploadingMedia = false;
+  /// Video upload progress 0..1 (null for photos / unknown)
+  double? _uploadProgress;
+  /// Status of the order linked to this chat (null when there is no order)
+  String? _orderStatus;
 
   @override
   void initState() {
@@ -659,6 +667,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   builder: (context, orderSnap) {
                     if (!orderSnap.hasData || !orderSnap.data!.exists) return const SizedBox.shrink();
                     final order = OrderModel.fromFirestore(orderSnap.data!);
+                    _rememberOrderStatus(order.status);
                     
                     return OrderNextStepPanel(
                       order: order,
@@ -1058,6 +1067,192 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  /// Seller can send a custom offer only before there is an order in this chat.
+  bool get _canSendOffer =>
+      _isFreelancer &&
+      !((_currentOrderId != null && _currentOrderId!.isNotEmpty) ||
+          (widget.orderId != null && widget.orderId!.isNotEmpty));
+
+  /// Order statuses where the order is paid, so photos and videos can be shared in the chat.
+  static const _paidOrderStatuses = {
+    'requirements', 'processing', 'in_progress', 'revision', 'delivered', 'completed', 'disputed',
+  };
+
+  /// Photos and videos only in an order chat whose order is paid (buyer and seller).
+  bool get _canSendMedia =>
+      (_currentOrderId ?? widget.orderId ?? '').isNotEmpty &&
+      _orderStatus != null &&
+      _paidOrderStatuses.contains(_orderStatus);
+
+  static const int _maxPhotoBytes = 5 * 1024 * 1024;
+  static const int _maxVideoBytes = 100 * 1024 * 1024;
+
+  /// Called from the order stream: remembers the order status so the "+" menu can show media options.
+  void _rememberOrderStatus(String status) {
+    if (_orderStatus == status) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _orderStatus != status) setState(() => _orderStatus = status);
+    });
+  }
+
+  void _showMediaSnack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  Widget _attachTile(BuildContext ctx, IconData icon, String title, String subtitle, VoidCallback onTap) {
+    return ListTile(
+      leading: Icon(icon, color: AppTheme.primary),
+      title: Text(title, style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w500, color: context.themeTextDark)),
+      subtitle: Text(subtitle, style: GoogleFonts.inter(fontSize: 12.5, color: context.themeTextLight)),
+      onTap: () {
+        Navigator.pop(ctx);
+        onTap();
+      },
+    );
+  }
+
+  /// The "+" menu next to the message box: Photo / Video in a paid order chat, Create offer for the seller.
+  void _showAttachMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: context.themeSurface,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (_canSendMedia) ...[
+                _attachTile(ctx, Icons.photo_outlined, 'Photo', 'Up to 5 MB, from your library', _pickAndSendPhoto),
+                _attachTile(ctx, Icons.videocam_outlined, 'Video', 'Up to 100 MB, from your library', _pickAndSendVideo),
+              ],
+              if (_canSendOffer)
+                _attachTile(ctx, Icons.local_offer_outlined, 'Create offer', 'Send a custom offer to this buyer', _showCustomOfferModal),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Picks a photo from the library, uploads it to Storage and sends it as an image message.
+  Future<void> _pickAndSendPhoto() async {
+    if (_uploadingMedia) return;
+    final auth = context.read<AuthProvider>();
+    final chatProvider = context.read<ChatProvider>();
+    final currentUser = auth.user;
+    if (currentUser == null) return;
+
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1600,
+        maxHeight: 1600,
+        imageQuality: 80,
+      );
+      if (picked == null || !mounted) return;
+      // Size after image_picker compression
+      if (await picked.length() > _maxPhotoBytes) {
+        _showMediaSnack('Photos up to 5 MB');
+        return;
+      }
+      setState(() {
+        _uploadingMedia = true;
+        _uploadProgress = null;
+      });
+
+      final bytes = await picked.readAsBytes();
+      final ref = FirebaseStorage.instance
+          .ref('chat_images/$_chatId/${DateTime.now().millisecondsSinceEpoch}_${currentUser.uid}.jpg');
+      await ref.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
+      final url = await ref.getDownloadURL();
+
+      await chatProvider.sendMessage(
+        chatId: _chatId,
+        currentUserId: currentUser.uid,
+        currentUserName: auth.displayName,
+        text: '',
+        type: 'image',
+        imageUrl: url,
+      );
+      _scrollToNewest();
+    } catch (e) {
+      debugPrint('Chat photo upload failed: $e');
+      _showMediaSnack('Could not send the photo. Please try again.');
+    } finally {
+      if (mounted) setState(() => _uploadingMedia = false);
+    }
+  }
+
+  /// Picks a video from the library, uploads it with progress and sends it as a video message.
+  Future<void> _pickAndSendVideo() async {
+    if (_uploadingMedia) return;
+    final auth = context.read<AuthProvider>();
+    final chatProvider = context.read<ChatProvider>();
+    final currentUser = auth.user;
+    if (currentUser == null) return;
+
+    StreamSubscription<TaskSnapshot>? progressSub;
+    try {
+      final picked = await ImagePicker().pickVideo(source: ImageSource.gallery);
+      if (picked == null || !mounted) return;
+      if (await picked.length() > _maxVideoBytes) {
+        _showMediaSnack('Videos up to 100 MB, or share a Google Drive / WeTransfer link');
+        return;
+      }
+
+      final name = (picked.name.isNotEmpty ? picked.name : picked.path).toLowerCase();
+      final isMov = name.endsWith('.mov') || (picked.mimeType ?? '').contains('quicktime');
+      final ext = isMov ? 'mov' : 'mp4';
+      final contentType = isMov ? 'video/quicktime' : 'video/mp4';
+
+      setState(() {
+        _uploadingMedia = true;
+        _uploadProgress = 0;
+      });
+
+      final ref = FirebaseStorage.instance
+          .ref('chat_videos/$_chatId/${DateTime.now().millisecondsSinceEpoch}_${currentUser.uid}.$ext');
+      // putFile streams from disk, so a big video is not loaded into memory
+      final task = ref.putFile(File(picked.path), SettableMetadata(contentType: contentType));
+      progressSub = task.snapshotEvents.listen((snap) {
+        if (!mounted || snap.totalBytes <= 0) return;
+        setState(() => _uploadProgress = snap.bytesTransferred / snap.totalBytes);
+      });
+      await task;
+      final url = await ref.getDownloadURL();
+
+      await chatProvider.sendMessage(
+        chatId: _chatId,
+        currentUserId: currentUser.uid,
+        currentUserName: auth.displayName,
+        text: '',
+        type: 'video',
+        videoUrl: url,
+      );
+      _scrollToNewest();
+    } catch (e) {
+      debugPrint('Chat video upload failed: $e');
+      _showMediaSnack('Could not send the video. Please try again.');
+    } finally {
+      await progressSub?.cancel();
+      if (mounted) {
+        setState(() {
+          _uploadingMedia = false;
+          _uploadProgress = null;
+        });
+      }
+    }
+  }
+
+  void _scrollToNewest() {
+    if (mounted && _scrollController.hasClients) {
+      _scrollController.animateTo(0.0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+    }
+  }
+
   /// Quick replies for both sides: sellers and buyers each have their own list (editable in Profile → Quick Replies)
   bool _canUseQuickReplies(AuthProvider auth) => auth.user != null;
 
@@ -1228,16 +1423,39 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
               child: Row(
                 children: [
-                  // Custom offers: only the seller, and only before there is an order
-                  if (!((_currentOrderId != null && _currentOrderId!.isNotEmpty) || (widget.orderId != null && widget.orderId!.isNotEmpty)) &&
-                      _isFreelancer) ...[
-                    IconButton(
-                      icon: const Icon(
-                        Icons.local_offer_outlined,
-                        color: AppTheme.primary,
+                  // "+" menu: Photo (buyer and seller) and Create offer (seller, before there is an order)
+                  if (_uploadingMedia) ...[
+                    SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          SizedBox(
+                            width: 26,
+                            height: 26,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: AppTheme.primary,
+                              value: _uploadProgress,
+                            ),
+                          ),
+                          if (_uploadProgress != null)
+                            Text(
+                              '${(_uploadProgress! * 100).round()}%',
+                              style: GoogleFonts.inter(fontSize: 9, fontWeight: FontWeight.w700, color: AppTheme.primary),
+                            ),
+                        ],
                       ),
-                      onPressed: _showCustomOfferModal,
-                      tooltip: 'Send Custom Offer',
+                    ),
+                    const SizedBox(width: 4),
+                  ] else if (_canSendMedia || _canSendOffer) ...[
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline_rounded, color: AppTheme.primary),
+                      onPressed: _showAttachMenu,
+                      tooltip: _canSendMedia ? 'Photo or video' : 'Create offer',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                     ),
                     const SizedBox(width: 4),
                   ],

@@ -89,6 +89,8 @@ struct ChatMessage: Identifiable, Hashable {
     let gigImage: String?
     /// Photo message (type "image"), same fields as the Flutter app
     let imageUrl: String?
+    /// Video message (type "video")
+    let videoUrl: String?
 
     init(id: String, data: [String: Any]) {
         self.id = id
@@ -128,6 +130,7 @@ struct ChatMessage: Identifiable, Hashable {
         self.replyToSender = FS.string(data["replyToSender"])
         self.gigImage = FS.string(data["gigImage"])
         self.imageUrl = FS.string(data["imageUrl"])
+        self.videoUrl = FS.string(data["videoUrl"])
     }
 
     private static func firstLink(in text: String) -> String {

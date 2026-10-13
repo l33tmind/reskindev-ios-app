@@ -30,6 +30,56 @@ class AdminDashboardScreen extends StatefulWidget {
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   int _selectedIndex = 0;
+  /// Filter the Orders tab opens on (set when jumping there from the overview)
+  String _ordersFilter = 'All';
+
+  // Live counts for the red tab badges
+  final _toVerify = FirebaseFirestore.instance.collection('orders')
+      .where('status', whereIn: ['pending_payment', 'pending']).snapshots();
+  final _pendingGigs = FirebaseFirestore.instance.collection('services')
+      .where('status', isEqualTo: 'pending').snapshots();
+  final _openTickets = FirebaseFirestore.instance.collection('support_tickets')
+      .where('status', isEqualTo: 'open').snapshots();
+
+  /// From the overview: 'orders:<filter>', 'users', 'gigs', 'tickets'
+  void _open(String target) {
+    setState(() {
+      if (target.startsWith('orders')) {
+        _ordersFilter = target.contains(':') ? target.split(':').last : 'All';
+        _selectedIndex = 1;
+      } else {
+        _selectedIndex = {'users': 2, 'gigs': 3, 'tickets': 7}[target] ?? 0;
+      }
+    });
+  }
+
+  Widget _tabContent(int index) {
+    switch (index) {
+      case 0: return AdminOverviewView(onOpen: _open);
+      case 1: return AdminOrdersView(initialFilter: _ordersFilter);
+      case 2: return const AdminUsersView();
+      case 3: return const ManageServicesView();
+      case 4: return const ManagePagesView();
+      case 5: return const AdminCouponsView();
+      case 6: return _buildSettingsTab();
+      case 7: return const AdminSupportTicketsView();
+      default: return const AdminReportsView();
+    }
+  }
+
+  Widget _badgeTab(String label, int index, Stream<QuerySnapshot>? countStream) {
+    final tab = (int count) => _MobileTab(
+          label: label,
+          count: count,
+          isActive: _selectedIndex == index,
+          onTap: () => setState(() {
+            if (index == 1) _ordersFilter = 'All';
+            _selectedIndex = index;
+          }),
+        );
+    if (countStream == null) return tab(0);
+    return StreamBuilder<QuerySnapshot>(stream: countStream, builder: (_, snap) => tab(snap.data?.docs.length ?? 0));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,31 +116,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
               child: Row(
                 children: [
-                  _MobileTab(label: 'Stats', isActive: _selectedIndex == 0, onTap: () => setState(() => _selectedIndex = 0)),
-                  _MobileTab(label: 'Orders', isActive: _selectedIndex == 1, onTap: () => setState(() => _selectedIndex = 1)),
-                  _MobileTab(label: 'Users', isActive: _selectedIndex == 2, onTap: () => setState(() => _selectedIndex = 2)),
-                  _MobileTab(label: 'Gigs', isActive: _selectedIndex == 3, onTap: () => setState(() => _selectedIndex = 3)),
-                  _MobileTab(label: 'Pages', isActive: _selectedIndex == 4, onTap: () => setState(() => _selectedIndex = 4)),
-                  _MobileTab(label: 'Coupons', isActive: _selectedIndex == 5, onTap: () => setState(() => _selectedIndex = 5)),
-                  _MobileTab(label: 'Settings', isActive: _selectedIndex == 6, onTap: () => setState(() => _selectedIndex = 6)),
-                  _MobileTab(label: 'Tickets', isActive: _selectedIndex == 7, onTap: () => setState(() => _selectedIndex = 7)),
+                  _badgeTab('Overview', 0, null),
+                  _badgeTab('Orders', 1, _toVerify),
+                  _badgeTab('Users', 2, null),
+                  _badgeTab('Gigs', 3, _pendingGigs),
+                  _badgeTab('Tickets', 7, _openTickets),
+                  _badgeTab('Reports', 8, null),
+                  _badgeTab('Pages', 4, null),
+                  _badgeTab('Coupons', 5, null),
+                  _badgeTab('Settings', 6, null),
                 ],
               ),
             ),
           ),
         ),
-        body: IndexedStack(
-          index: _selectedIndex,
-          children: [
-            const AdminOverviewView(),
-            const AdminOrdersView(),
-            const AdminUsersView(),
-            const ManageServicesView(),
-            const ManagePagesView(),
-            const AdminCouponsView(),
-            _buildSettingsTab(),
-          ],
-        ),
+        body: _tabContent(_selectedIndex),
       );
     }
 
@@ -169,23 +209,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           // Main Content
           Expanded(
-            child: _selectedIndex == 0
-                ? const AdminOverviewView()
-                : _selectedIndex == 1
-                    ? const AdminOrdersView()
-                    : _selectedIndex == 2
-                        ? const AdminUsersView()
-                        : _selectedIndex == 3
-                            ? const ManageServicesView()
-                            : _selectedIndex == 4
-                                ? const ManagePagesView()
-                                : _selectedIndex == 5
-                                    ? const AdminCouponsView()
-                                    : _selectedIndex == 6
-                                        ? _buildSettingsTab()
-                                        : _selectedIndex == 7
-                                            ? const AdminSupportTicketsView()
-                                            : const AdminReportsView(),
+            child: _tabContent(_selectedIndex),
           ),
         ],
       ),
@@ -1034,8 +1058,9 @@ class _MobileTab extends StatelessWidget {
   final String label;
   final bool isActive;
   final VoidCallback onTap;
+  final int count;
 
-  const _MobileTab({required this.label, required this.isActive, required this.onTap});
+  const _MobileTab({required this.label, required this.isActive, required this.onTap, this.count = 0});
 
   @override
   Widget build(BuildContext context) {
@@ -1049,13 +1074,26 @@ class _MobileTab extends StatelessWidget {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: isActive ? AppTheme.primary : context.themeBorder),
         ),
-        child: Text(
-          label,
-          style: GoogleFonts.inter(
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-            color: isActive ? Colors.white : context.themeTextLight,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: isActive ? Colors.white : context.themeTextLight,
+              ),
+            ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: AppTheme.error, borderRadius: BorderRadius.circular(10)),
+                child: Text('$count', style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white)),
+              ),
+            ],
+          ],
         ),
       ),
     );

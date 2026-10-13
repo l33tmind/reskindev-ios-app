@@ -773,7 +773,7 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
                 maxLines: 6,
                 style: GoogleFonts.inter(fontSize: 14, color: context.themeTextDark),
                 decoration: InputDecoration(
-                  hintText: 'Describe what you need...\n\nE.g. I need a 5-page website for my restaurant...',
+                  hintText: 'Describe what you need. Share files with a link, e.g. Google Drive or WeTransfer.\n\nE.g. I need a 5-page website for my restaurant...',
                   hintStyle: GoogleFonts.inter(fontSize: 14, color: AppTheme.textMuted),
                   filled: true,
                   fillColor: context.themeSurface,
@@ -793,6 +793,23 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
                   contentPadding: const EdgeInsets.all(16),
                 ),
                 // validator removed to make it optional
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Icon(Icons.link_rounded, size: 15, color: context.themeTextLight),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Tip: upload big files to Google Drive or WeTransfer, then paste the share link here.',
+                      style: GoogleFonts.inter(fontSize: 12, color: context.themeTextLight, height: 1.4),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
               _SectionHeader(

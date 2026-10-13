@@ -88,6 +88,7 @@ class MessageModel {
   final String? offerStatus;
   final String? offerOrderId;
   final String? imageUrl;
+  final String? videoUrl;
   final String? replyToId;
   final String? replyToText;
   final String? replyToSender;
@@ -117,6 +118,7 @@ class MessageModel {
     this.offerStatus,
     this.offerOrderId,
     this.imageUrl,
+    this.videoUrl,
     this.replyToId,
     this.replyToText,
     this.replyToSender,
@@ -161,6 +163,7 @@ class MessageModel {
       offerStatus: data['offerStatus']?.toString(),
       offerOrderId: data['offerOrderId']?.toString(),
       imageUrl: data['imageUrl']?.toString(),
+      videoUrl: data['videoUrl']?.toString(),
       replyToId: data['replyToId']?.toString(),
       replyToText: data['replyToText']?.toString(),
       replyToSender: data['replyToSender']?.toString(),
@@ -192,6 +195,9 @@ class MessageModel {
     }
     if (type == 'image' && imageUrl != null) {
       map['imageUrl'] = imageUrl!;
+    }
+    if (type == 'video' && videoUrl != null) {
+      map['videoUrl'] = videoUrl!;
     }
     if (replyToId != null) map['replyToId'] = replyToId!;
     if (replyToText != null) map['replyToText'] = replyToText!;
