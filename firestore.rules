@@ -19,11 +19,15 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       // pro (Reskindev Pro subscription) and verified are written only by Cloud Functions / admins
       allow create: if isAuthenticated() && request.auth.uid == userId
-                    && !('pro' in request.resource.data) && !('verified' in request.resource.data);
+                    && !('pro' in request.resource.data) && !('verified' in request.resource.data)
+                    && !('walletBdt' in request.resource.data) && request.resource.data.get('walletBalance', 0) == 0;
       allow update: if isAuthenticated() && (
         isAdmin() ||
         (request.auth.uid == userId
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pro', 'verified', 'verificationStatus', 'verifiedAt']))
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pro', 'verified', 'verificationStatus', 'verifiedAt', 'walletBdt'])
+          // People may spend their dollar balance (pay with wallet, withdraw) but never raise it themselves
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['walletBalance'])
+              || request.resource.data.get('walletBalance', 0) < resource.data.get('walletBalance', 0)))
       );
       allow delete: if isAdmin();
 
@@ -77,6 +81,21 @@ service cloud.firestore {
     // Identity verification requests: the person and admins can read; only Cloud Functions write
     match /verifications/{uid} {
       allow read: if isAuthenticated() && (request.auth.uid == uid || isAdmin());
+      allow write: if false;
+    }
+
+    // Taka wallet: settings readable by signed-in users; deposits and history by their owner and admins.
+    // Everything is written by Cloud Functions only.
+    match /settings/bdtWallet {
+      allow read: if isAuthenticated();
+      allow write: if false;
+    }
+    match /bdt_deposits/{depositId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
+      allow write: if false;
+    }
+    match /wallet_transactions/{txId} {
+      allow read: if isAuthenticated() && (resource.data.uid == request.auth.uid || isAdmin());
       allow write: if false;
     }
 

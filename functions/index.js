@@ -573,3 +573,4 @@ exports.orderReminders = onSchedule("every 60 minutes", async () => {
 // Reskindev Pro subscription (website, iOS, Android, Vision Pro)
 Object.assign(exports, require("./pro"));
 Object.assign(exports, require("./verification"));
+Object.assign(exports, require("./wallet_bdt"));
