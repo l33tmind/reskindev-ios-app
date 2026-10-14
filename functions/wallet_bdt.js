@@ -114,7 +114,7 @@ exports.requestBdtDeposit = onCall({ region: REGION }, async (request) => {
         const o = os.data();
         if ((o.userId || o.clientUid) !== uid) throw new HttpsError("permission-denied", "This isn't your order.");
         if (!["pending_payment", "pending"].includes(o.status)) throw new HttpsError("failed-precondition", "This order is already paid.");
-        expectedBdt = Math.ceil(Number(o.price) * s.bdtPerUsd);
+        expectedBdt = await takaPriceForOrder(o, s);
         orderTitle = o.gigTitle || "";
     } else if (purpose === "pro") {
         plan = PLANS[d.plan] ? d.plan : null;
@@ -321,6 +321,30 @@ exports.saveBdtWalletSettings = onCall({ region: REGION }, async (request) => {
 
 // ---------------- Paying for an order in taka ----------------
 
+/**
+ * What a taka order costs, decided here (never trusted from the browser).
+ * If the seller set a taka price on the package (packages[i].priceBdt), that price is used
+ * (× quantity, minus any coupon at today's rate, plus the service fee); otherwise the dollar
+ * total × today's rate. Always whole taka, rounded up.
+ */
+async function takaPriceForOrder(o, s) {
+    const fallback = Math.ceil(Number(o.price) * s.bdtPerUsd);
+    if (!o.gigId || o.offerId || o.offerMessageId || o.isCustomOffer) return fallback;
+    const gig = (await db().collection("services").doc(o.gigId).get()).data();
+    if (!gig) return fallback;
+    const key = String(o.packageId || o.packageName || "").toLowerCase();
+    const pkg = (gig.packages || []).find((p) => String(p.id || p.name || "").toLowerCase() === key
+        || String(p.name || "").toLowerCase() === key);
+    const priceBdt = pkg && Number(pkg.priceBdt);
+    if (!(priceBdt > 0)) return fallback;
+    const g = (await db().collection("settings").doc("global").get()).data() || {};
+    const feePct = Number(g.serviceFee != null ? g.serviceFee : 5);
+    const qty = Math.max(1, Number(o.quantity) || 1);
+    const discountBdt = Math.ceil((Number(o.discountAmount) || 0) * s.bdtPerUsd);
+    const base = Math.max(0, priceBdt * qty - discountBdt);
+    return Math.ceil(base * (1 + feePct / 100));
+}
+
 /** Find the order's chat and post a system card (the chat push function turns it into notifications) */
 async function postOrderCard(order, orderId, actionType, text) {
     const chats = await db().collection("conversations").where("orderId", "==", orderId).limit(1).get();
@@ -345,6 +369,9 @@ exports.payOrderWithTaka = onCall({ region: REGION }, async (request) => {
     const s = await settings();
     const orderRef = db().collection("orders").doc(orderId);
     const userRef = db().collection("users").doc(uid);
+    const pre = await orderRef.get();
+    if (!pre.exists) throw new HttpsError("not-found", "Order not found.");
+    const priceBdt = await takaPriceForOrder(pre.data(), s);
     let paid;
     await db().runTransaction(async (tx) => {
         const [os, us] = await Promise.all([tx.get(orderRef), tx.get(userRef)]);
@@ -354,7 +381,7 @@ exports.payOrderWithTaka = onCall({ region: REGION }, async (request) => {
         if (!["pending_payment", "pending"].includes(o.status)) throw new HttpsError("failed-precondition", "This order is already paid.");
         const u = us.data() || {};
         if (!isBangladesh(u)) throw new HttpsError("failed-precondition", "Taka payments are for accounts in Bangladesh.");
-        const amountBdt = Math.ceil(Number(o.price) * s.bdtPerUsd);
+        const amountBdt = priceBdt;
         const have = round2(u.walletBdt);
         if (have < amountBdt) throw new HttpsError("failed-precondition", `This order costs ৳${amountBdt}. Your taka wallet has ৳${have.toFixed(2)}.`);
         tx.update(userRef, { walletBdt: round2(have - amountBdt) });
@@ -370,6 +397,18 @@ exports.payOrderWithTaka = onCall({ region: REGION }, async (request) => {
     await postOrderCard(paid.order, orderId, "payment_verified",
         `Payment received: ৳${paid.amountBdt} from the taka wallet. The seller can start now.`);
     return { amountBdt: paid.amountBdt, status: "requirements" };
+});
+
+/** The exact taka amount for an unpaid order (what checkout / My Orders should show) */
+exports.quoteOrderTaka = onCall({ region: REGION }, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Please sign in first.");
+    const orderId = request.data && request.data.orderId;
+    const os = orderId ? await db().collection("orders").doc(orderId).get() : null;
+    if (!os || !os.exists) throw new HttpsError("not-found", "Order not found.");
+    const o = os.data();
+    if ((o.userId || o.clientUid) !== request.auth.uid) throw new HttpsError("permission-denied", "This isn't your order.");
+    const s = await settings();
+    return { amountBdt: await takaPriceForOrder(o, s), bdtPerUsd: s.bdtPerUsd };
 });
 
 // ---------------- Sellers' taka earnings and withdrawals ----------------
