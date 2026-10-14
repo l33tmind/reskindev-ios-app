@@ -200,25 +200,30 @@ final class SessionStore {
         }
     }
 
-    /// Settings page: username must be unique (same check as the website)
+    /// Settings page: username must be unique (same check as the website).
+    /// Verified accounts can't change display name, username or country (Firestore rules
+    /// reject the whole write), so those keys are left out of the update.
     func updateProfile(displayName: String, username: String, phone: String, country: String, bio: String) async throws {
         guard let uid else { throw SessionError.signInRequired }
+        let locked = isVerified
         var payload: [String: Any] = [
-            "displayName": displayName.trimmingCharacters(in: .whitespaces),
             "phone": phone.trimmingCharacters(in: .whitespaces),
-            "country": country.trimmingCharacters(in: .whitespaces),
             "bio": bio,
         ]
-        let newUsername = username.trimmingCharacters(in: .whitespaces)
-        if !newUsername.isEmpty {
-            if newUsername != self.username {
-                let taken = try await db.collection("users").whereField("username", isEqualTo: newUsername).getDocuments()
-                if taken.documents.contains(where: { $0.documentID != uid }) { throw SessionError.usernameTaken }
+        if !locked {
+            payload["displayName"] = displayName.trimmingCharacters(in: .whitespaces)
+            payload["country"] = country.trimmingCharacters(in: .whitespaces)
+            let newUsername = username.trimmingCharacters(in: .whitespaces)
+            if !newUsername.isEmpty {
+                if newUsername != self.username {
+                    let taken = try await db.collection("users").whereField("username", isEqualTo: newUsername).getDocuments()
+                    if taken.documents.contains(where: { $0.documentID != uid }) { throw SessionError.usernameTaken }
+                }
+                payload["username"] = newUsername
             }
-            payload["username"] = newUsername
         }
         try await db.collection("users").document(uid).updateData(payload)
-        if let user = Auth.auth().currentUser, user.displayName != payload["displayName"] as? String {
+        if !locked, let user = Auth.auth().currentUser, user.displayName != payload["displayName"] as? String {
             let change = user.createProfileChangeRequest()
             change.displayName = payload["displayName"] as? String
             try? await change.commitChanges()

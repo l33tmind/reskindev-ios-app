@@ -284,10 +284,18 @@ private struct ProfileSettingsView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
+                if session.isVerified {
+                    Label("Verified accounts change these through support.", systemImage: "lock.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
                 GlassField(title: "Display name", text: $displayName)
+                    .disabled(session.isVerified)
                 GlassField(title: "Username", text: $username)
+                    .disabled(session.isVerified)
                 GlassField(title: "Phone", text: $phone)
                 GlassField(title: "Country", text: $country)
+                    .disabled(session.isVerified)
                 GlassField(title: "Bio", text: $bio, axis: .vertical)
 
                 HStack {

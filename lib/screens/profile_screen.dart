@@ -754,8 +754,9 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
 
     setState(() => _saving = true);
     
+    final verified = auth.isVerified;
     final newUsername = _usernameCtrl.text.toLowerCase().trim();
-    if (newUsername != auth.username && _canChangeUsername && newUsername.isNotEmpty) {
+    if (!verified && newUsername != auth.username && _canChangeUsername && newUsername.isNotEmpty) {
       final uid = auth.user?.uid;
       if (uid != null) {
         try {
@@ -770,11 +771,12 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
 
     try {
       await auth.updateProfile(
-        name: _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
-        username: newUsername.isEmpty ? null : newUsername,
+        // Verified: name, username and address are locked; updateProfile skips them.
+        name: verified || _nameCtrl.text.trim().isEmpty ? null : _nameCtrl.text.trim(),
+        username: verified || newUsername.isEmpty ? null : newUsername,
         phone: _phoneCtrl.text.trim().isEmpty ? null : _phoneCtrl.text.trim(),
         company: _companyCtrl.text.trim().isEmpty ? null : _companyCtrl.text.trim(),
-        address: _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
+        address: verified || _addressCtrl.text.trim().isEmpty ? null : _addressCtrl.text.trim(),
       );
     } catch (e) {
       if (mounted) {
@@ -787,6 +789,48 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
       }
     }
       }
+
+  Widget _lockIcon() => const Icon(Icons.lock_outline, size: 18, color: AppTheme.textMuted);
+
+  Widget _verifiedLockNote() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.verified_user_outlined, size: 18, color: AppTheme.primary),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Your account is verified. To change your name, username or address, contact support.',
+                  style: GoogleFonts.inter(fontSize: 13, color: context.themeTextDark),
+                ),
+                const SizedBox(height: 4),
+                GestureDetector(
+                  onTap: () {
+                    final router = GoRouter.of(context);
+                    Navigator.pop(context);
+                    router.push('/page/contact');
+                  },
+                  child: Text(
+                    'Contact support',
+                    style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.primary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildField({
     required TextEditingController controller,
@@ -854,19 +898,31 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
             const SizedBox(height: 8),
             Text('These details are auto-filled in orders.', style: GoogleFonts.inter(fontSize: 14, color: context.themeTextLight)),
             const SizedBox(height: 24),
-            _buildField(controller: _nameCtrl, label: 'Full Name', icon: Icons.person_outline),
+            if (auth.isVerified) ...[
+              _verifiedLockNote(),
+              const SizedBox(height: 16),
+            ],
+            _buildField(
+              controller: _nameCtrl,
+              label: 'Full Name',
+              icon: Icons.person_outline,
+              readOnly: auth.isVerified,
+              suffix: auth.isVerified ? _lockIcon() : null,
+            ),
             const SizedBox(height: 16),
             
             _buildField(
                   controller: _usernameCtrl, 
                   label: 'Username', 
                   icon: Icons.alternate_email,
-                  onChanged: _onUsernameChanged,
-                  readOnly: !_canChangeUsername && _usernameCtrl.text != auth.username,
+                  onChanged: auth.isVerified ? null : _onUsernameChanged,
+                  readOnly: auth.isVerified || (!_canChangeUsername && _usernameCtrl.text != auth.username),
                   inputFormatters: [
                     FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9_]')),
                   ],
-                  suffix: _isCheckingUsername 
+                  suffix: auth.isVerified
+                      ? _lockIcon()
+                      : _isCheckingUsername
                       ? const Padding(
                           padding: EdgeInsets.all(12.0),
                           child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator.adaptive(strokeWidth: 2)),
@@ -885,7 +941,7 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
                       ),
                     ),
                   ),
-                if (!_canChangeUsername && _usernameError == null)
+                if (!auth.isVerified && !_canChangeUsername && _usernameError == null)
                   Padding(
                     padding: const EdgeInsets.only(top: 6, left: 16),
                     child: Text(
@@ -899,7 +955,14 @@ class _EditProfileSheetState extends State<_EditProfileSheet> {
             const SizedBox(height: 16),
             _buildField(controller: _companyCtrl, label: 'Company Name', icon: Icons.business_outlined),
             const SizedBox(height: 16),
-            _buildField(controller: _addressCtrl, label: 'Address', icon: Icons.location_on_outlined, maxLines: 2),
+            _buildField(
+              controller: _addressCtrl,
+              label: 'Address',
+              icon: Icons.location_on_outlined,
+              maxLines: 2,
+              readOnly: auth.isVerified,
+              suffix: auth.isVerified ? _lockIcon() : null,
+            ),
             const SizedBox(height: 24),
             SizedBox(
               width: double.infinity,

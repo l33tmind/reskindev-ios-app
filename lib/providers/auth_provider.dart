@@ -443,7 +443,15 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     final u = _auth.currentUser;
     if (u == null) return;
-    
+
+    // Verified accounts can't change name, username or address (Firestore
+    // rules reject the whole write). Leave them out instead of clearing them.
+    final locked = isVerified;
+    if (locked) {
+      name = null;
+      username = null;
+    }
+
     if (name != null && name.isNotEmpty && name != u.displayName) {
       await u.updateDisplayName(name);
       // Wait for it to apply to the instance
@@ -456,12 +464,12 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
       if (name != null && name.isNotEmpty) 'displayName': name,
       'phone': phone,
       'company': company,
-      'address': address,
+      if (!locked) 'address': address,
       if (username != null && username.isNotEmpty) 'username': username,
     }, SetOptions(merge: true));
     _phone = phone;
     _company = company;
-    _address = address;
+    if (!locked) _address = address;
     if (username != null) _username = username;
     notifyListeners();
   }
