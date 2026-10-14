@@ -123,7 +123,8 @@ exports.requestBdtDeposit = onCall({ region: REGION }, async (request) => {
     if (purpose === "wallet") {
         if (!(amountBdt >= s.minDepositBdt)) throw new HttpsError("invalid-argument", `The minimum deposit is ৳${s.minDepositBdt}.`);
         if (amountBdt > s.maxDepositBdt) throw new HttpsError("invalid-argument", `The maximum deposit is ৳${s.maxDepositBdt}.`);
-    } else if (!(amountBdt >= expectedBdt)) {
+    } else if (!(amountBdt >= Math.floor(expectedBdt * 0.98))) {
+        // 2% room: the hourly rate may move between checkout and this check
         throw new HttpsError("invalid-argument", `Please send at least ৳${expectedBdt}.`);
     }
     if (transactionId.length < 4) throw new HttpsError("invalid-argument", "Enter the transaction ID / reference from your bank or app.");

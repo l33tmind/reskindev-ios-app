@@ -82,6 +82,7 @@ class _VerificationBodyState extends State<_VerificationBody> {
     final children = <Widget>[];
     if (status == 'approved') {
       children.add(_VerifiedCard(request: req));
+      if (req != null && req.status == 'approved') children.add(_VerifiedDetails(request: req));
     } else if (status == 'pending') {
       children.add(_PendingCard(request: req));
     } else if (!auth.isPro) {
@@ -157,6 +158,109 @@ class _VerifiedCard extends StatelessWidget {
         title: 'You\'re verified',
         text: 'The blue tick now shows next to your name on your profile, gigs and chats.'
             '${request?.reviewedAt != null ? '\nVerified on ${adminDate(request!.reviewedAt!)}.' : ''}',
+      );
+}
+
+/// "6 June 1998" from a yyyy-mm-dd date of birth (falls back to the raw text).
+String _longDate(String raw) {
+  final d = DateTime.tryParse(raw);
+  if (d == null) return raw;
+  const m = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October',
+    'November', 'December'];
+  return '${d.day} ${m[d.month - 1]} ${d.year}';
+}
+
+/// The verified identity details, read-only. ID photos and ID number are never shown.
+class _VerifiedDetails extends StatelessWidget {
+  final VerificationRequest request;
+  const _VerifiedDetails({required this.request});
+
+  @override
+  Widget build(BuildContext context) {
+    final r = request;
+    final rows = <(String, String)>[
+      ('Full legal name', r.legalName),
+      ('Date of birth', _longDate(r.dateOfBirth)),
+      ('ID type', idTypeLabel(r.idType)),
+      ('Country', r.country),
+      ('Address', r.address),
+      if (r.reviewedAt != null) ('Verified on', _longDate(r.reviewedAt!.toIso8601String())),
+    ].where((e) => e.$2.isNotEmpty).toList();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
+        decoration: BoxDecoration(
+          color: context.themeSurface,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: context.themeBorder),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Text('Your verified details',
+              style: GoogleFonts.outfit(fontSize: 17, fontWeight: FontWeight.w700, color: context.themeTextDark)),
+          const SizedBox(height: 12),
+          for (final row in rows) ...[
+            _LockedField(label: row.$1, value: row.$2),
+            const SizedBox(height: 10),
+          ],
+          const SizedBox(height: 4),
+          Center(
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () => context.push('/page/contact'),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                child: Text.rich(
+                  TextSpan(children: [
+                    TextSpan(
+                        text: 'Need to change something? ',
+                        style: GoogleFonts.inter(fontSize: 13, color: context.themeTextLight)),
+                    TextSpan(
+                        text: 'Contact support.',
+                        style: GoogleFonts.inter(
+                            fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.primary)),
+                  ]),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+}
+
+class _LockedField extends StatelessWidget {
+  final String label;
+  final String value;
+  const _LockedField({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) => InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(
+            content: Text('Verified details can only be changed by support'),
+            duration: Duration(seconds: 2),
+          )),
+        child: InputDecorator(
+          decoration: InputDecoration(
+            labelText: label,
+            labelStyle: GoogleFonts.inter(color: context.themeTextLight),
+            filled: true,
+            fillColor: context.themeBackground,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            suffixIcon: Icon(Icons.lock_outline_rounded, size: 18, color: context.themeTextLight),
+            border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: context.themeBorder)),
+            enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: context.themeBorder)),
+          ),
+          child: Text(value, style: GoogleFonts.inter(fontSize: 15, color: context.themeTextDark)),
+        ),
       );
 }
 
