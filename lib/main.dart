@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'dart:ui';
 import 'package:seo/seo.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:flutter/material.dart';
@@ -14,7 +16,9 @@ import 'providers/settings_provider.dart';
 import 'providers/page_provider.dart';
 import 'providers/connectivity_provider.dart';
 import 'providers/chat_provider.dart';
+import 'services/pro_service.dart';
 import 'router.dart';
+import 'screens/chat_screen.dart';
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -35,7 +39,7 @@ Future<void> _initMessaging() async {
     }
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const AndroidInitializationSettings initializationSettingsAndroid = AndroidInitializationSettings('@drawable/ic_notification');
     const DarwinInitializationSettings initializationSettingsIOS = DarwinInitializationSettings();
     const InitializationSettings initializationSettings = InitializationSettings(
       android: initializationSettingsAndroid,
@@ -45,7 +49,7 @@ Future<void> _initMessaging() async {
       initializationSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
         if (response.payload != null && response.payload!.isNotEmpty) {
-          appRouter.go(response.payload!);
+          appRouter.push(response.payload!);
         }
       },
     );
@@ -65,14 +69,14 @@ Future<void> _initMessaging() async {
     FirebaseMessaging.instance.getInitialMessage().then((RemoteMessage? message) {
       if (message != null && message.data['route'] != null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          appRouter.go(message.data['route']);
+          appRouter.push(message.data['route']);
         });
       }
     });
 
     FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
       if (message.data['route'] != null) {
-        appRouter.go(message.data['route']);
+        appRouter.push(message.data['route']);
       }
     });
 
@@ -83,20 +87,42 @@ Future<void> _initMessaging() async {
       sound: true,
     );
 
+    // Keep track to prevent notification spam
+    DateTime? lastNotificationTime;
+
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      // Prevent flood of queued messages when app connects
+      if (message.sentTime != null) {
+        final age = DateTime.now().difference(message.sentTime!);
+        if (age.inMinutes > 1) return; // Skip old queued messages
+      }
+
+      final now = DateTime.now();
+      if (lastNotificationTime != null && now.difference(lastNotificationTime!).inSeconds < 2) {
+        return; // Prevent vibrating more than once every 2 seconds
+      }
+      lastNotificationTime = now;
+
+      // Already reading that chat: the message appears right there, a banner on top would only distract
+      final openChat = ChatScreen.openChatId;
+      if (openChat != null && message.data['route'] == '/chat/$openChat') return;
+
       RemoteNotification? notification = message.notification;
       if (notification != null) {
         flutterLocalNotificationsPlugin.show(
           notification.hashCode,
           notification.title,
           notification.body,
-          const NotificationDetails(
+          NotificationDetails(
             android: AndroidNotificationDetails(
               'high_importance_channel',
               'High Importance Notifications',
               importance: Importance.max,
               priority: Priority.high,
-              icon: '@mipmap/ic_launcher',
+              icon: '@drawable/ic_notification',
+              color: const Color(0xFF00C6A2),
+              // Expands to show the whole text, not just two lines
+              styleInformation: BigTextStyleInformation(notification.body ?? ''),
             ),
             iOS: DarwinNotificationDetails(
               presentAlert: true,
@@ -120,6 +146,14 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+
+  if (!kIsWeb) {
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  }
 
   // Initialize Messaging safely (web non-blocking)
   if (!kIsWeb) {
@@ -173,6 +207,8 @@ class MyApp extends StatelessWidget {
           ChangeNotifierProvider(create: (_) => PageProvider()),
           ChangeNotifierProvider(create: (_) => ConnectivityProvider()),
           ChangeNotifierProvider(create: (_) => ChatProvider()),
+          // Created at launch so store transactions (renewals, pending purchases) are picked up right away
+          ChangeNotifierProvider(lazy: false, create: (_) => ProService()),
         ],
         child: const _AppRouter(),
       ),

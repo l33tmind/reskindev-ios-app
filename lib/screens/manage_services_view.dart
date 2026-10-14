@@ -21,7 +21,7 @@ class ManageServicesView extends StatelessWidget {
           return const Center(child: CircularProgressIndicator(color: AppTheme.primary));
         }
 
-        final gigs = provider.gigs;
+        final gigs = provider.allGigs;
 
         return SingleChildScrollView(
           padding: EdgeInsets.all(isMobile ? 16 : 40),

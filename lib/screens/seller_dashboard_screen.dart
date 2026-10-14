@@ -3,6 +3,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/earnings_chart.dart';
 
 import '../models/order_model.dart';
+import '../services/order_chat_nav.dart';
+import '../widgets/user_avatar.dart';
 import '../widgets/countdown_timer.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -30,13 +32,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
   Widget build(BuildContext context) {
     final auth = context.watch<ap.AuthProvider>();
 
-    if (!auth.isFreelancer) {
-      return Scaffold(
-        body: Center(
-          child: Text('Access Denied', style: GoogleFonts.outfit(fontSize: 24)),
-        ),
-      );
-    }
+
 
     final isMobile = MediaQuery.of(context).size.width < 900;
 
@@ -45,16 +41,7 @@ class _SellerDashboardScreenState extends State<SellerDashboardScreen> {
       appBar: AppBar(
         backgroundColor: context.themeSurface,
         title: Text('Seller Dashboard', style: GoogleFonts.outfit(fontWeight: FontWeight.w800, color: context.themeTextDark)),
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: context.themeTextDark),
-          onPressed: () {
-            if (context.canPop()) {
-              context.pop();
-            } else {
-              context.go('/');
-            }
-          },
-        ),
+        automaticallyImplyLeading: false,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(50),
           child: SingleChildScrollView(
@@ -245,7 +232,7 @@ class _SellerOverview extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 16),
-                      EarningsChart(orders: orderSnap.data!.docs),
+                      EarningsChart(orders: orderSnap.data?.docs ?? const []),
                     ],
                   );
                 },
@@ -732,14 +719,7 @@ class _SellerOrdersView extends StatelessWidget {
             ),
             child: Row(
               children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: AppTheme.primary.withValues(alpha: 0.2),
-                  child: Text(
-                    order.clientName.isNotEmpty ? order.clientName[0].toUpperCase() : 'B',
-                    style: TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold),
-                  ),
-                ),
+                UserAvatar(uid: order.clientUid, name: order.clientName, radius: 20),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -751,14 +731,7 @@ class _SellerOrdersView extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  onPressed: () {
-                    context.push('/chat/new', extra: {
-                      'targetUserId': order.clientUid,
-                      'targetUserName': order.userName,
-                      'targetUserAvatar': '',
-                      'orderId': order.id,
-                    });
-                  },
+                  onPressed: () => openOrderChat(context, order),
                   icon: const Icon(Icons.chat_bubble_rounded),
                   color: AppTheme.primary,
                   tooltip: 'Message Buyer',
@@ -796,84 +769,57 @@ class _SellerOrdersView extends StatelessWidget {
   Widget _buildSellerAction(BuildContext context, OrderModel order) {
     if (order.status == 'pending_payment') {
       return _buildLabel(const Color(0xFFDC2626), const Color(0xFFFEF2F2), const Color(0xFFFECACA), 'Waiting for Payment (Escrow)');
-    } else if (order.status == 'requirements' || order.status == 'pending') {
-      return _buildButton(context, AppTheme.primary, 'Start Work', () async {
-        await FirebaseFirestore.instance.collection('orders').doc(order.id).update({
-          'status': 'in_progress',
-          'startedAt': FieldValue.serverTimestamp(),
-        });
-        
-        try {
-          if (context.mounted) {
-            final chatProvider = context.read<chat.ChatProvider>();
-            await chatProvider.sendSystemMessage(
-              buyerId: order.clientUid,
-              buyerName: order.clientName,
-              sellerId: order.authorId,
-              sellerName: order.userName,
-              orderId: order.id ?? '',
-              gigTitle: order.gigTitle,
-              actionType: 'requirements_submitted',
-              text: 'Requirements Submitted. The seller has started working.',
-            );
-          }
-        } catch (e) {
-          print('System msg err: $e');
-        }
-
-        await NotificationService.sendAndSaveNotification(
-          userId: order.clientUid,
-          title: 'Order Started',
-          body: 'The seller has started working on your order: ${order.gigTitle}',
-        );
-      });
-    } else if (order.status == 'in_progress' || order.status == 'revision') {
+    } else if (['requirements', 'pending', 'processing', 'in_progress', 'revision'].contains(order.status)) {
+      // Delivering happens in the order chat (its top panel), the one place to manage an order
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildButton(context, const Color(0xFF8B5CF6), 'Deliver Work', () {
-            _showDeliveryModal(context, order);
-          }),
-          const SizedBox(height: 8),
-          _buildButton(context, const Color(0xFFDC2626), 'Request Cancellation', () {
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                backgroundColor: Theme.of(context).cardColor,
-                title: Text('Request Cancellation?', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-                content: const Text('Are you sure you want to request cancellation for this order? The buyer will need to approve it.'),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('No, Go Back'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(ctx);
-                      FirebaseFirestore.instance.collection('orders').doc(order.id).update({'status': 'cancel_requested_by_freelancer'});
-                    },
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
-                    child: const Text('Yes, Cancel Order'),
-                  ),
-                ],
-              ),
-            );
-          }),
+          _buildButton(context, const Color(0xFF8B5CF6),
+            order.status == 'revision' ? 'Open chat to deliver again' : 'Open chat to deliver',
+            () => openOrderChat(context, order)),
+          TextButton(
+            onPressed: () => _confirmCancellation(context, order),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFDC2626), minimumSize: const Size(0, 36)),
+            child: const Text('Request cancellation', style: TextStyle(fontSize: 13)),
+          ),
         ],
       );
     } else if (order.status == 'delivered') {
       return _buildLabel(const Color(0xFFD97706), const Color(0xFFFEF3C7), const Color(0xFFFDE68A), 'Waiting for Client Approval');
     } else if (order.status == 'completed') {
       if (order.hasReview && !order.isReviewPublic) {
-        return _buildButton(context, const Color(0xFF8B5CF6), 'Rate Buyer to see review', () {
-          _showSellerRatingModal(context, order);
-        });
+        return _buildButton(context, const Color(0xFF8B5CF6), 'Rate the buyer in chat', () => openOrderChat(context, order));
       }
       return _buildLabel(const Color(0xFF059669), const Color(0xFFD1FAE5), const Color(0xFFA7F3D0), 'Order Completed');
     } else if (order.status == 'cancelled') {
       return _buildLabel(const Color(0xFFDC2626), const Color(0xFFFEF2F2), const Color(0xFFFECACA), 'Order Cancelled');
     }
     return const SizedBox();
+  }
+
+  void _confirmCancellation(BuildContext context, OrderModel order) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Theme.of(context).cardColor,
+        title: Text('Request Cancellation?', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, color: context.themeTextDark)),
+        content: const Text('Are you sure you want to request cancellation for this order? The buyer will need to approve it.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('No, Go Back'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              FirebaseFirestore.instance.collection('orders').doc(order.id).update({'status': 'cancel_requested_by_freelancer'});
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white),
+            child: const Text('Yes, Cancel Order'),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildLabel(Color textColor, Color bgColor, Color borderColor, String text) {
@@ -903,181 +849,7 @@ class _SellerOrdersView extends StatelessWidget {
     );
   }
 
-  void _showDeliveryModal(BuildContext context, OrderModel order) {
-    final noteCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (c) => AlertDialog(
-        backgroundColor: Theme.of(context).cardColor,
-        title: Text('Deliver Work', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Provide a link to your completed files (e.g. Google Drive link) or write a delivery note.', style: GoogleFonts.inter(fontSize: 13, color: Colors.grey.shade600)),
-            const SizedBox(height: 16),
-            TextField(
-              controller: noteCtrl,
-              maxLines: 4,
-              decoration: const InputDecoration(
-                hintText: 'Here is the link to the completed files...',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(c), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (noteCtrl.text.trim().isEmpty) return;
-              Navigator.pop(c);
-              await FirebaseFirestore.instance.collection('orders').doc(order.id).update({
-                'status': 'delivered',
-                'deliveryNote': noteCtrl.text.trim(),
-                'deliveredAt': FieldValue.serverTimestamp(),
-              });
-              
-              // Automatically send delivery message to Inbox
-              try {
-                final myId = FirebaseAuth.instance.currentUser?.uid;
-                if (myId != null) {
-                  final chatId = myId.compareTo(order.clientUid) < 0 ? '${myId}_${order.clientUid}' : '${order.clientUid}_$myId';
-                  final chatRef = FirebaseFirestore.instance.collection('conversations').doc(chatId);
-                  
-                  final message = {
-                    'senderId': myId,
-                    'text': '🎉 I have delivered your order for \"${order.gigTitle}\". Please review it from the Orders page!\n\nDelivery Note:\n${noteCtrl.text.trim()}',
-                    'createdAt': FieldValue.serverTimestamp(),
-                  };
-                  
-                  await chatRef.collection('messages').add(message);
-                  await chatRef.set({
-                    'participants': [myId, order.clientUid],
-                    'lastMessage': 'Order Delivered',
-                    'lastMessageTime': FieldValue.serverTimestamp(),
-                    'unreadCount': {order.clientUid: FieldValue.increment(1)}
-                  }, SetOptions(merge: true));
-                }
-              } catch (e) {
-                print('Error sending delivery message: $e');
-              }
-              
-              // Send notification to buyer
-              try {
-                final userDoc = await FirebaseFirestore.instance.collection('users').doc(order.clientUid).get();
-                final fcmToken = userDoc.data()?['fcmToken'];
-                if (fcmToken != null) {
-                  // Wait, we can't easily access NotificationService here if it's not imported. Let's just update the status, and admin backend or cloud functions should ideally handle it, but for now we just update status.
-                  // We'll leave out push notifications here to keep it simple, or we can import NotificationService at the top of the file.
-                }
-              } catch (e) {}
-            },
-            child: const Text('Submit Delivery'),
-          ),
-        ],
-      ),
-    );
-  }
-}
 
-void _showSellerRatingModal(BuildContext context, OrderModel order) {
-  int rating = 5;
-  final commentCtrl = TextEditingController();
-  bool submitting = false;
-
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (c) => StatefulBuilder(
-      builder: (context, setState) => AlertDialog(
-        backgroundColor: Theme.of(context).cardColor,
-        title: Text('Rate Buyer', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('How was your experience working with ${order.userName}?', style: GoogleFonts.inter(fontSize: 14)),
-            const SizedBox(height: 16),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(5, (index) {
-                return IconButton(
-                  icon: Icon(index < rating ? Icons.star_rounded : Icons.star_border_rounded, color: Colors.amber, size: 32),
-                  onPressed: () => setState(() => rating = index + 1),
-                );
-              }),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: commentCtrl,
-              maxLines: 3,
-              decoration: InputDecoration(
-                hintText: 'Share your experience...',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: submitting ? null : () => Navigator.pop(c), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: submitting ? null : () async {
-              if (commentCtrl.text.trim().isEmpty) return;
-              setState(() => submitting = true);
-              
-              final user = FirebaseAuth.instance.currentUser;
-              final sellerReviewMap = {
-                'userId': user?.uid ?? '',
-                'userName': user?.displayName ?? 'Freelancer',
-                'userImage': user?.photoURL ?? '',
-                'rating': rating.toDouble(),
-                'comment': commentCtrl.text.trim(),
-                'createdAt': FieldValue.serverTimestamp(),
-              };
-
-              final orderRef = FirebaseFirestore.instance.collection('orders').doc(order.id);
-              final gigRef = FirebaseFirestore.instance.collection('services').doc(order.gigId);
-
-              // 1. Update Order
-              await orderRef.update({
-                'sellerReview': sellerReviewMap,
-                'isReviewPublic': true, // Reviews are now public!
-              });
-
-              // 2. Publish both reviews to gig's subcollection
-              if (order.buyerReview != null) {
-                await gigRef.collection('reviews').add(order.buyerReview!);
-                
-                // Also save seller's review as a reply or separately if needed.
-                // Usually Fiverr shows the buyer's review on the gig.
-              }
-
-              // 3. Update Gig Rating
-              final reviewsSnap = await gigRef.collection('reviews').get();
-              if (reviewsSnap.docs.isNotEmpty) {
-                double totalRating = 0;
-                for (var r in reviewsSnap.docs) {
-                  totalRating += (r.data()['rating'] as num?)?.toDouble() ?? 5.0;
-                }
-                final avgRating = totalRating / reviewsSnap.docs.length;
-                await gigRef.update({
-                  'rating': avgRating,
-                  'reviewCount': reviewsSnap.docs.length,
-                });
-              }
-
-              if (context.mounted) {
-                Navigator.pop(c);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Reviews are now public!')));
-              }
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary, foregroundColor: Colors.white),
-            child: submitting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text('Publish Reviews'),
-          ),
-        ],
-      ),
-    ),
-  );
 }
 
 void _showWithdrawalModal(BuildContext context, double availableBalance, String uid, String displayName, String? email) {

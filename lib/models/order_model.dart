@@ -42,6 +42,8 @@ class OrderModel {
   final DateTime? deliveredAt;
   final String deliveryNote;
   final String deliveryLink;
+  /// "INV-000123": a running number the server saves on the order when it is created ("" for the first seconds)
+  final String invoiceNumber;
   final String revisionNote;
   
   // Rating & Review
@@ -82,6 +84,7 @@ class OrderModel {
     this.deliveredAt,
     this.deliveryNote = '',
     this.deliveryLink = '',
+    this.invoiceNumber = '',
     this.revisionNote = '',
     this.ratingCommunication,
     this.ratingQuality,
@@ -148,14 +151,17 @@ class OrderModel {
       userName: userName,
       userEmail: userEmail,
       authorId: d['authorId'] ?? '',
-      projectDetails: d['requirementsText'] ?? d['projectDetails'] ?? '',
+      // The website / Vision Pro checkout writes 'requirements'
+      projectDetails: d['requirementsText'] ?? d['projectDetails'] ?? (d['requirements'] is String ? d['requirements'] : ''),
       status: d['status'] ?? 'requirements',
       createdAt: _parseDate(d['createdAt']) ?? DateTime.now(),
       completedAt: _parseDate(d['completedAt']),
       startedAt: _parseDate(d['startedAt']),
       deliveredAt: _parseDate(d['deliveredAt']),
-      deliveryNote: d['deliveryNote'] ?? '',
+      // The website / Vision Pro write 'deliveryMessage'
+      deliveryNote: d['deliveryNote'] ?? d['deliveryMessage'] ?? '',
       deliveryLink: d['deliveryLink'] ?? '',
+      invoiceNumber: d['invoiceNumber'] ?? '',
       revisionNote: d['revisionNote'] ?? '',
       ratingCommunication: _parseDouble(d['ratingCommunication']),
       ratingQuality: _parseDouble(d['ratingQuality']),
@@ -214,9 +220,12 @@ class OrderModel {
 
   Color get statusColor {
     switch (status) {
-      case 'pending_payment': return const Color(0xFFEF4444); // Red
-      case 'requirements':  return const Color(0xFFF59E0B); // Amber
+      // Waiting is not an error: amber, not red
+      case 'pending_payment': return const Color(0xFFF59E0B); // Amber
+      case 'requirements':  return const Color(0xFF3B82F6); // Blue, being worked on
+      case 'processing':    return const Color(0xFF3B82F6);
       case 'in_progress':   return const Color(0xFF3B82F6); // Blue
+      case 'revision':      return const Color(0xFFF97316); // Orange
       case 'delivered':     return const Color(0xFF8B5CF6); // Purple
       case 'completed':     return const Color(0xFF1BCA75); // Green
       case 'cancelled':     return const Color(0xFFEF4444); // Red
@@ -232,8 +241,11 @@ class OrderModel {
   String get statusLabel {
     switch (status) {
       case 'pending_payment': return 'Waiting for Payment';
-      case 'requirements':  return 'Requirements';
+      // Paid and being worked on: the buyer gave the details when ordering
+      case 'requirements':  return 'In Progress';
+      case 'processing':    return 'In Progress';
       case 'in_progress':   return 'In Progress';
+      case 'revision':      return 'Changes Requested';
       case 'delivered':     return 'Delivered';
       case 'completed':     return 'Completed';
       case 'cancelled':     return 'Cancelled';

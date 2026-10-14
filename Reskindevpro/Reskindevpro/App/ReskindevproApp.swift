@@ -1,0 +1,176 @@
+import SwiftUI
+import FirebaseCore
+import AppIntents
+
+@main
+struct ReskindevproApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    @State private var gigStore: GigStore
+    @State private var session: SessionStore
+    @State private var chat: ChatStore
+    @State private var seller = SellerStore()
+    @State private var appModel = AppModel()
+    @State private var proStore = ProStore()
+
+    init() {
+        FirebaseApp.configure()
+        _gigStore = State(initialValue: GigStore())
+        _session = State(initialValue: SessionStore())
+        _chat = State(initialValue: ChatStore())
+        // Tell Siri about the phrases and their values (service types, screens) on every launch
+        ReskindevShortcuts.updateAppShortcutParameters()
+    }
+
+    var body: some Scene {
+        // Main window: tab bar (Explore · Messages · Profile)
+        WindowGroup(id: WindowID.main) {
+            stores(ContentView())
+                // Inbox follows the signed-in user
+                .onChange(of: session.uid, initial: true) {
+                    chat.bind(uid: session.uid, name: session.displayName)
+                    seller.bind(uid: session.uid)
+                    // Listens for renewals and quietly re-sends active App Store subscriptions on sign-in
+                    proStore.bind(uid: session.uid)
+                    if session.isSignedIn {
+                        PushService.shared.requestPermissionIfNeeded()
+                        PushService.shared.saveToken()
+                    }
+                }
+                .onChange(of: session.displayName) { chat.bind(uid: session.uid, name: session.displayName) }
+                .onChange(of: session.blockedUsers, initial: true) { chat.blockedByMe = session.blockedUsers }
+                // Reskindev Pro: photos and videos in any chat
+                .onChange(of: session.isPro, initial: true) { chat.iAmPro = session.isPro }
+                // Order Board / Desk widgets follow orders, chats and sign-in
+                .task(id: widgetKey) {
+                    try? await Task.sleep(for: .seconds(2))   // let bursts of updates settle
+                    await WidgetSync.refresh(session: session, chat: chat, seller: seller)
+                }
+        }
+        .defaultSize(width: 1100, height: 900)
+        // The app always opens on the main window, even if another window was the last one open
+        .defaultLaunchBehavior(.presented)
+
+        // Menu: its own window on the main window's left (Home look)
+        WindowGroup(id: WindowID.sidebar, for: String.self) { _ in
+            stores(PanelWindow(kind: .sidebar) { LeftSidebarView().frame(width: 320, height: 720) }.needsHomeWindow())
+        }
+        .windowStyle(.plain)
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
+        .defaultWindowPlacement { _, context in
+            if let main = context.windows.first(where: { $0.id == WindowID.main }) {
+                return WindowPlacement(.leading(main))
+            }
+            return WindowPlacement(.none)
+        }
+
+        // My Orders / Orders Workspace: its own window, first opened beside the main window
+        WindowGroup(id: WindowID.orders, for: String.self) { _ in
+            stores(PanelWindow(kind: .orders) { RightOrdersView().frame(width: 440, height: 720) }.needsHomeWindow())
+        }
+        .windowStyle(.plain)
+        .windowResizability(.contentSize)
+        .restorationBehavior(.disabled)
+        .defaultWindowPlacement { _, context in
+            if let main = context.windows.first(where: { $0.id == WindowID.main }) {
+                return WindowPlacement(.trailing(main))
+            }
+            return WindowPlacement(.none)
+        }
+
+        // Gig Detail Window (one per gig)
+        WindowGroup(id: WindowID.gigDetail, for: String.self) { $gigID in
+            if let gigID {
+                stores(GigDetailView(gigID: gigID).needsHomeWindow())
+            }
+        }
+        .windowStyle(.plain)
+        .defaultSize(width: 1080, height: 720)
+        .restorationBehavior(.disabled)
+
+        // Seller public profile (one per seller)
+        WindowGroup(id: WindowID.sellerProfile, for: String.self) { $userKey in
+            if let userKey { stores(SellerProfileView(userKey: userKey).needsHomeWindow()) }
+        }
+        .windowStyle(.plain)
+        .defaultSize(width: 1000, height: 760)
+        .restorationBehavior(.disabled)
+
+        // Help & Policies (admin-managed pages)
+        WindowGroup(id: WindowID.page, for: String.self) { _ in
+            stores(PagesView().needsHomeWindow())
+        }
+        .defaultSize(width: 1000, height: 700)
+        .restorationBehavior(.disabled)
+
+        // 3D Showroom: gigs around you in your room
+        ImmersiveSpace(id: appModel.immersiveSpaceID) {
+            stores(ImmersiveView())
+        }
+        .immersionStyle(selection: .constant(.mixed), in: .mixed)
+
+        // 3D Delivery Box Window (Volumetric)
+        WindowGroup(id: WindowID.deliveryBox) {
+            stores(Delivery3DView().needsHomeWindow())
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)
+        .restorationBehavior(.disabled)
+
+        // "View in Your Room": a gig's or delivery's 3D model in a volume (set it on your desk)
+        WindowGroup(id: WindowID.model3D, for: String.self) { $url in
+            if let url { stores(ModelViewer3D(urlString: url).needsHomeWindow()) }
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 0.6, height: 0.6, depth: 0.6, in: .meters)
+        .restorationBehavior(.disabled)
+
+        // One order's progress as glowing stepping stones in your room
+        WindowGroup(id: WindowID.orderTimeline3D, for: String.self) { $orderID in
+            if let orderID { stores(OrderTimeline3DView(orderID: orderID).needsHomeWindow()) }
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 0.9, height: 0.8, depth: 0.3, in: .meters)
+        .restorationBehavior(.disabled)
+
+        // Seller earnings as 3D bars on your desk
+        WindowGroup(id: WindowID.earnings3D) {
+            stores(Earnings3DView().needsHomeWindow())
+        }
+        .windowStyle(.volumetric)
+        .defaultSize(width: 0.7, height: 0.5, depth: 0.4, in: .meters)
+        .restorationBehavior(.disabled)
+
+        // Delivery Theater: delivered work on a big screen
+        WindowGroup(id: WindowID.theater, for: TheaterItem.self) { $item in
+            if let item { stores(DeliveryTheaterView(item: item).needsHomeWindow()) }
+        }
+        .windowStyle(.plain)
+        .defaultSize(width: 1500, height: 1000)
+        .restorationBehavior(.disabled)
+    }
+
+    /// Every window shares the same live Firestore stores
+    /// Changes whenever something the widgets show may have changed
+    private var widgetKey: String {
+        let orders = session.orders.map { "\($0.id)\($0.status)" }.joined()
+        let lastChat = chat.conversations.compactMap(\.updatedAt).max()?.timeIntervalSince1970 ?? 0
+        return "\(session.uid ?? "-")|\(orders)|\(chat.unreadTotal)|\(lastChat)"
+    }
+
+    private func stores<V: View>(_ view: V) -> some View {
+        view
+            .celebrations(appModel.celebration)
+            .environment(gigStore)
+            .environment(session)
+            .environment(chat)
+            .environment(seller)
+            .environment(appModel)
+            .environment(proStore)
+            // Idempotent, so any window restored first still gets live data
+            .onAppear {
+                gigStore.start()
+                session.start()
+            }
+    }
+}

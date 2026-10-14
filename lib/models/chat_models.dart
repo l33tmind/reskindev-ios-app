@@ -82,7 +82,13 @@ class MessageModel {
   final num? offerPrice;
   final int? offerDays;
   final String? offerDescription;
+  /// Custom offer: a short headline, the included features (✓ list) and pending / accepted / declined
+  final String? offerTitle;
+  final List<String> offerFeatures;
+  final String? offerStatus;
+  final String? offerOrderId;
   final String? imageUrl;
+  final String? videoUrl;
   final String? replyToId;
   final String? replyToText;
   final String? replyToSender;
@@ -107,7 +113,12 @@ class MessageModel {
     this.offerPrice,
     this.offerDays,
     this.offerDescription,
+    this.offerTitle,
+    this.offerFeatures = const [],
+    this.offerStatus,
+    this.offerOrderId,
     this.imageUrl,
+    this.videoUrl,
     this.replyToId,
     this.replyToText,
     this.replyToSender,
@@ -147,7 +158,12 @@ class MessageModel {
       offerPrice: data['offerPrice'] != null ? num.tryParse(data['offerPrice'].toString()) : null,
       offerDays: data['offerDays'] != null ? int.tryParse(data['offerDays'].toString()) : null,
       offerDescription: data['offerDescription']?.toString(),
+      offerTitle: data['offerTitle']?.toString(),
+      offerFeatures: data['offerFeatures'] is List ? List<String>.from((data['offerFeatures'] as List).map((e) => e.toString())) : const [],
+      offerStatus: data['offerStatus']?.toString(),
+      offerOrderId: data['offerOrderId']?.toString(),
       imageUrl: data['imageUrl']?.toString(),
+      videoUrl: data['videoUrl']?.toString(),
       replyToId: data['replyToId']?.toString(),
       replyToText: data['replyToText']?.toString(),
       replyToSender: data['replyToSender']?.toString(),
@@ -179,6 +195,9 @@ class MessageModel {
     }
     if (type == 'image' && imageUrl != null) {
       map['imageUrl'] = imageUrl!;
+    }
+    if (type == 'video' && videoUrl != null) {
+      map['videoUrl'] = videoUrl!;
     }
     if (replyToId != null) map['replyToId'] = replyToId!;
     if (replyToText != null) map['replyToText'] = replyToText!;

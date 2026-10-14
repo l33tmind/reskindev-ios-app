@@ -2,10 +2,44 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.reskindevdotcom.reskindev</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>reskindev</string>
+			</array>
+		</dict>
+	</array>
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Reskin Dev</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>reskin dev</string>
+		</dict>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Reskindev Pro</string>
+			<key>INAlternativeAppNamePronunciationHint</key>
+			<string>reskin dev pro</string>
+		</dict>
+	</array>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Reskindev saves photos and videos from your chats to your library.</string>
+	<key>NSSupportsGroupActivities</key>
+	<true/>
+	<key>NSUserActivityTypes</key>
+	<array>
+		<string>com.reskindevdotcom.reskindev.viewService</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationPreferredDefaultSceneSessionRole</key>
-		<string>UIWindowSceneSessionRoleVolumetricApplication</string>
+		<string>UIWindowSceneSessionRoleApplication</string>
 		<key>UIApplicationSupportsMultipleScenes</key>
 		<true/>
 		<key>UISceneConfigurations</key>

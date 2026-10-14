@@ -1,8 +1,13 @@
+import '../services/recently_viewed_service.dart';
 import 'package:share_plus/share_plus.dart';
 import 'dart:io' show Platform;
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:html/dom.dart' as dom;
+import '../widgets/pro_badge.dart';
+import '../widgets/gig_description.dart';
+import '../widgets/gig_cover.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
@@ -24,6 +29,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../providers/settings_provider.dart';
 import '../providers/page_provider.dart';
 import '../widgets/web_nav_bar.dart';
+import '../widgets/user_avatar.dart';
 
 class GigDetailScreen extends StatefulWidget {
   final String gigId;
@@ -55,6 +61,7 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
     super.initState();
     _confettiController = ConfettiController(duration: const Duration(seconds: 3));
     _checkAutoUnlock();
+    WidgetsBinding.instance.addPostFrameCallback((_) => RecentlyViewedService.add(widget.gigId));
   
 
 
@@ -692,7 +699,7 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
 }
 
   Widget _buildMediaGallery(GigModel gig, List<String> allMedia, {required bool isMobile}) {
-    if (allMedia.isEmpty) return const SizedBox();
+    if (allMedia.isEmpty) return AspectRatio(aspectRatio: 16 / 9, child: GigCover(gig: gig));
     final currentMedia = allMedia[_selectedMediaIndex];
     final isYT = currentMedia.contains('youtube.com/watch') || currentMedia.contains('youtu.be/');
     final videoId = isYT ? _extractVideoId(currentMedia) : null;
@@ -734,15 +741,13 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
                                 child: Image.network(
                                   isYT ? maxResThumbUrl : currentMedia,
                                   fit: BoxFit.cover,
-                                  errorBuilder: (_, __, ___) => const Center(
-                                    child: Icon(Icons.image_not_supported, size: 64, color: Colors.grey)),
+                                  errorBuilder: (_, __, ___) => GigCover(gig: gig),
                                 ),
                               )
                             : Image.network(
                                 isYT ? maxResThumbUrl : currentMedia,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) => const Center(
-                                  child: Icon(Icons.image_not_supported, size: 64, color: Colors.grey)),
+                                errorBuilder: (_, __, ___) => GigCover(gig: gig),
                               ),
                       ),
                      ],
@@ -912,7 +917,7 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
           elevation: 0,
         ),
         child: Text(
-          'Confirm Order (\$${pkg.price.toStringAsFixed(2)})',
+          'Continue · \$${pkg.price.toStringAsFixed(0)}',
           style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 16),
         ),
       ),
@@ -1066,7 +1071,7 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
                 height: 250,
                 width: double.infinity,
                 child: allMedia.isEmpty
-                    ? Container(color: Colors.grey[200])
+                    ? GigCover(gig: gig)
                     : (allMedia[_selectedMediaIndex].contains('youtube.com/watch') || allMedia[_selectedMediaIndex].contains('youtu.be/'))
                         ? _YoutubeVideoPlayer(key: ValueKey(allMedia[_selectedMediaIndex]), videoId: _extractVideoId(allMedia[_selectedMediaIndex]) ?? '')
                         : Image.network(
@@ -1135,7 +1140,7 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
                   future: gig.authorId.isNotEmpty ? FirebaseFirestore.instance.collection('users').doc(gig.authorId).get() : Future.value(null),
                   builder: (context, snapshot) {
                     String name = gig.authorName.isNotEmpty ? gig.authorName : 'Verified Seller';
-                    String photoUrl = 'https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&background=0D8ABC&color=fff';
+                    String photoUrl = '';
                     
                     if (snapshot.hasData && snapshot.data!.exists) {
                       final data = snapshot.data!.data() as Map<String, dynamic>;
@@ -1152,7 +1157,8 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
                       if (pUrl != null && pUrl.isNotEmpty) {
                         photoUrl = pUrl;
                       } else {
-                        photoUrl = 'https://ui-avatars.com/api/?name=${Uri.encodeComponent(name)}&background=0D8ABC&color=fff';
+                        // No photo: UserAvatar draws the same initials + color used everywhere else in the app
+                        photoUrl = '';
                       
 
 
@@ -1166,9 +1172,11 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
                     
                     return Row(
                       children: [
-                        CircleAvatar(
+                        UserAvatar(
+                          uid: gig.authorId,
+                          name: name,
+                          photoUrl: photoUrl.isNotEmpty ? photoUrl : null,
                           radius: 24,
-                          backgroundImage: NetworkImage(photoUrl),
                         ),
                         const SizedBox(width: 12),
                         Text(
@@ -1190,23 +1198,30 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
                   style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w800, color: context.themeTextDark, height: 1.2),
                 ),
                 const SizedBox(height: 12),
-                if (gig.reviewCount > 0)
-                  Row(
-                    children: [
-                      const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
-                      const SizedBox(width: 4),
-                      Text(
-                        gig.averageRating > 0 ? gig.averageRating.toStringAsFixed(1) : 'Rising Talent', 
-                        style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15, color: context.themeTextDark)
-                      ),
-                      const SizedBox(width: 4),
-                      if (gig.reviewCount > 0)
-                        Text('(${gig.reviewCount} reviews)', style: GoogleFonts.inter(color: context.themeTextLight, fontSize: 13)),
-                    ],
-                  ),
+                Row(
+                  children: [
+                    const Icon(Icons.star_rounded, color: Colors.amber, size: 20),
+                    const SizedBox(width: 4),
+                    Text(
+                      gig.reviewCount > 0 && gig.averageRating > 0 ? gig.averageRating.toStringAsFixed(1) : 'New',
+                      style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 15, color: context.themeTextDark),
+                    ),
+                    const SizedBox(width: 4),
+                    if (gig.reviewCount > 0)
+                      Text('(${gig.reviewCount} reviews)', style: GoogleFonts.inter(color: context.themeTextLight, fontSize: 13)),
+                  ],
+                ),
+                if (gig.packages.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  _QuickFacts(gig: gig),
+                ],
                 const SizedBox(height: 16),
                 
-                _FiverrExpandableHtml(htmlData: gig.description),
+                // Descriptions with pictures or tables keep the rich view; everything else gets the easy-reading one
+                if (RegExp(r'<(img|table|iframe)\b', caseSensitive: false).hasMatch(gig.description))
+                  _FiverrExpandableHtml(htmlData: gig.description)
+                else
+                  GigDescription(html: gig.description),
                 
                 const SizedBox(height: 24),
                 const Divider(),
@@ -1255,17 +1270,26 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
           const SizedBox(height: 12),
           Row(
             children: [
-              CircleAvatar(
+              UserAvatar(
+                uid: gig.authorId,
+                name: gig.authorName.isNotEmpty ? gig.authorName : 'Verified Seller',
                 radius: 24,
-                backgroundColor: AppTheme.primary.withValues(alpha: 0.1),
-                child: Text(gig.authorName.isNotEmpty ? gig.authorName[0].toUpperCase() : 'S', style: const TextStyle(color: AppTheme.primary, fontWeight: FontWeight.bold, fontSize: 20)),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(gig.authorName.isNotEmpty ? gig.authorName : 'Verified Seller', style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16, color: context.themeTextDark)),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(gig.authorName.isNotEmpty ? gig.authorName : 'Verified Seller',
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.inter(fontWeight: FontWeight.bold, fontSize: 16, color: context.themeTextDark)),
+                        ),
+                        LiveProBadge(uid: gig.authorId),
+                      ],
+                    ),
                     const SizedBox(height: 4),
                     Text('Tap to view profile & past work', style: GoogleFonts.inter(color: AppTheme.primary, fontSize: 13)),
                   ],
@@ -1341,39 +1365,28 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
         const SizedBox(height: 16),
         StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance
-              .collection('orders')
-              .where('gigId', isEqualTo: gig.id)
-              .where('status', isEqualTo: 'completed')
+              .collection('services')
+              .doc(gig.id)
+              .collection('reviews')
+              .orderBy('createdAt', descending: true)
               .snapshots(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
               return const Center(child: CircularProgressIndicator.adaptive());
-            
-
-
-
-}
+            }
             if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
               return Text('No reviews yet.', style: GoogleFonts.inter(color: context.themeTextLight));
-            
-
-
-
-}
+            }
             
             final reviews = snapshot.data!.docs.where((doc) {
-              final text = doc.data() as Map<String, dynamic>;
-              final review = text['publicReview'] as String?;
+              final data = doc.data() as Map<String, dynamic>;
+              final review = data['comment'] as String? ?? data['review'] as String? ?? data['publicReview'] as String?;
               return review != null && review.trim().isNotEmpty;
             }).toList();
 
             if (reviews.isEmpty) {
               return Text('No reviews yet.', style: GoogleFonts.inter(color: context.themeTextLight));
-            
-
-
-
-}
+            }
 
             return Container(
               padding: const EdgeInsets.all(24),
@@ -1389,19 +1402,20 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
                 separatorBuilder: (_, __) => Divider(height: 32, color: context.themeBorder),
                 itemBuilder: (context, index) {
                   final data = reviews[index].data() as Map<String, dynamic>;
-                  final name = data['userName'] ?? 'Anonymous';
-                  final rating = (data['overallRating'] as num?)?.toDouble() ?? 5.0;
-                  final text = data['publicReview'] as String;
+                  final name = data['userName'] ?? data['buyerName'] ?? 'Anonymous';
+                  final rating = (data['overallRating'] as num?)?.toDouble() ?? (data['rating'] as num?)?.toDouble() ?? 5.0;
+                  final text = (data['comment'] as String?) ?? (data['review'] as String?) ?? (data['publicReview'] as String?) ?? '';
                   
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          CircleAvatar(
+                          UserAvatar(
+                            uid: (data['userId'] ?? data['buyerId'] ?? data['userUid']) as String?,
+                            name: name,
+                            photoUrl: (data['userPhoto'] ?? data['buyerPhoto'] ?? data['photoUrl']) as String?,
                             radius: 16,
-                            backgroundColor: const Color(0xFF1BCA75).withOpacity(0.1),
-                            child: Text(name[0].toUpperCase(), style: const TextStyle(color: Color(0xFF1BCA75), fontWeight: FontWeight.bold)),
                           ),
                           const SizedBox(width: 12),
                           Text(name, style: GoogleFonts.inter(fontWeight: FontWeight.bold, color: context.themeTextDark)),
@@ -1437,122 +1451,239 @@ class _GigDetailScreenState extends State<GigDetailScreen> {
 
 }
 
-class _YoutubeVideoPlayer extends StatefulWidget {
+/// The gig video on the page: its thumbnail with a play button. Tapping plays it full screen.
+///
+/// An inline YouTube player is a web view; on iPhone it slid over the top bar while scrolling and covered
+/// the back button, so people got stuck on the page. The thumbnail also loads much faster.
+class _YoutubeVideoPlayer extends StatelessWidget {
   final String videoId;
   const _YoutubeVideoPlayer({super.key, required this.videoId});
 
-  @override
-  State<_YoutubeVideoPlayer> createState() => _YoutubeVideoPlayerState();
-
-
-
-
-}
-
-class _YoutubeVideoPlayerState extends State<_YoutubeVideoPlayer> {
-  late YoutubePlayerController _controller;
+  void _play(BuildContext context) {
+    Navigator.of(context, rootNavigator: true).push(MaterialPageRoute(
+      fullscreenDialog: true,
+      builder: (_) => _YoutubeFullScreen(videoId: videoId),
+    ));
+  }
 
   @override
-  void initState() {
-    super.initState();
-    _controller = YoutubePlayerController.fromVideoId(
-      videoId: widget.videoId,
-      autoPlay: false,
-      params: const YoutubePlayerParams(
-        showControls: true,
-        mute: false,
-        showFullscreenButton: true,
-        loop: false,
+  Widget build(BuildContext context) {
+    if (videoId.isEmpty) return const SizedBox.shrink();
+    return GestureDetector(
+      onTap: () => _play(context),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.network(
+            'https://img.youtube.com/vi/$videoId/hqdefault.jpg',
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(color: Colors.black),
+          ),
+          Container(color: Colors.black.withValues(alpha: 0.15)),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.55), shape: BoxShape.circle),
+              child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 40),
+            ),
+          ),
+          Positioned(
+            left: 12,
+            bottom: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.6), borderRadius: BorderRadius.circular(8)),
+              child: Text('Watch video', style: GoogleFonts.inter(color: Colors.white, fontSize: 12.5, fontWeight: FontWeight.w600)),
+            ),
+          ),
+        ],
       ),
     );
-  
-
-
-
+  }
 }
+
+class _YoutubeFullScreen extends StatefulWidget {
+  final String videoId;
+  const _YoutubeFullScreen({required this.videoId});
+
+  @override
+  State<_YoutubeFullScreen> createState() => _YoutubeFullScreenState();
+}
+
+class _YoutubeFullScreenState extends State<_YoutubeFullScreen> {
+  late final YoutubePlayerController _controller = YoutubePlayerController.fromVideoId(
+    videoId: widget.videoId,
+    autoPlay: true,
+    params: const YoutubePlayerParams(showControls: true, mute: false, showFullscreenButton: true, loop: false),
+  );
 
   @override
   void dispose() {
     _controller.close();
     super.dispose();
-  
-
-
-
-}
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: YoutubePlayer(
-        controller: _controller,
-        aspectRatio: 16 / 9,
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        leading: IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(context)),
       ),
+      body: Center(child: YoutubePlayer(controller: _controller, aspectRatio: 16 / 9)),
     );
-  
-
-
-
+  }
 }
 
+class _QuickFacts extends StatelessWidget {
+  final GigModel gig;
+  const _QuickFacts({required this.gig});
 
+  @override
+  Widget build(BuildContext context) {
+    final fastest = gig.packages.map((p) => p.deliveryDays).reduce(math.min);
+    Widget chip(IconData icon, String text) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: AppTheme.primary),
+              const SizedBox(width: 5),
+              Text(text, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: context.themeTextDark)),
+            ],
+          ),
+        );
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        chip(Icons.bolt_rounded, 'From $fastest-day delivery'),
+        chip(Icons.autorenew_rounded, 'Revisions included'),
+      ],
+    );
+  }
+}
 
+/// Pasted descriptions carry inline colors/fonts/no-wrap that break the layout (and are invisible on dark theme).
+String _cleanDescription(String html) {
+  const value = r"""("[^"]*"|'[^']*'|[^\s>]+)""";
+  return html
+      .replaceAll(RegExp(r'<(script|style|iframe|object|embed)\b[\s\S]*?</\1\s*>', caseSensitive: false), '')
+      .replaceAll(RegExp(r'</?(script|style|iframe|object|embed|link|meta)\b[^>]*>', caseSensitive: false), '')
+      .replaceAll(RegExp(r'\son\w+\s*=\s*' + value, caseSensitive: false), '')
+      .replaceAll(RegExp(r'\s(style|class|width|height|align|bgcolor|color|face|size|nowrap)\s*=\s*' + value, caseSensitive: false), '')
+      .replaceAll(RegExp(r'</?font\b[^>]*>', caseSensitive: false), '')
+      .replaceAll(RegExp(r'javascript:', caseSensitive: false), '')
+      .replaceAll('&nbsp;', ' ')
+      .replaceAll('\u00a0', ' ');
+}
 
+Map<String, String>? _descriptionStyles(dom.Element e) {
+  switch (e.localName) {
+    case 'h1': return {'font-size': '1.35em', 'font-weight': '700', 'margin': '14px 0 6px'};
+    case 'h2': return {'font-size': '1.2em', 'font-weight': '700', 'margin': '12px 0 6px'};
+    case 'h3': return {'font-size': '1.1em', 'font-weight': '600', 'margin': '10px 0 4px'};
+    case 'p': return {'margin': '0 0 10px'};
+  }
+  return null;
 }
 
 class _FiverrExpandableHtml extends StatelessWidget {
-  final String htmlData;
-  const _FiverrExpandableHtml({required this.htmlData});
+  final String rawHtml;
+  const _FiverrExpandableHtml({required String htmlData}) : rawHtml = htmlData;
+  String get htmlData => _cleanDescription(rawHtml);
+
+  void _openFull(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.themeSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.85,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (_, controller) => Column(
+          children: [
+            Container(
+              margin: const EdgeInsets.symmetric(vertical: 12),
+              height: 4,
+              width: 40,
+              decoration: BoxDecoration(color: context.themeBorder, borderRadius: BorderRadius.circular(2)),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Text('About this Gig', style: GoogleFonts.outfit(fontSize: 20, fontWeight: FontWeight.bold, color: context.themeTextDark)),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                controller: controller,
+                padding: const EdgeInsets.all(20),
+                child: HtmlWidget(
+                  htmlData,
+                  customStylesBuilder: _descriptionStyles,
+                  textStyle: GoogleFonts.inter(fontSize: 15, height: 1.6, color: context.themeTextDark),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: () {
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: context.themeSurface,
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          builder: (context) => DraggableScrollableSheet(
-            initialChildSize: 0.85,
-            minChildSize: 0.5,
-            maxChildSize: 0.95,
-            expand: false,
-            builder: (_, controller) => Column(
+    final bg = context.themeBackground;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('About this Gig', style: GoogleFonts.outfit(fontSize: 18, fontWeight: FontWeight.bold, color: context.themeTextDark)),
+        const SizedBox(height: 8),
+        GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => _openFull(context),
+          child: SizedBox(
+            height: 110,
+            child: Stack(
               children: [
-                Container(
-                  margin: EdgeInsets.symmetric(vertical: 12),
-                  height: 4,
-                  width: 40,
-                  decoration: BoxDecoration(
-                    color: context.themeBorder,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    'About this Gig',
-                    style: GoogleFonts.outfit(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: context.themeTextDark,
+                ClipRect(
+                  child: OverflowBox(
+                    alignment: Alignment.topLeft,
+                    minHeight: 0,
+                    maxHeight: double.infinity,
+                    child: IgnorePointer(
+                      child: HtmlWidget(
+                        htmlData,
+                        customStylesBuilder: _descriptionStyles,
+                        textStyle: GoogleFonts.inter(fontSize: 14, height: 1.5, color: context.themeTextDark),
+                      ),
                     ),
                   ),
                 ),
-                Expanded(
-                  child: SingleChildScrollView(
-                    controller: controller,
-                    padding: EdgeInsets.all(20),
-                    child: HtmlWidget(
-                      htmlData,
-                      textStyle: GoogleFonts.inter(
-                        fontSize: 15,
-                        height: 1.6,
-                        color: context.themeTextDark,
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                  height: 50,
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [bg.withValues(alpha: 0), bg],
+                        ),
                       ),
                     ),
                   ),
@@ -1560,41 +1691,15 @@ class _FiverrExpandableHtml extends StatelessWidget {
               ],
             ),
           ),
-        );
-      },
-      child: Container(
-        width: double.infinity,
-        padding: EdgeInsets.symmetric(vertical: 14, horizontal: 16),
-        decoration: BoxDecoration(
-          color: context.themeSurface,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: context.themeBorder),
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(
-              'About this Gig',
-              style: GoogleFonts.inter(
-                fontWeight: FontWeight.bold,
-                fontSize: 15,
-                color: context.themeTextDark,
-              ),
-            ),
-            const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
-          ],
+        TextButton(
+          onPressed: () => _openFull(context),
+          style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: const Size(0, 36), foregroundColor: AppTheme.primary),
+          child: Text('Read more', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
         ),
-      ),
+      ],
     );
-  
-
-
-
-}
-
-
-
-
+  }
 }
 
 class _FiverrPricingTabs extends StatelessWidget {
@@ -1620,7 +1725,7 @@ class _FiverrPricingTabs extends StatelessWidget {
                 child: GestureDetector(
                   onTap: () => onPackageSelected(pkg.name),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
                       border: Border(
                         bottom: BorderSide(
@@ -1629,15 +1734,33 @@ class _FiverrPricingTabs extends StatelessWidget {
                         ),
                       ),
                     ),
-                    child: Center(
-                      child: Text(
-                        '\$${pkg.price.toStringAsFixed(0)}',
-                        style: GoogleFonts.inter(
-                          fontSize: 16,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                          color: isSelected ? context.themeTextDark : (context.isDarkMode ? Colors.white60 : context.themeTextLight),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          height: 16,
+                          child: (gig.packages.length == 3 && gig.packages.indexOf(pkg) == 1)
+                              ? Text('MOST POPULAR', style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: AppTheme.primary, letterSpacing: 0.4))
+                              : null,
                         ),
-                      ),
+                        Text(
+                          pkg.name,
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: isSelected ? context.themeTextDark : context.themeTextLight,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '\$${pkg.price.toStringAsFixed(0)}',
+                          style: GoogleFonts.inter(
+                            fontSize: 16,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                            color: isSelected ? context.themeTextDark : (context.isDarkMode ? Colors.white60 : context.themeTextLight),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
@@ -1702,7 +1825,7 @@ class _FiverrPricingTabs extends StatelessWidget {
                         padding: EdgeInsets.only(bottom: 8),
                         child: Row(
                           children: [
-                            Icon(Icons.check, size: 16, color: Colors.black),
+                            Icon(Icons.check_circle_rounded, size: 16, color: AppTheme.primary),
                             const SizedBox(width: 8),
                             Expanded(child: Text(fName, style: GoogleFonts.inter(color: context.themeTextDark, fontSize: 13))),
                           ],

@@ -1,0 +1,104 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "6E1C2A55",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_applicationInternalID" : "6802118085",
+    "_developerTeamID" : "U73JN9WJNB",
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21500001",
+      "localizations" : [
+        {
+          "description" : "Reskindev Pro membership",
+          "displayName" : "Reskindev Pro",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "Reskindev Pro",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "99.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "21500002",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Pro badge, message any seller, photos and videos in every chat.",
+              "displayName" : "Reskindev Pro Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "reskindev.pro.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Reskindev Pro Yearly",
+          "subscriptionGroupID" : "21500001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "9.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "21500003",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Pro badge, message any seller, photos and videos in every chat.",
+              "displayName" : "Reskindev Pro Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "reskindev.pro.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Reskindev Pro Monthly",
+          "subscriptionGroupID" : "21500001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

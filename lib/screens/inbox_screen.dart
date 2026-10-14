@@ -1,3 +1,4 @@
+import '../services/invoice_number.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +9,8 @@ import '../providers/chat_provider.dart';
 import '../models/chat_models.dart';
 
 import '../theme.dart';
+import '../widgets/pro_badge.dart';
+import '../widgets/user_avatar.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({Key? key}) : super(key: key);
@@ -17,6 +20,17 @@ class InboxScreen extends StatefulWidget {
 }
 
 class _InboxScreenState extends State<InboxScreen> {
+  String _formatTime(DateTime t) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(t.year, t.month, t.day);
+    final diff = today.difference(day).inDays;
+    if (diff <= 0) return DateFormat('h:mm a').format(t);
+    if (diff == 1) return 'Yesterday';
+    if (diff < 7) return DateFormat('EEE').format(t);
+    return DateFormat('d MMM').format(t);
+  }
+
   String _searchQuery = "";
   bool _showArchived = false;
 
@@ -183,54 +197,23 @@ class _InboxScreenState extends State<InboxScreen> {
                       },
                       title: Row(
                         children: [
-                          Expanded(
-                            child: Text(
-                              name,
+                          Flexible(
+                            child: LiveUserName(
+                              uid: otherUserId,
+                              fallback: name,
                               style: GoogleFonts.outfit(fontWeight: unread > 0 ? FontWeight.bold : FontWeight.w500, fontSize: 16, color: context.themeTextDark),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (chat.orderId != null)
-                            Container(
-                              margin: const EdgeInsets.only(left: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primary.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                'Order',
-                                style: GoogleFonts.inter(fontSize: 10, color: AppTheme.primary, fontWeight: FontWeight.bold),
-                              ),
-                            ),
+                          LiveProBadge(uid: otherUserId, fontSize: 9),
                         ],
                       ),
-                      leading: Stack(
-                        children: [
-                          CircleAvatar(
-                            radius: 26,
-                            backgroundColor: AppTheme.primary.withOpacity(0.1),
-                            backgroundImage: avatarUrl.isNotEmpty ? NetworkImage(avatarUrl) : null,
-                            child: avatarUrl.isEmpty
-                                ? Text(name.isNotEmpty ? name.substring(0, 1).toUpperCase() : '?', style: GoogleFonts.outfit(color: AppTheme.primary, fontSize: 20, fontWeight: FontWeight.bold))
-                                : null,
-                          ),
-                          // Online indicator mock (you can implement real status later)
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: Container(
-                              width: 14,
-                              height: 14,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF10B981),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: context.themeSurface, width: 2),
-                              ),
-                            ),
-                          )
-                        ],
+                      // Live profile photo (or colored initials), with a green dot when they're online
+                      leading: UserAvatar(
+                        uid: otherUserId,
+                        name: name,
+                        photoUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+                        radius: 26,
+                        showOnline: true,
                       ),
                       subtitle: Padding(
                         padding: const EdgeInsets.only(top: 4.0),
@@ -246,8 +229,8 @@ class _InboxScreenState extends State<InboxScreen> {
                                     Icon(Icons.work_outline, size: 12, color: AppTheme.primary),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'ORDER #${chat.orderId!.length > 6 ? chat.orderId!.substring(0, 6).toUpperCase() : chat.orderId!.toUpperCase()}',
-                                      style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.primary),
+                                      'ORDER ${orderNumber(chat.orderId)}',
+                                      style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primary),
                                     ),
                                   ],
                                 ),
@@ -271,7 +254,7 @@ class _InboxScreenState extends State<InboxScreen> {
                         children: [
                           if (chat.updatedAt != null)
                             Text(
-                              DateFormat('hh:mm a').format(chat.updatedAt!),
+                              _formatTime(chat.updatedAt!),
                               style: GoogleFonts.inter(
                                 fontSize: 12, 
                                 fontWeight: unread > 0 ? FontWeight.bold : FontWeight.normal,

@@ -2,7 +2,7 @@
   "applinks": {
     "apps": [],
     "details": [{
-      "appIDs": ["TEAM_ID.com.reskindevdotcom.reskindev"],
+      "appIDs": ["U73JN9WJNB.com.reskindevdotcom.reskindev"],
       "components": [{
         "/": "/gig/*",
         "comment": "Matches any gig URL"
@@ -10,6 +10,6 @@
     }]
   },
   "webcredentials": {
-    "apps": ["TEAM_ID.com.reskindevdotcom.reskindev"]
+    "apps": ["U73JN9WJNB.com.reskindevdotcom.reskindev"]
   }
 }

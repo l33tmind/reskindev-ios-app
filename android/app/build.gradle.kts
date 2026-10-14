@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -32,11 +33,27 @@ android {
         versionName = flutter.versionName
     }
 
+
+    signingConfigs {
+        create("release") {
+            keyAlias = "key0"
+            keyPassword = "123456"
+            storeFile = file("reskindev.jks")
+            storePassword = "123456"
+        }
+        getByName("debug") {
+            keyAlias = "key0"
+            keyPassword = "123456"
+            storeFile = file("reskindev.jks")
+            storePassword = "123456"
+        }
+    }
+
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

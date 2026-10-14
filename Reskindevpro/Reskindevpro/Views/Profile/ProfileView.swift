@@ -1,0 +1,440 @@
+import SwiftUI
+
+/// Profile window: Profile · Saved Services · Settings (website /profile, /profile/saved, /profile/settings)
+struct ProfileView: View {
+    @Environment(SessionStore.self) private var session
+    @Environment(AppModel.self) private var appModel
+    @Environment(\.openWindow) private var openWindow
+    @State private var showSignIn = false
+
+    /// Same menus as the website profile: sellers get My Gigs + Earnings, buyers get Saved
+    private func isVisible(_ tab: AppModel.ProfileTab) -> Bool {
+        if session.isAdmin { return true }
+        if session.isFreelancer { return tab != .saved }
+        return !tab.sellerOnly
+    }
+
+    var body: some View {
+        @Bindable var appModel = appModel
+
+        Group {
+            if session.isSignedIn {
+                NavigationSplitView {
+                    List(selection: Binding($appModel.profileTab)) {
+                        Section {
+                            ForEach(AppModel.ProfileTab.allCases.filter(isVisible)) { tab in
+                                if tab == .pro {
+                                    HStack {
+                                        Label(tab.rawValue, systemImage: tab.icon)
+                                        Spacer()
+                                        if session.isPro {
+                                            Text("Active").font(.caption.weight(.semibold)).foregroundStyle(Color.proAmber)
+                                        } else {
+                                            ProBadge(size: .small)
+                                        }
+                                    }
+                                    .tag(tab)
+                                } else {
+                                    Label(tab.rawValue, systemImage: tab.icon).tag(tab)
+                                }
+                            }
+                        }
+                        Section {
+                            Button {
+                                openWindow(id: WindowID.page, value: WindowID.single)
+                            } label: {
+                                Label("Help & Policies", systemImage: "questionmark.circle")
+                            }
+                            Button(role: .destructive) {
+                                session.signOut()
+                            } label: {
+                                Label("Log Out", systemImage: "rectangle.portrait.and.arrow.right")
+                            }
+                        }
+                    }
+                    .navigationTitle("Account")
+                } detail: {
+                    switch appModel.profileTab {
+                    case .profile: ProfileOverview()
+                    case .saved: SavedServicesView()
+                    case .settings: ProfileSettingsView()
+                    case .myGigs: MyGigsView()
+                    case .earnings: EarningsView()
+                    case .pro: ProView()
+                    }
+                }
+            } else {
+                ContentUnavailableView {
+                    Label("Sign in to see your profile", systemImage: "person.crop.circle")
+                } actions: {
+                    Button("Sign In") { showSignIn = true }
+                        .buttonStyle(GlassOutlineButtonStyle(prominent: true))
+                        .frame(width: 220)
+                }
+            }
+        }
+        .frame(minWidth: 900, minHeight: 600)
+        .sheet(isPresented: $showSignIn) { SignInView() }
+    }
+}
+
+// MARK: - Overview
+
+private struct ProfileOverview: View {
+    @Environment(SessionStore.self) private var session
+    @Environment(AppModel.self) private var appModel
+    @Environment(\.openWindow) private var openWindow
+    @State private var confirmSwitch = false
+    @State private var switching = false
+    @State private var errorMessage: String?
+
+    private func switchRole() async {
+        switching = true
+        defer { switching = false }
+        do {
+            try await session.switchRole()
+            appModel.profileTab = .profile
+        } catch {
+            errorMessage = error.friendlyMessage
+        }
+    }
+
+    private var completedCount: Int { session.orders.filter(\.isCompleted).count }
+    private var activeCount: Int { session.orders.filter { !$0.isCompleted && $0.status != "cancelled" }.count }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                HStack(spacing: 24) {
+                    UserAvatar(name: session.displayName, photoUrl: session.photoUrl, size: 110)
+                        .shadow(color: Color.brandGreen.opacity(0.5), radius: 18)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 12) {
+                            Text(session.nameOrFallback).font(.extraLargeTitle2.weight(.semibold))
+                            if session.isVerified {
+                                Image(systemName: "checkmark.seal.fill").font(.title2).foregroundStyle(.blue)
+                                    .accessibilityLabel("Verified")
+                            }
+                            if session.isPro { ProBadge(size: .large) }
+                        }
+                        if !session.username.isEmpty {
+                            Text("@\(session.username)").font(.title3).foregroundStyle(.secondary)
+                        }
+                        Text((session.role ?? "buyer").capitalized)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.brandGreen)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(Color.brandGreen.opacity(0.15), in: Capsule())
+                    }
+                }
+
+                HStack(spacing: 16) {
+                    StatTile(title: "Wallet Balance", value: session.walletBalance.usd, icon: "wallet.bifold")
+                    StatTile(title: "Active Orders", value: "\(activeCount)", icon: "clock")
+                    StatTile(title: "Completed", value: "\(completedCount)", icon: "checkmark.seal")
+                    StatTile(title: "Saved", value: "\(session.savedGigIDs.count)", icon: "heart")
+                }
+
+                // Reviews from both sides of finished orders live on the public profile
+                if let uid = session.uid {
+                    Button {
+                        openWindow(id: WindowID.sellerProfile, value: uid)
+                    } label: {
+                        Label("My Public Profile & Reviews", systemImage: "star.bubble")
+                    }
+                    .buttonStyle(GlassOutlineButtonStyle())
+                    .frame(width: 360)
+                }
+
+                // Website "Switch to Seller / Buyer" (not for admins)
+                if !session.isAdmin {
+                    let toSeller = !session.isFreelancer
+                    HStack(spacing: 18) {
+                        Image(systemName: toSeller ? "briefcase.fill" : "cart.fill")
+                            .font(.title)
+                            .foregroundStyle(Color.brandGreen)
+                            .frame(width: 60, height: 60)
+                            .background(Color.brandGreen.opacity(0.15), in: Circle())
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(toSeller ? "Start selling on Reskindev" : "Hire on Reskindev")
+                                .font(.title3.weight(.semibold))
+                            Text(toSeller ? "Post gigs, take orders and get paid. Switch back any time."
+                                          : "Switch to your buyer profile to order services and see your purchases.")
+                                .font(.callout).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Button {
+                            confirmSwitch = true
+                        } label: {
+                            if switching { ProgressView() } else { Text(toSeller ? "Switch to Seller" : "Switch to Buyer") }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.brandGreen)
+                        .disabled(switching)
+                    }
+                    .padding(20)
+                    .background(Color.brandGreen.opacity(0.08), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
+                    .errorAlert("Failed to switch role", message: $errorMessage)
+                    .confirmationDialog(toSeller ? "Switch to Seller Account" : "Switch to Buyer Account",
+                                        isPresented: $confirmSwitch, titleVisibility: .visible) {
+                        Button(toSeller ? "Switch to Seller" : "Switch to Buyer") { Task { await switchRole() } }
+                        Button("Cancel", role: .cancel) {}
+                    } message: {
+                        Text("You will be taken to your \(toSeller ? "freelancer dashboard" : "buyer profile").")
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    if !session.email.isEmpty { Label(session.email, systemImage: "envelope") }
+                    if !session.phone.isEmpty { Label(session.phone, systemImage: "phone") }
+                    if !session.country.isEmpty { Label(session.country, systemImage: "mappin.and.ellipse") }
+                    if let since = session.memberSince {
+                        Label("Joined \(since.formatted(.dateTime.month(.wide).year()))", systemImage: "calendar")
+                    }
+                }
+                .font(.title3)
+
+                if !session.bio.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("About").font(.title2.weight(.semibold))
+                        Text(session.bio).foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .padding(36)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .navigationTitle("Profile")
+    }
+}
+
+private struct StatTile: View {
+    let title: String
+    let value: String
+    let icon: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon).font(.title2).foregroundStyle(Color.brandGreen)
+            Text(value).font(.title.weight(.semibold)).lineLimit(1).minimumScaleFactor(0.6)
+            Text(title).font(.subheadline).foregroundStyle(.secondary)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: Radius.medium, style: .continuous))
+    }
+}
+
+// MARK: - Saved services (users/{uid}.savedGigs)
+
+private struct SavedServicesView: View {
+    @Environment(SessionStore.self) private var session
+    @Environment(GigStore.self) private var gigStore
+    @Environment(\.openWindow) private var openWindow
+
+    private var savedGigs: [GigModel] {
+        session.savedGigIDs.compactMap { gigStore.gig(id: $0) }
+    }
+
+    var body: some View {
+        Group {
+            if savedGigs.isEmpty {
+                ContentUnavailableView("No saved services", systemImage: "heart",
+                                       description: Text("Tap the heart on a service to save it here."))
+            } else {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 200), spacing: 18)], spacing: 18) {
+                        ForEach(savedGigs) { gig in
+                            Button {
+                                openWindow(id: WindowID.gigDetail, value: gig.id)
+                            } label: {
+                                CompactGigCard(gig: gig)
+                            }
+                            .buttonStyle(.plain)
+                            .gazeLift(scale: 1.05, radius: Radius.medium)
+                        }
+                    }
+                    .padding(28)
+                }
+            }
+        }
+        .navigationTitle("Saved Services")
+    }
+}
+
+// MARK: - Settings (same fields + username check as the website)
+
+private struct ProfileSettingsView: View {
+    @Environment(SessionStore.self) private var session
+    @State private var displayName = ""
+    @State private var username = ""
+    @State private var phone = ""
+    @State private var country = ""
+    @State private var bio = ""
+    @State private var isSaving = false
+    @State private var saved = false
+    @State private var errorMessage: String?
+    @State private var confirmDelete = false
+    @Environment(\.openURL) private var openURL
+
+    /// Reskindev on the App Store (same listing as the iOS app), straight to "Write a Review"
+    private static let reviewURL = URL(string: "https://apps.apple.com/app/id6802118085?action=write-review")!
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                if session.isVerified {
+                    Label("Verified accounts change these through support.", systemImage: "lock.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                GlassField(title: "Display name", text: $displayName)
+                    .disabled(session.isVerified)
+                GlassField(title: "Username", text: $username)
+                    .disabled(session.isVerified)
+                GlassField(title: "Phone", text: $phone)
+                GlassField(title: "Country", text: $country)
+                    .disabled(session.isVerified)
+                GlassField(title: "Bio", text: $bio, axis: .vertical)
+
+                HStack {
+                    if saved {
+                        Label("Profile updated successfully!", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(Color.brandGreen)
+                    }
+                    Spacer()
+                    Button {
+                        Task { await save() }
+                    } label: {
+                        if isSaving { ProgressView() } else { Text("Save Changes") }
+                    }
+                    .buttonStyle(GlassOutlineButtonStyle(prominent: true))
+                    .frame(width: 240)
+                    .disabled(isSaving || displayName.trimmed.isEmpty)
+                }
+
+                Divider().padding(.vertical, 12)
+
+                // Rate Us
+                HStack(spacing: 16) {
+                    Image(systemName: "star.bubble.fill")
+                        .font(.title)
+                        .foregroundStyle(Color.starYellow)
+                        .frame(width: 56, height: 56)
+                        .background(Color.starYellow.opacity(0.15), in: Circle())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Enjoying Reskindev?").font(.headline)
+                        Text("A rating on the App Store helps other buyers and sellers find us.")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button {
+                        openURL(Self.reviewURL)
+                    } label: {
+                        Label("Rate Us", systemImage: "star.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.brandGreen)
+                }
+
+                Divider().padding(.vertical, 12)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Danger Zone").font(.headline).foregroundStyle(.red)
+                    Text("Deleting your account removes your login. Orders and chats stay on record for the other side.")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                    Button("Delete Account", role: .destructive) { confirmDelete = true }
+                        .buttonStyle(.bordered)
+                }
+            }
+            .padding(36)
+        }
+        .navigationTitle("Settings")
+        .onAppear(perform: load)
+        .errorAlert("Something went wrong", message: $errorMessage)
+        .sheet(isPresented: $confirmDelete) {
+            DeleteAccountSheet { error in errorMessage = error }
+                .sheetPresence()
+        }
+    }
+
+    private func load() {
+        displayName = session.displayName
+        username = session.username
+        phone = session.phone
+        country = session.country
+        bio = session.bio
+    }
+
+    private func save() async {
+        isSaving = true
+        saved = false
+        do {
+            try await session.updateProfile(displayName: displayName, username: username,
+                                            phone: phone, country: country, bio: bio)
+            saved = true
+        } catch {
+            errorMessage = error.friendlyMessage
+        }
+        isSaving = false
+    }
+}
+
+/// Delete Account: the button only unlocks after typing DELETE
+private struct DeleteAccountSheet: View {
+    var onError: (String) -> Void
+    @Environment(SessionStore.self) private var session
+    @Environment(\.dismiss) private var dismiss
+    @State private var typed = ""
+    @State private var deleting = false
+
+    private static let word = "DELETE"
+    private var confirmed: Bool { typed.trimmingCharacters(in: .whitespaces) == Self.word }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Label("Delete your account?", systemImage: "exclamationmark.triangle.fill")
+                .font(.title.weight(.semibold))
+                .foregroundStyle(.red)
+            Text("This permanently removes your Reskindev login and profile. It can't be undone. Orders and chats stay on record for the other side.")
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text("Type \(Self.word) to confirm").font(.headline)
+            TextField(Self.word, text: $typed)
+                .textFieldStyle(.roundedBorder)
+                .textInputAutocapitalization(.characters)
+                .autocorrectionDisabled()
+                .onSubmit { if confirmed { delete() } }
+            HStack {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.bordered)
+                Spacer()
+                Button(role: .destructive) {
+                    delete()
+                } label: {
+                    if deleting { ProgressView() } else { Label("Delete Account", systemImage: "trash") }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .disabled(!confirmed || deleting)
+            }
+        }
+        .padding(32)
+        .frame(width: 560)
+    }
+
+    private func delete() {
+        deleting = true
+        Task {
+            do {
+                try await session.deleteAccount()
+                dismiss()
+            } catch {
+                deleting = false
+                dismiss()
+                onError(error.friendlyMessage)
+            }
+        }
+    }
+}

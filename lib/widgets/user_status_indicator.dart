@@ -45,9 +45,8 @@ class UserStatusIndicator extends StatelessWidget {
             text = 'Active ${timeago.format(lastSeen)}';
           }
         } else {
-            isOnline = false;
-            text = 'Active ${timeago.format(lastSeen)}';
-          }
+          isOnline = false;
+          text = 'Offline';
         }
 
         return Row(

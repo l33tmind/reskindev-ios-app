@@ -37,6 +37,7 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
   final _addressCtrl = TextEditingController();
   bool _submitting = false;
   int _quantity = 1;
+  String _paymentMethod = 'offline';
 
   @override
   void initState() {
@@ -123,7 +124,7 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
       userEmail: auth.user!.email ?? '',
       authorId: gig.authorId,
       projectDetails: _detailsCtrl.text.trim(),
-      status: 'pending_payment',
+      status: _paymentMethod == 'wallet' ? 'requirements' : 'pending_payment',
     );
 
     final orderMap = order.toMap();
@@ -135,22 +136,55 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
     if (company != null) orderMap['clientCompany'] = company;
     if (address != null) orderMap['clientAddress'] = address;
 
-    final docRef = await FirebaseFirestore.instance.collection('orders').add(orderMap);
+    final orderRef = FirebaseFirestore.instance.collection('orders').doc();
+    String orderId = orderRef.id;
+    orderMap['id'] = orderId; // Add ID into document explicitly
+
+    if (_paymentMethod == 'wallet') {
+      final batch = FirebaseFirestore.instance.batch();
+      batch.set(orderRef, orderMap);
+      
+      final userRef = FirebaseFirestore.instance.collection('users').doc(auth.user!.uid);
+      batch.update(userRef, {'walletBalance': FieldValue.increment(-order.price)});
+      
+      await batch.commit();
+      auth.refreshWallet();
+    } else {
+      await orderRef.set(orderMap);
+    }
     
     // Trigger system message
     try {
       if (context.mounted) {
         final chatProvider = context.read<ChatProvider>();
+        
+        // Initial Order Placed message
         await chatProvider.sendSystemMessage(
           buyerId: order.clientUid,
           buyerName: order.clientName,
           sellerId: order.authorId,
           sellerName: gig.authorName,
-          orderId: docRef.id,
+          orderId: orderId,
           gigTitle: order.gigTitle,
           actionType: 'order_placed',
-          text: 'Order placed but waiting for payment confirmation. \$${order.price.toStringAsFixed(0)} for ${order.gigTitle}',
+          text: _paymentMethod == 'wallet' 
+            ? 'Order placed via Wallet. \$${order.price.toStringAsFixed(0)} for ${order.gigTitle}'
+            : 'Order placed but waiting for payment confirmation. \$${order.price.toStringAsFixed(0)} for ${order.gigTitle}',
         );
+        
+        if (_paymentMethod == 'wallet') {
+          // If paid by wallet, instantly trigger payment verified message
+          await chatProvider.sendSystemMessage(
+            buyerId: order.clientUid,
+            buyerName: order.clientName,
+            sellerId: order.authorId,
+            sellerName: gig.authorName,
+            orderId: orderId,
+            gigTitle: order.gigTitle,
+            actionType: 'payment_verified',
+            text: 'Payment verified via Wallet for \$${order.price.toStringAsFixed(2)}. Please submit requirements.',
+          );
+        }
       }
     } catch (e) {
       print('System message error: $e');
@@ -170,25 +204,12 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
           body: '${FirebaseAuth.instance.currentUser?.displayName ?? "A client"} placed an order for ${gig.title}',
         );
       }
+      // The seller's "New order" push + in-app notification is sent by the server (onOrderCreated).
     } catch (e) {
-      debugPrint('Error triggering admin notification: $e');
+      debugPrint('Error triggering notification: $e');
     }
 
-    // Trigger Client Notification
-    try {
-      final clientDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(auth.user!.uid)
-          .get();
-          
-      await NotificationService.sendAndSaveNotification(
-        userId: auth.user!.uid,
-        title: 'Order Placed Successfully! 🎉',
-        body: 'Thank you for ordering ${gig.title}. We will review it and contact you shortly.',
-      );
-    } catch (e) {
-      debugPrint('Error triggering client notification: $e');
-    }
+    // The buyer's "Order placed" notification is sent by the server (chat system message).
 
     // Trigger Email Notification (Order Placed)
     try {
@@ -198,7 +219,7 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
         body: jsonEncode({
           'email': order.clientEmail,
           'clientName': order.clientName,
-          'orderId': order.id ?? 'New Order',
+          'orderId': orderId,
           'status': 'pending', // This should trigger the new order template
           'gigTitle': order.gigTitle,
           'packageName': order.packageName,
@@ -212,10 +233,10 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
 
     setState(() => _submitting = false);
     if (!mounted) return;
-    _showSuccessDialog(context, gig.title, package.name);
+    _showSuccessDialog(context, gig.title, package.name, orderId);
   }
 
-  void _showSuccessDialog(BuildContext ctx, String gigTitle, String pkgName) {
+  void _showSuccessDialog(BuildContext ctx, String gigTitle, String pkgName, String orderId) {
     showAdaptiveDialog(
       context: ctx,
       barrierDismissible: false,
@@ -243,7 +264,8 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
                   style: GoogleFonts.outfit(fontSize: 24, fontWeight: FontWeight.w800, color: context.themeTextDark)),
               const SizedBox(height: 10),
               Text(
-                'Your order has been submitted. We will review and contact you shortly.',
+                // Say what happens next and where to follow it
+                "We'll confirm your payment, then the seller starts. Follow everything and talk to the seller in the order chat.",
                 textAlign: TextAlign.center,
                 style: GoogleFonts.inter(fontSize: 14, color: context.themeTextLight, height: 1.6),
               ),
@@ -253,10 +275,11 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
                 child: ElevatedButton.icon(
                   onPressed: () {
                     Navigator.pop(ctx);
-                    ctx.go('/my-orders');
+                    // Replace the order form, so Back from the chat doesn't land on a used form
+                    ctx.pushReplacement('/order-chat/$orderId');
                   },
-                  icon: const Icon(Icons.receipt_long_outlined, size: 18),
-                  label: Text('View My Orders', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
+                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 18),
+                  label: Text('Open order chat', style: GoogleFonts.inter(fontWeight: FontWeight.w700)),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppTheme.primary,
                     foregroundColor: Colors.white,
@@ -339,7 +362,7 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'To provide a secure experience, please sign in with your Google account to proceed with your order.',
+                  'To provide a secure experience, please sign in or register to proceed with your order.',
                   textAlign: TextAlign.center,
                   style: GoogleFonts.inter(
                       fontSize: 15,
@@ -545,6 +568,8 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
         ),
       ),
       body: SingleChildScrollView(
+        // The phone keypad has no Done key on iPhone: scrolling puts the keyboard away
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
         child: _buildFormContent(context, gig, package),
       ),
@@ -748,7 +773,7 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
                 maxLines: 6,
                 style: GoogleFonts.inter(fontSize: 14, color: context.themeTextDark),
                 decoration: InputDecoration(
-                  hintText: 'Describe what you need...\n\nE.g. I need a 5-page website for my restaurant...',
+                  hintText: 'Describe what you need. Share files with a link, e.g. Google Drive or WeTransfer.\n\nE.g. I need a 5-page website for my restaurant...',
                   hintStyle: GoogleFonts.inter(fontSize: 14, color: AppTheme.textMuted),
                   filled: true,
                   fillColor: context.themeSurface,
@@ -768,6 +793,101 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
                   contentPadding: const EdgeInsets.all(16),
                 ),
                 // validator removed to make it optional
+              ),
+              const SizedBox(height: 8),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(top: 1),
+                    child: Icon(Icons.link_rounded, size: 15, color: context.themeTextLight),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Tip: upload big files to Google Drive or WeTransfer, then paste the share link here.',
+                      style: GoogleFonts.inter(fontSize: 12, color: context.themeTextLight, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              _SectionHeader(
+                title: 'Payment Method',
+                subtitle: 'Choose how to pay',
+                icon: Icons.payment_outlined,
+              ),
+              const SizedBox(height: 14),
+              Container(
+                decoration: BoxDecoration(
+                  color: context.themeSurface,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: context.themeBorder),
+                ),
+                child: Column(
+                  children: [
+                    RadioListTile<String>(
+                      title: Text('Offline Payment / Bank Transfer', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: context.themeTextDark)),
+                      subtitle: Text('Pay manually. Order starts after admin verifies payment.', style: GoogleFonts.inter(fontSize: 12, color: context.themeTextLight)),
+                      value: 'offline',
+                      groupValue: _paymentMethod,
+                      activeColor: AppTheme.primary,
+                      onChanged: (val) => setState(() => _paymentMethod = val!),
+                    ),
+                    Divider(color: context.themeBorder, height: 1),
+                    Builder(
+                      builder: (context) {
+                        final auth = context.watch<ap.AuthProvider>();
+                        
+                        // We need finalPrice here
+                        final gigProvider = context.read<GigProvider>();
+                        final gig = gigProvider.getById(widget.gigId);
+                        GigPackage? package;
+                        if (widget.packageName == 'Premium_Gallery') {
+                          package = GigPackage(name: 'Premium_Gallery', price: gig?.galleryUnlockPrice ?? 0, description: '', deliveryDays: 1, featureChecks: []);
+                        } else {
+                          try { package = gig?.packages.firstWhere((p) => p.name == widget.packageName); } catch (_) {}
+                        }
+                        
+                        final settings = context.watch<SettingsProvider>();
+                        final double serviceFeePct = settings.serviceFee;
+                        final double basePrice = package?.price ?? 0;
+                        final double serviceFeeAmount = basePrice * (serviceFeePct / 100);
+                        final double finalPrice = (basePrice + serviceFeeAmount) * _quantity;
+                        
+                        final isWalletSufficient = auth.walletBalance >= finalPrice;
+                        
+                        return RadioListTile<String>(
+                          title: Row(
+                            children: [
+                              Text('Wallet Balance', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.bold, color: context.themeTextDark)),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                                ),
+                                child: Text('\$${auth.walletBalance.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.green)),
+                              ),
+                            ],
+                          ),
+                          subtitle: Text(
+                            isWalletSufficient 
+                              ? 'Pay instantly from your wallet balance.' 
+                              : 'Insufficient balance to cover the total amount.',
+                            style: GoogleFonts.inter(fontSize: 12, color: isWalletSufficient ? context.themeTextLight : Colors.red),
+                          ),
+                          value: 'wallet',
+                          groupValue: _paymentMethod,
+                          activeColor: AppTheme.primary,
+                          onChanged: isWalletSufficient ? (val) => setState(() => _paymentMethod = val!) : null,
+                        );
+                      }
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 28),
 
@@ -793,7 +913,7 @@ class _OrderFormScreenState extends State<OrderFormScreen> {
                             const Icon(Icons.check_circle_rounded, size: 20),
                             const SizedBox(width: 10),
                             Text(
-                              'Confirm Order · \$${total.toStringAsFixed(0)}',
+                              'Confirm Order · \$${total.toStringAsFixed(total % 1 == 0 ? 0 : 2)}',
                               style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
                             ),
                           ],

@@ -1,0 +1,598 @@
+import SwiftUI
+import PhotosUI
+import UniformTypeIdentifiers
+import AVKit
+
+/// The open WorkStream: header, messages, quick replies, composer —
+/// with the workspace details floating beside the window as an ornament
+struct ChatView: View {
+    @Environment(ChatStore.self) private var chat
+    @Environment(SessionStore.self) private var session
+    @State private var draft = ""
+    @State private var replyTo: ChatMessage?
+    @State private var showOffer = false
+    @State private var showWorkspace = true
+    @State private var showReport = false
+    @State private var sheetAction: OrderAction?
+    @State private var toast: String?
+    @State private var errorMessage: String?
+    @FocusState private var composerFocused: Bool
+    @State private var photoItem: PhotosPickerItem?
+    @State private var sendingPhoto = false
+    /// 0...1 while a video uploads
+    @State private var videoProgress: Double?
+    /// Picked but not sent yet: shown in a preview with Send / Cancel
+    @State private var pending: PendingMedia?
+
+    var body: some View {
+        if let conversation = chat.activeChat, let uid = session.uid {
+            VStack(spacing: 0) {
+                header(conversation, me: uid)
+                messageList(me: uid, conversation: conversation)
+                if session.isBlockedByAdmin {
+                    Label("Your account is suspended by Reskindev, so messaging is disabled.", systemImage: "exclamationmark.octagon.fill")
+                        .font(.callout)
+                        .foregroundStyle(.red)
+                        .padding(20)
+                } else if chat.iBlockedThem {
+                    // I blocked them: say so and let me undo it right here
+                    HStack(spacing: 16) {
+                        Label("You blocked \(chat.otherUser?.name ?? "this user"). They can't message you.", systemImage: "hand.raised.fill")
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button {
+                            toggleBlock()
+                        } label: {
+                            Label("Unblock", systemImage: "hand.raised.slash")
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Color.brandGreen)
+                    }
+                    .padding(20)
+                } else if chat.theyBlockedMe {
+                    Label("This user has blocked you, so you can't send messages.", systemImage: "hand.raised.fill")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(20)
+                } else {
+                    composer
+                }
+            }
+            .overlay(alignment: .top) {
+                if let toast {
+                    Label(toast, systemImage: "checkmark.circle.fill")
+                        .font(.headline)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 12)
+                        .glassBackgroundEffect(in: Capsule())
+                        .padding(.top, 100)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .ornament(visibility: showWorkspace ? .visible : .hidden,
+                      attachmentAnchor: .scene(.trailing), contentAlignment: .leading) {
+                WorkspacePanel(onAction: { sheetAction = $0 })
+                    // Turned in toward the viewer, hinged on the edge next to the chat, so it's easy to read
+                    .rotation3DEffect(.degrees(-24), axis: (x: 0, y: 1, z: 0), anchor: .leading)
+                    .padding(.leading, 20)
+            }
+            .sheet(item: $sheetAction) { action in
+                if let order = chat.currentOrder {
+                    OrderActionSheet(order: order, action: action) { show($0) }
+                }
+            }
+            .sheet(isPresented: $showOffer) { OfferComposer().sheetPresence() }
+            .sheet(item: $pending) { media in
+                MediaPreviewSheet(media: media) {
+                    if case .video(let url, _) = media { try? FileManager.default.removeItem(at: url) }
+                    pending = nil
+                } onSend: {
+                    Task { await sendPending(media) }
+                }
+            }
+            .alert("Report user", isPresented: $showReport) {
+                ReportButtons { reason in
+                    Task {
+                        do { try await chat.report(reason: reason); show("Report submitted successfully") }
+                        catch { errorMessage = error.friendlyMessage }
+                    }
+                }
+            } message: {
+                Text("Why are you reporting this user?")
+            }
+            .errorAlert("Something went wrong", message: $errorMessage)
+            .task(id: chat.chatOrders.map(\.status)) {
+                await OrderService.applyAutomaticRules(to: chat.chatOrders, session: session)
+            }
+        }
+    }
+
+    // MARK: Header ("WorkStream with …")
+
+    private func header(_ conversation: Conversation, me: String) -> some View {
+        let order = chat.currentOrder
+        let name = chat.otherUser?.name ?? conversation.title(me: me)
+        return HStack(alignment: .center, spacing: 16) {
+            UserAvatar(name: name, photoUrl: chat.photo(for: conversation.otherID(me: me)), size: 52)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    (Text("WorkStream with ").foregroundStyle(.secondary) + Text(name).bold())
+                        .font(.title3)
+                    if chat.otherUser?.isPro == true { ProBadge() }
+                }
+                if let order {
+                    Text(order.gigTitle).font(.headline).foregroundStyle(Color.brandGreen).lineLimit(1)
+                } else {
+                    let online = chat.otherUser?.isOnline ?? false
+                    Label(online ? "Online" : "Offline", systemImage: "circle.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(online ? Color.green : Color.secondary)
+                        .labelStyle(DotLabelStyle())
+                }
+            }
+            Spacer()
+
+            // Only the seller of this order delivers
+            if let order, order.isSeller(me), order.isInProgress {
+                Button { sheetAction = .deliver } label: { Label("Deliver Order", systemImage: "shippingbox.fill") }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Color.brandGreen)
+            }
+            // Only the seller side of this chat makes offers (buyers can't, even if their account also sells)
+            if chat.amISeller && !chat.amIBuyer {
+                Button { showOffer = true } label: { Label("Create Offer", systemImage: "briefcase") }
+                    .buttonStyle(.bordered)
+            }
+            Button {
+                withAnimation { showWorkspace.toggle() }
+            } label: {
+                Label("Workspace", systemImage: "sidebar.trailing")
+            }
+            .buttonStyle(.bordered)
+            .help("Show or hide workspace details")
+
+            Menu {
+                if let order, order.isCancellable || order.isDelivered {
+                    Section("Resolution Center") {
+                        Button { sheetAction = .cancel } label: { Label("Request Cancellation", systemImage: "xmark.octagon") }
+                        Button { sheetAction = .escalate } label: { Label("Escalate to Admin", systemImage: "exclamationmark.shield") }
+                    }
+                }
+                Button {
+                    toggleBlock()
+                } label: {
+                    Label(chat.iBlockedThem ? "Unblock User" : "Block User",
+                          systemImage: chat.iBlockedThem ? "hand.raised.slash" : "hand.raised")
+                }
+                Button(role: .destructive) { showReport = true } label: { Label("Report User", systemImage: "flag") }
+            } label: {
+                Image(systemName: "ellipsis.circle").font(.title2)
+                    .frame(width: Hit.min, height: Hit.min)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("More options")
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .background(Color.white.opacity(0.05))
+    }
+
+    private func toggleBlock() {
+        let wasBlocked = chat.iBlockedThem
+        Task {
+            do {
+                try await chat.toggleBlock()
+                show(wasBlocked ? "User unblocked" : "User blocked")
+            } catch {
+                errorMessage = error.friendlyMessage
+            }
+        }
+    }
+
+    // MARK: Messages
+
+    private func messageList(me: String, conversation: Conversation) -> some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    if chat.messagesLoading && chat.messages.isEmpty {
+                        ProgressView().padding(40)
+                    }
+                    ForEach(chat.messages) { message in
+                        MessageRow(message: message, me: me, conversation: conversation,
+                                   onReply: { replyTo = $0; composerFocused = true },
+                                   onAction: { sheetAction = $0 },
+                                   onError: { errorMessage = $0 },
+                                   onNotice: { show($0) })
+                            .id(message.id)
+                    }
+                    if conversation.isOtherTyping(me: me) {
+                        HStack {
+                            Text("\(chat.otherUser?.name ?? conversation.title(me: me)) is typing…")
+                                .font(.subheadline.italic())
+                                .foregroundStyle(Color.brandGreen)
+                            Spacer()
+                        }
+                    }
+                }
+                .padding(24)
+            }
+            .defaultScrollAnchor(.bottom)
+            .onChange(of: chat.messages.last?.id) {
+                withAnimation { proxy.scrollTo(chat.messages.last?.id, anchor: .bottom) }
+                // A soft chime when money moves or the order closes, while you're looking at the chat
+                if let last = chat.messages.last, last.kind == .system,
+                   ["payment_verified", "order_completed"].contains(last.actionType),
+                   -(last.createdAt?.timeIntervalSinceNow ?? -999) < 30 {
+                    SoundFX.success.play()
+                }
+            }
+        }
+    }
+
+    // MARK: Composer + quick replies
+
+    private var composer: some View {
+        VStack(spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(chat.quickReplies, id: \.self) { reply in
+                        Button(reply) { draft = reply; composerFocused = true }
+                            .font(.subheadline.weight(.medium))
+                            .buttonStyle(.bordered)
+                            .buttonBorderShape(.capsule)
+                    }
+                }
+            }
+
+            if let replyTo {
+                HStack {
+                    Label("Replying to: \(replyTo.text)", systemImage: "arrowshape.turn.up.left")
+                        .font(.subheadline)
+                        .lineLimit(1)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button { self.replyTo = nil } label: { Image(systemName: "xmark.circle.fill") }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Cancel reply")
+                }
+            }
+
+            HStack(spacing: 12) {
+                // Photos (5 MB) and videos (100 MB): once the order is paid, or any chat for Reskindev Pro members
+                if chat.canSendMedia {
+                    PhotosPicker(selection: $photoItem, matching: .any(of: [.images, .videos])) {
+                        Group {
+                            if let videoProgress {
+                                Text("\(Int(videoProgress * 100))%").font(.caption.weight(.bold)).monospacedDigit()
+                            } else if sendingPhoto {
+                                ProgressView()
+                            } else {
+                                Image(systemName: "photo.on.rectangle.angled").font(.title3)
+                            }
+                        }
+                        .frame(width: Hit.min, height: Hit.min)
+                        .background(Color.white.opacity(0.08), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .hoverEffect(.lift)
+                    .disabled(sendingPhoto || videoProgress != nil)
+                    .accessibilityLabel("Send a photo or video")
+                    .onChange(of: photoItem) { _, item in
+                        guard let item else { return }
+                        photoItem = nil
+                        Task { await sendMedia(item) }
+                    }
+                }
+                TextField("Type a message…", text: $draft, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .lineLimit(1...5)
+                    .focused($composerFocused)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+                    .background(Color.white.opacity(0.08), in: Capsule())
+                    .onChange(of: draft) { _, new in if !new.isEmpty { chat.userTyped() } }
+                    .onSubmit(send)
+                Button(action: send) {
+                    Image(systemName: "paperplane.fill")
+                        .font(.title3)
+                        .foregroundStyle(.white)
+                        .frame(width: Hit.min, height: Hit.min)
+                        .background(Color.brandGreen, in: Circle())
+                        .shadow(color: Color.brandGreen.opacity(0.45), radius: 10, y: 4)
+                }
+                .buttonStyle(.plain)
+                .hoverEffect(.lift)
+                .disabled(draft.trimmed.isEmpty)
+                .accessibilityLabel("Send")
+            }
+        }
+        .padding(16)
+        .background(.ultraThinMaterial)
+    }
+
+    private func send() {
+        let text = draft.trimmed
+        guard !text.isEmpty else { return }
+        let reply = replyTo
+        draft = ""
+        replyTo = nil
+        Task {
+            do { try await chat.send(text: text, replyTo: reply) } catch {
+                draft = text
+                errorMessage = error.friendlyMessage
+            }
+        }
+    }
+
+    /// Load the picked item for the preview; nothing is uploaded until Send
+    private func sendMedia(_ item: PhotosPickerItem) async {
+        sendingPhoto = true
+        defer { sendingPhoto = false }
+        do {
+            if let type = item.supportedContentTypes.first(where: { $0.conforms(to: .movie) }) {
+                guard let movie = try await item.loadTransferable(type: ChatMovie.self) else { return }
+                pending = .video(movie.url, contentType: type.preferredMIMEType ?? "video/mp4")
+            } else {
+                guard let data = try await item.loadTransferable(type: Data.self), let image = UIImage(data: data),
+                      let jpeg = image.downscaled(maxSide: 1600).jpegData(compressionQuality: 0.8) else { return }
+                pending = .photo(jpeg, image)
+            }
+        } catch {
+            errorMessage = error.friendlyMessage
+        }
+    }
+
+    /// Send pressed in the preview
+    private func sendPending(_ media: PendingMedia) async {
+        pending = nil
+        do {
+            switch media {
+            case .photo(let jpeg, _):
+                sendingPhoto = true
+                defer { sendingPhoto = false }
+                try await chat.sendImage(jpeg)
+            case .video(let url, let contentType):
+                videoProgress = 0
+                defer {
+                    videoProgress = nil
+                    try? FileManager.default.removeItem(at: url)
+                }
+                try await chat.sendVideo(fileURL: url, contentType: contentType) { p in
+                    Task { @MainActor in videoProgress = p }
+                }
+            }
+        } catch {
+            errorMessage = error.friendlyMessage
+        }
+    }
+
+    private func show(_ message: String) {
+        withAnimation { toast = message }
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            withAnimation { toast = nil }
+        }
+    }
+}
+
+/// "● Online"
+private struct DotLabelStyle: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 6) {
+            configuration.icon.font(.caption2)
+            configuration.title
+        }
+    }
+}
+
+private struct ReportButtons: View {
+    let onReport: (String) -> Void
+    var body: some View {
+        ForEach(["Spam", "Harassment", "Scam or fraud", "Off-platform payment"], id: \.self) { reason in
+            Button(reason) { onReport(reason) }
+        }
+        Button("Cancel", role: .cancel) { }
+    }
+}
+
+// MARK: - Workspace Details (website right sidebar), floating beside the Inbox window
+
+private struct WorkspacePanel: View {
+    var onAction: (OrderAction) -> Void
+    @Environment(ChatStore.self) private var chat
+    @Environment(SessionStore.self) private var session
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Workspace Details").font(.title3.weight(.semibold))
+                if let uid = session.uid, let conversation = chat.activeChat {
+                    let name = chat.otherUser?.name ?? conversation.title(me: uid)
+                    HStack(spacing: 12) {
+                        UserAvatar(name: name, photoUrl: chat.photo(for: conversation.otherID(me: uid)), size: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(name).font(.headline)
+                            Text(chat.amISeller ? "BUYER" : "SELLER")
+                                .font(.caption2.weight(.semibold)).tracking(0.8)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                // Several orders between the same two people: pick one
+                if chat.chatOrders.count > 1, chat.activeChat?.orderId == nil {
+                    Text("\(chat.chatOrders.count) orders together · showing the latest")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(24)
+
+            Divider()
+
+            ScrollView {
+                if let order = chat.currentOrder {
+                    WorkspaceTimeline(order: order, onAction: onAction)
+                        .padding(24)
+                } else {
+                    ContentUnavailableView("No active order", systemImage: "briefcase",
+                                           description: Text("Start an order to see details here."))
+                        .padding(.vertical, 60)
+                }
+            }
+        }
+        .frame(width: 400, height: 640)
+        .glassBackgroundEffect(in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+    }
+}
+
+// MARK: - Custom offer (seller → buyer)
+
+private struct OfferComposer: View {
+    @Environment(ChatStore.self) private var chat
+    @Environment(\.dismiss) private var dismiss
+    @State private var price = ""
+    @State private var days = ""
+    @State private var description = ""
+    @State private var sending = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            Text("Create Custom Offer").font(.title.weight(.bold))
+            GlassField(title: "Price (USD)", text: $price, prompt: "150")
+            GlassField(title: "Delivery days", text: $days, prompt: "5")
+            GlassField(title: "What's included", text: $description, axis: .vertical)
+            HStack(spacing: 12) {
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(GlassOutlineButtonStyle())
+                Button {
+                    Task {
+                        sending = true
+                        // Same minimum and step as the website and the iOS app
+                        if let problem = await PricingRules.load().check(Double(price)) {
+                            errorMessage = problem
+                            sending = false
+                            return
+                        }
+                        do {
+                            try await chat.sendOffer(price: Double(price) ?? 0, days: Int(days) ?? 3, description: description)
+                            dismiss()
+                        } catch {
+                            errorMessage = error.friendlyMessage
+                        }
+                        sending = false
+                    }
+                } label: {
+                    if sending { ProgressView() } else { Text("Send Offer") }
+                }
+                .buttonStyle(GlassOutlineButtonStyle(prominent: true))
+                .disabled((Double(price) ?? 0) <= 0 || (Int(days) ?? 0) <= 0 || sending)
+            }
+        }
+        .padding(32)
+        .frame(width: 520)
+        .errorAlert("Couldn't send offer", message: $errorMessage)
+    }
+}
+
+private extension UIImage {
+    /// Longest side at most `maxSide` points, so chat photos upload fast
+    func downscaled(maxSide: CGFloat) -> UIImage {
+        let longest = max(size.width, size.height)
+        guard longest > maxSide else { return self }
+        let scale = maxSide / longest
+        let target = CGSize(width: size.width * scale, height: size.height * scale)
+        return UIGraphicsImageRenderer(size: target).image { _ in draw(in: CGRect(origin: .zero, size: target)) }
+    }
+}
+
+/// A picked video copied into tmp, so it can be uploaded as a file (not loaded into memory)
+private struct ChatMovie: Transferable {
+    let url: URL
+
+    static var transferRepresentation: some TransferRepresentation {
+        FileRepresentation(contentType: .movie) { movie in
+            SentTransferredFile(movie.url)
+        } importing: { received in
+            let copy = FileManager.default.temporaryDirectory
+                .appendingPathComponent(UUID().uuidString)
+                .appendingPathExtension(received.file.pathExtension.isEmpty ? "mov" : received.file.pathExtension)
+            try FileManager.default.copyItem(at: received.file, to: copy)
+            return Self(url: copy)
+        }
+    }
+}
+
+/// A photo or video picked in the chat, waiting for Send
+enum PendingMedia: Identifiable {
+    case photo(Data, UIImage)
+    case video(URL, contentType: String)
+
+    var id: String {
+        switch self {
+        case .photo(let data, _): "photo-\(data.count)"
+        case .video(let url, _): url.absoluteString
+        }
+    }
+
+    var byteCount: Int {
+        switch self {
+        case .photo(let data, _): data.count
+        case .video(let url, _): (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        }
+    }
+
+    /// Size problem shown before anything is uploaded
+    var limitMessage: String? {
+        switch self {
+        case .photo: byteCount > ChatStore.maxPhotoBytes ? "Photos can be up to 5 MB." : nil
+        case .video: byteCount > ChatStore.maxVideoBytes ? "Videos can be up to 100 MB. For bigger files, share a Google Drive or WeTransfer link." : nil
+        }
+    }
+}
+
+/// Look before you send: the picked photo or video, its size, Cancel and Send
+struct MediaPreviewSheet: View {
+    let media: PendingMedia
+    var onCancel: () -> Void
+    var onSend: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text("Send this?").font(.title2.weight(.semibold))
+            Group {
+                switch media {
+                case .photo(_, let image):
+                    Image(uiImage: image).resizable().scaledToFit()
+                case .video(let url, _):
+                    VideoPlayer(player: AVPlayer(url: url))
+                }
+            }
+            .frame(maxWidth: 640, maxHeight: 400)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+            Text(ByteCountFormatter.string(fromByteCount: Int64(media.byteCount), countStyle: .file))
+                .font(.callout).foregroundStyle(.secondary)
+            if let problem = media.limitMessage {
+                Label(problem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+            }
+            HStack(spacing: 12) {
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(GlassOutlineButtonStyle())
+                Button(action: onSend) {
+                    Label("Send", systemImage: "paperplane.fill")
+                }
+                .buttonStyle(GlassOutlineButtonStyle(prominent: true))
+                .disabled(media.limitMessage != nil)
+            }
+            .frame(maxWidth: 480)
+        }
+        .padding(32)
+        .frame(width: 720)
+        .sheetPresence()
+    }
+}

@@ -25,7 +25,28 @@ class DynamicPageScreen extends StatelessWidget {
     );
     
     if (page == null) {
-      return const Scaffold(body: Center(child: Text('Page not found')));
+      return Scaffold(
+        appBar: AppBar(title: const Text('Page Not Found')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 64, color: Colors.grey),
+                const SizedBox(height: 16),
+                const Text('Page Not Found', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 8),
+                Text(
+                  'The page \'$pageIdOrSlug\' has not been created yet.\n\nIf you are an admin, please go to the Admin Dashboard > Pages and create a page with the slug \'$pageIdOrSlug\'.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 16, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
     }
 
     return Scaffold(

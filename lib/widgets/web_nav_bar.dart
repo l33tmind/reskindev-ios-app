@@ -8,6 +8,7 @@ import '../theme.dart';
 import '../providers/auth_provider.dart' as ap;
 import '../providers/settings_provider.dart';
 import '../providers/page_provider.dart';
+import 'user_avatar.dart';
 
 final ValueNotifier<bool> profileMenuOpen = ValueNotifier(false);
 
@@ -136,6 +137,24 @@ class WebNavBar extends StatelessWidget {
             ],
           ],
           if (auth.isLoggedIn) ...[
+            if (auth.walletBalance > 0)
+              Container(
+                margin: const EdgeInsets.only(right: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.account_balance_wallet_rounded, size: 14, color: Colors.green),
+                    const SizedBox(width: 4),
+                    Text('\$${auth.walletBalance.toStringAsFixed(2)}', style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.green)),
+                  ],
+                ),
+              ),
             IconButton(
               icon: Icon(Icons.notifications_none_rounded, color: context.themeTextDark),
               onPressed: () => context.push('/notifications'),
@@ -201,11 +220,11 @@ class _WebUserPill extends StatelessWidget {
           ),
           child: Row(
             children: [
-              CircleAvatar(
+              UserAvatar(
+                uid: auth.user?.uid,
+                name: auth.user?.displayName ?? auth.user?.email?.split('@').first ?? 'User',
+                photoUrl: auth.photoUrl.isNotEmpty ? auth.photoUrl : null,
                 radius: 12,
-                backgroundImage: auth.photoUrl.isNotEmpty ? NetworkImage(auth.photoUrl) : null,
-                backgroundColor: AppTheme.primary,
-                child: auth.photoUrl.isEmpty ? Icon(Icons.person, size: 14, color: Colors.white) : null,
               ),
               const SizedBox(width: 8),
               Flexible(
@@ -248,10 +267,10 @@ class _WebUserPill extends StatelessWidget {
                       width: 260,
                       decoration: BoxDecoration(
                         color: context.isDarkMode 
-                            ? Colors.black.withOpacity(0.6) 
-                            : Colors.white.withOpacity(0.75),
+                            ? Colors.black.withValues(alpha: 0.6) 
+                            : Colors.white.withValues(alpha: 0.75),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: context.themeBorder.withOpacity(0.5)),
+                        border: Border.all(color: context.themeBorder.withValues(alpha: 0.5)),
                       ),
                       child: Material(
                         color: Colors.transparent,
@@ -280,6 +299,15 @@ class _WebUserPill extends StatelessWidget {
                             ),
                             title: Text('My Orders', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: context.themeTextDark)),
                             onTap: () { Navigator.pop(ctx); context.go('/my-orders'); },
+                          ),
+                          ListTile(
+                            leading: Container(
+                              padding: EdgeInsets.all(8),
+                              decoration: BoxDecoration(color: Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(10)), // Light amber
+                              child: const Icon(Icons.account_balance_wallet_rounded, color: Color(0xFFD97706), size: 20),
+                            ),
+                            title: Text(auth.role == 'freelancer' || auth.role == 'admin' ? 'Wallet & Earnings' : 'Wallet', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w500, color: context.themeTextDark)),
+                            onTap: () { Navigator.pop(ctx); context.go('/wallet'); },
                           ),
                           if (auth.isAdmin)
                             ListTile(

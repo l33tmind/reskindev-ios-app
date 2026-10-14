@@ -1,3 +1,4 @@
+import '../services/pricing_rules.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
@@ -8,6 +9,7 @@ import 'package:firebase_storage/firebase_storage.dart' as firebase_storage;
 import 'package:path/path.dart' as path;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart' as img_picker;
@@ -147,33 +149,23 @@ class _GigEditorScreenState extends State<GigEditorScreen> {
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('Not logged in');
 
-      var uri = Uri.parse("https://api.reskindev.com/upload.php");
-      var request = http.MultipartRequest("POST", uri);
+      final storageRef = FirebaseStorage.instance
+          .ref()
+          .child('gigs/${user.uid}/${DateTime.now().millisecondsSinceEpoch}.jpg');
+          
+      // Read bytes (works on Web and Mobile)
+      final bytes = await image.readAsBytes();
+      final uploadTask = storageRef.putData(bytes, SettableMetadata(contentType: 'image/jpeg'));
       
-      // Attach the image file
-      request.files.add(await http.MultipartFile.fromPath('image', image.path));
+      final snapshot = await uploadTask;
+      final downloadUrl = await snapshot.ref.getDownloadURL();
       
-      // Attach the freelancer ID
-      request.fields['freelancer_id'] = user.uid;
+      setState(() {
+        _uploadedImageUrl = downloadUrl;
+      });
       
-      // Send the request
-      var streamedResponse = await request.send();
-      var response = await http.Response.fromStream(streamedResponse);
-      
-      if (response.statusCode == 200) {
-        var jsonResponse = jsonDecode(response.body);
-        if (jsonResponse['success'] == true) {
-          setState(() {
-            _uploadedImageUrl = jsonResponse['url'];
-          });
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Image uploaded successfully!'), backgroundColor: Colors.green));
-          }
-        } else {
-          throw Exception(jsonResponse['message'] ?? 'Upload failed');
-        }
-      } else {
-        throw Exception('Server error: ${response.statusCode}');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Image uploaded successfully!'), backgroundColor: Colors.green));
       }
     } catch (e) {
       if (mounted) {
@@ -267,7 +259,7 @@ class _GigEditorScreenState extends State<GigEditorScreen> {
 
   void _addTier() {
     setState(() {
-      _tiers.add(_PackageTierControllers(name: '', price: '0', desc: '', delivery: '3'));
+      _tiers.add(_PackageTierControllers(name: '', price: '5', desc: '', delivery: '3'));
       // Add feature checks for the new tier (all unchecked)
       final checks = <String, bool>{};
       for (var feat in _masterFeatures) {
@@ -376,6 +368,20 @@ class _GigEditorScreenState extends State<GigEditorScreen> {
       return;
     }
     
+    // Every package: at least the minimum and in steps (same rule as the website and Vision Pro app)
+    final rules = await PricingRules.load();
+    for (int t = 0; t < _tiers.length; t++) {
+      final problem = rules.check(double.tryParse(_tiers[t].priceCtrl.text));
+      if (problem != null) {
+        if (!mounted) return;
+        final name = _tiers[t].nameCtrl.text.trim().isEmpty ? 'Tier ${t + 1}' : _tiers[t].nameCtrl.text.trim();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$name: $problem'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+    }
+
     setState(() => _isSaving = true);
 
 
@@ -495,9 +501,12 @@ class _GigEditorScreenState extends State<GigEditorScreen> {
                 children: [
                   const Icon(Icons.check_circle_rounded, color: Color(0xFF10B981), size: 64),
                   const SizedBox(height: 16),
-                  Text('Gig Created!', style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black)),
+                  Text(_status == 'pending' ? 'Gig Submitted!' : 'Gig Created!', style: GoogleFonts.outfit(fontSize: 22, fontWeight: FontWeight.bold, color: context.themeTextDark)),
                   const SizedBox(height: 8),
-                  Text('Your service is now live. If you enjoy using our app, please take a moment to rate us!', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 14, color: Colors.grey[700], height: 1.4)),
+                  Text(_status == 'pending'
+                      ? "We'll review your service and tell you when it's live. If you enjoy using our app, please take a moment to rate us!"
+                      : 'Your service is now live. If you enjoy using our app, please take a moment to rate us!',
+                    textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 14, color: context.themeTextLight, height: 1.4)),
                   const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
