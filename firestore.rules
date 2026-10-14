@@ -25,6 +25,10 @@ service cloud.firestore {
         isAdmin() ||
         (request.auth.uid == userId
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['pro', 'verified', 'verificationStatus', 'verifiedAt', 'walletBdt', 'bdtWithdrawnTotal'])
+          // Once verified (blue tick), identity details change only through admins / support
+          && !(resource.data.get('verified', false) == true
+               && request.resource.data.diff(resource.data).affectedKeys()
+                    .hasAny(['displayName', 'name', 'username', 'country', 'countryCode', 'address', 'legalName']))
           // People may spend their dollar balance (pay with wallet, withdraw) but never raise it themselves
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['walletBalance'])
               || request.resource.data.get('walletBalance', 0) < resource.data.get('walletBalance', 0)))

@@ -487,6 +487,11 @@ class AuthProvider extends ChangeNotifier with WidgetsBindingObserver {
       'photoUrl': u.photoURL ?? '',
       if (fcmToken != null) 'fcmToken': fcmToken,
     };
+    // Verified (blue tick) identities are locked by the rules: don't rewrite the name on sign-in
+    if (doc.exists && doc.data()?['verified'] == true) {
+      updateData.remove('name');
+      updateData.remove('displayName');
+    }
     if (!doc.exists) {
       updateData['createdAt'] = FieldValue.serverTimestamp();
       updateData['role'] = 'freelancer';

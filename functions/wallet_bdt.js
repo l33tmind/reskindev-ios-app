@@ -11,6 +11,7 @@
  *                                                       accountName, accountNumber, bankName?, branch?, routing?, note? }] }
  *                                         (admins edit it from the admin panel; anyone signed in can read)
  *   bdt_deposits/{id}                     { uid, name, email, amountBdt, methodId, methodTitle, senderAccount,
+ *                                           purpose: "wallet"|"order"|"pro", orderId?, orderTitle?, plan?, expectedBdt?, rateAtRequest,
  *                                           transactionId, receiptPath?, status: "pending"|"approved"|"rejected",
  *                                           createdAt, reviewedAt?, reviewedBy?, rejectReason?, creditedBdt? }
  *   wallet_transactions/{id}              every balance change: { uid, type: "bdt_deposit"|"bdt_to_usd"|"bdt_adjust",
@@ -20,6 +21,7 @@
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
+const { PLANS, grantPro } = require("./pro_core");
 
 const REGION = "asia-south1";
 const db = () => admin.firestore();
@@ -100,8 +102,30 @@ exports.requestBdtDeposit = onCall({ region: REGION }, async (request) => {
     const receiptPath = String(d.receiptPath || "").trim().slice(0, 300);
 
     if (!method) throw new HttpsError("invalid-argument", "Choose where you sent the money.");
-    if (!(amountBdt >= s.minDepositBdt)) throw new HttpsError("invalid-argument", `The minimum deposit is ৳${s.minDepositBdt}.`);
-    if (amountBdt > s.maxDepositBdt) throw new HttpsError("invalid-argument", `The maximum deposit is ৳${s.maxDepositBdt}.`);
+
+    // What the money is for: topping up the taka wallet, paying one order, or buying Pro
+    const purpose = ["order", "pro"].includes(d.purpose) ? d.purpose : "wallet";
+    let orderId = null, plan = null, expectedBdt = null, orderTitle = null;
+    if (purpose === "order") {
+        orderId = String(d.orderId || "");
+        const os = orderId ? await db().collection("orders").doc(orderId).get() : null;
+        if (!os || !os.exists) throw new HttpsError("not-found", "Order not found.");
+        const o = os.data();
+        if ((o.userId || o.clientUid) !== uid) throw new HttpsError("permission-denied", "This isn't your order.");
+        if (!["pending_payment", "pending"].includes(o.status)) throw new HttpsError("failed-precondition", "This order is already paid.");
+        expectedBdt = Math.ceil(Number(o.price) * s.bdtPerUsd);
+        orderTitle = o.gigTitle || "";
+    } else if (purpose === "pro") {
+        plan = PLANS[d.plan] ? d.plan : null;
+        if (!plan) throw new HttpsError("invalid-argument", "Choose monthly or yearly.");
+        expectedBdt = plan === "yearly" ? (Number(s.proYearlyBdt) || 9999) : (Number(s.proMonthlyBdt) || 999);
+    }
+    if (purpose === "wallet") {
+        if (!(amountBdt >= s.minDepositBdt)) throw new HttpsError("invalid-argument", `The minimum deposit is ৳${s.minDepositBdt}.`);
+        if (amountBdt > s.maxDepositBdt) throw new HttpsError("invalid-argument", `The maximum deposit is ৳${s.maxDepositBdt}.`);
+    } else if (!(amountBdt >= expectedBdt)) {
+        throw new HttpsError("invalid-argument", `Please send at least ৳${expectedBdt}.`);
+    }
     if (transactionId.length < 4) throw new HttpsError("invalid-argument", "Enter the transaction ID / reference from your bank or app.");
     if (!senderAccount) throw new HttpsError("invalid-argument", "Enter the account or number you sent the money from.");
     if (receiptPath && !receiptPath.startsWith(`deposits/${uid}/`)) throw new HttpsError("invalid-argument", "Invalid receipt.");
@@ -115,6 +139,7 @@ exports.requestBdtDeposit = onCall({ region: REGION }, async (request) => {
     const ref = await db().collection("bdt_deposits").add({
         uid, name: user.displayName || user.name || "", email: user.email || "",
         amountBdt, methodId: method.id, methodTitle: method.title || method.type, methodType: method.type,
+        purpose, orderId, orderTitle, plan, expectedBdt, rateAtRequest: s.bdtPerUsd,
         senderAccount, transactionId, receiptPath: receiptPath || null,
         status: "pending", createdAt: now(),
     });
@@ -122,7 +147,7 @@ exports.requestBdtDeposit = onCall({ region: REGION }, async (request) => {
     const admins = await db().collection("users").where("role", "==", "admin").get();
     for (const a of admins.docs) {
         await db().collection("notifications").add({
-            userId: a.id, title: `New taka deposit ৳${amountBdt}`,
+            userId: a.id, title: purpose === "order" ? `Order payment ৳${amountBdt} to check` : purpose === "pro" ? `Pro (${plan}) payment ৳${amountBdt} to check` : `New taka deposit ৳${amountBdt}`,
             message: `${user.displayName || "A user"} says they sent ৳${amountBdt} by ${method.title || method.type} (Txn ${transactionId}).`,
             type: "admin_deposit", link: "/admin/deposits", route: "/admin", read: false, createdAt: now(),
         });
@@ -154,6 +179,39 @@ exports.reviewBdtDeposit = onCall({ region: REGION }, async (request) => {
         const credit = correctedAmount != null ? round2(correctedAmount) : round2(d.amountBdt);
         if (!(credit > 0)) throw new HttpsError("invalid-argument", "Amount must be more than 0.");
         tx.update(depRef, { status: "approved", creditedBdt: credit, reviewedAt: now(), reviewedBy: adminUser.uid, reviewedByName: adminUser.name });
+        if (d.purpose === "order" && d.orderId) {
+            // Bank payment for one order: the order becomes paid in taka (nothing goes to the wallet)
+            const orderRef = db().collection("orders").doc(d.orderId);
+            const os = await tx.get(orderRef);
+            if (!os.exists) throw new HttpsError("not-found", "The order no longer exists.");
+            const o = os.data();
+            if (!["pending_payment", "pending"].includes(o.status)) {
+                // Already paid another way: keep the money as wallet credit instead
+                tx.set(db().collection("users").doc(d.uid), { walletBdt: admin.firestore.FieldValue.increment(credit) }, { merge: true });
+                tx.set(db().collection("wallet_transactions").doc(), {
+                    uid: d.uid, type: "bdt_deposit", amountBdt: credit, amountUsd: 0, feeBdt: 0, rate: null, refId: depositId, createdAt: now(),
+                });
+                result = { status: "approved", uid: d.uid, amountBdt: credit, credited: "wallet" };
+                return;
+            }
+            tx.update(orderRef, {
+                status: "requirements", paidCurrency: "BDT", amountBdt: credit,
+                bdtRate: d.rateAtRequest || null, paymentMethod: "taka_bank", paidAt: now(), updatedAt: now(),
+            });
+            tx.set(db().collection("wallet_transactions").doc(), {
+                uid: d.uid, type: "order_payment", amountBdt: -credit, amountUsd: 0, feeBdt: 0, rate: d.rateAtRequest || null,
+                refId: d.orderId, via: "bank", createdAt: now(),
+            });
+            result = { status: "approved", uid: d.uid, amountBdt: credit, purpose: "order", order: o, orderId: d.orderId };
+            return;
+        }
+        if (d.purpose === "pro" && d.plan) {
+            result = { status: "approved", uid: d.uid, amountBdt: credit, purpose: "pro", plan: d.plan };
+            tx.set(db().collection("pro_payments").doc(), {
+                uid: d.uid, plan: d.plan, amountBdt: credit, source: "taka_bank", depositId, createdAt: now(),
+            });
+            return;
+        }
         tx.set(db().collection("users").doc(d.uid), { walletBdt: admin.firestore.FieldValue.increment(credit) }, { merge: true });
         tx.set(db().collection("wallet_transactions").doc(), {
             uid: d.uid, type: "bdt_deposit", amountBdt: credit, amountUsd: 0, feeBdt: 0, rate: null, refId: depositId, createdAt: now(),
@@ -161,8 +219,19 @@ exports.reviewBdtDeposit = onCall({ region: REGION }, async (request) => {
         result = { status: "approved", uid: d.uid, amountBdt: credit };
     });
 
-    if (result.status === "approved") {
-        await notify(result.uid, `৳${result.amountBdt} added to your taka wallet`, "Your deposit is confirmed. Convert it to dollars to shop on Reskindev.", "deposit_approved");
+    if (result.status === "approved" && result.purpose === "order") {
+        await postOrderCard(result.order, result.orderId, "payment_verified",
+            `Payment received: ৳${result.amountBdt} by bank transfer. The seller can start now.`);
+        await notify(result.uid, "Payment confirmed", `We received ৳${result.amountBdt}. Your order is paid and the seller can start.`, "deposit_approved");
+    } else if (result.status === "approved" && result.purpose === "pro") {
+        const u = (await db().collection("users").doc(result.uid).get()).data() || {};
+        const current = u.pro && u.pro.expiresAt ? u.pro.expiresAt.toMillis() : 0;
+        await grantPro(result.uid, {
+            plan: result.plan, source: "wallet", productId: PLANS[result.plan].productId,
+            expiresAtMs: Math.max(Date.now(), current) + PLANS[result.plan].days * 86400000, autoRenew: false,
+        });
+    } else if (result.status === "approved") {
+        await notify(result.uid, `৳${result.amountBdt} added to your taka wallet`, "Your deposit is confirmed. You can pay for services and Pro with it.", "deposit_approved");
     } else {
         await notify(result.uid, "Deposit not confirmed", `We couldn't confirm your ৳${result.amountBdt} deposit. Reason: ${why}`, "deposit_rejected");
     }
