@@ -102,6 +102,7 @@ exports.requestBdtDeposit = onCall({ region: REGION }, async (request) => {
     const receiptPath = String(d.receiptPath || "").trim().slice(0, 300);
 
     if (!method) throw new HttpsError("invalid-argument", "Choose where you sent the money.");
+    if (d.acceptedTerms !== true) throw new HttpsError("failed-precondition", "Please accept the payment terms first.");
 
     // What the money is for: topping up the taka wallet, paying one order, or buying Pro
     const purpose = ["order", "pro"].includes(d.purpose) ? d.purpose : "wallet";
@@ -141,6 +142,7 @@ exports.requestBdtDeposit = onCall({ region: REGION }, async (request) => {
         uid, name: user.displayName || user.name || "", email: user.email || "",
         amountBdt, methodId: method.id, methodTitle: method.title || method.type, methodType: method.type,
         purpose, orderId, orderTitle, plan, expectedBdt, rateAtRequest: s.bdtPerUsd,
+        acceptedTermsAt: now(),
         senderAccount, transactionId, receiptPath: receiptPath || null,
         status: "pending", createdAt: now(),
     });
@@ -404,6 +406,20 @@ exports.getTakaEarnings = onCall({ region: REGION }, async (request) => {
              minWithdrawBdt: s.minWithdrawBdt, withdrawMethods: s.withdrawMethods };
 });
 
+/** "Md. Robius  Sany" → "mdrobiussany" (letters and digits only, Bangla kept) */
+const normName = (v) => String(v || "").toLowerCase().normalize("NFKC").replace(/[^\p{L}\p{N}]/gu, "");
+const normAccount = (v) => String(v || "").replace(/[^0-9a-z]/gi, "").toLowerCase();
+
+/** The account holder must be the person: their profile name or their verified legal name */
+async function namesFor(uid, u) {
+    const v = (await db().collection("verifications").doc(uid).get()).data() || {};
+    return [u.displayName, u.name, v.legalName].map(normName).filter((n) => n.length >= 3);
+}
+function nameMatches(accountName, names) {
+    const a = normName(accountName);
+    return a.length >= 3 && names.some((n) => n === a || n.includes(a) || a.includes(n));
+}
+
 exports.requestBdtWithdrawal = onCall({ region: REGION }, async (request) => {
     if (!request.auth) throw new HttpsError("unauthenticated", "Please sign in first.");
     const uid = request.auth.uid;
@@ -420,6 +436,38 @@ exports.requestBdtWithdrawal = onCall({ region: REGION }, async (request) => {
     if (accountNumber.length < 6) throw new HttpsError("invalid-argument", "Enter the account / wallet number.");
     if (!accountName) throw new HttpsError("invalid-argument", "Enter the account holder's name.");
     if (method === "bank" && !bankName) throw new HttpsError("invalid-argument", "Enter the bank name.");
+    if (d.acceptedTerms !== true) throw new HttpsError("failed-precondition", "Please accept the withdrawal terms first.");
+    // "earnings": taka earned from orders; "wallet": deposited taka going back to where it came from
+    const source = d.source === "wallet" ? "wallet" : "earnings";
+
+    const profile = (await db().collection("users").doc(uid).get()).data() || {};
+    if (!nameMatches(accountName, await namesFor(uid, profile))) {
+        throw new HttpsError("failed-precondition", "The account must be in your own name, the same name as on your Reskindev profile.");
+    }
+
+    if (source === "wallet") {
+        // Deposited money only goes back to an account the person actually sent money from
+        const deps = await db().collection("bdt_deposits").where("uid", "==", uid).where("status", "==", "approved").get();
+        const fromAccounts = new Set(deps.docs.map((x) => normAccount(x.data().senderAccount)).filter(Boolean));
+        if (!fromAccounts.has(normAccount(accountNumber))) {
+            throw new HttpsError("failed-precondition", "Deposited taka can only go back to the same account it was sent from.");
+        }
+        const userRef = db().collection("users").doc(uid);
+        const wRef = db().collection("bdt_withdrawals").doc();
+        await db().runTransaction(async (tx) => {
+            const u = (await tx.get(userRef)).data() || {};
+            const have = round2(u.walletBdt);
+            if (amountBdt > have) throw new HttpsError("failed-precondition", `Your taka wallet has ৳${have.toFixed(2)}.`);
+            tx.update(userRef, { walletBdt: round2(have - amountBdt) });
+            tx.set(wRef, {
+                uid, name: u.displayName || u.name || "", email: u.email || "", source: "wallet",
+                amountBdt, method, accountNumber, accountName, bankName: bankName || null, branch: branch || null,
+                status: "pending", acceptedTermsAt: now(), createdAt: now(),
+            });
+        });
+        await notifyAdminsWithdrawal(amountBdt, method, accountNumber, accountName);
+        return { id: wRef.id, status: "pending" };
+    }
 
     const e = await takaEarnings(uid);
     const userRef = db().collection("users").doc(uid);
@@ -432,11 +480,16 @@ exports.requestBdtWithdrawal = onCall({ region: REGION }, async (request) => {
         if (amountBdt > available) throw new HttpsError("failed-precondition", `You can withdraw up to ৳${Math.max(0, available).toFixed(2)} now.`);
         tx.set(userRef, { bdtWithdrawnTotal: round2(withdrawn + amountBdt) }, { merge: true });
         tx.set(wRef, {
-            uid, name: u.displayName || u.name || "", email: u.email || "",
+            uid, name: u.displayName || u.name || "", email: u.email || "", source: "earnings",
             amountBdt, method, accountNumber, accountName, bankName: bankName || null, branch: branch || null,
-            status: "pending", createdAt: now(),
+            status: "pending", acceptedTermsAt: now(), createdAt: now(),
         });
     });
+    await notifyAdminsWithdrawal(amountBdt, method, accountNumber, accountName);
+    return { id: wRef.id, status: "pending" };
+});
+
+async function notifyAdminsWithdrawal(amountBdt, method, accountNumber, accountName) {
     const admins = await db().collection("users").where("role", "==", "admin").get();
     for (const a of admins.docs) {
         await db().collection("notifications").add({
@@ -445,7 +498,21 @@ exports.requestBdtWithdrawal = onCall({ region: REGION }, async (request) => {
             type: "admin_withdrawal", link: "/admin/deposits?tab=withdrawals", route: "/admin", read: false, createdAt: now(),
         });
     }
-    return { id: wRef.id, status: "pending" };
+}
+
+/** What the person can withdraw from deposits, and to which accounts */
+exports.getWalletWithdrawInfo = onCall({ region: REGION }, async (request) => {
+    if (!request.auth) throw new HttpsError("unauthenticated", "Please sign in first.");
+    const uid = request.auth.uid;
+    const deps = await db().collection("bdt_deposits").where("uid", "==", uid).where("status", "==", "approved").get();
+    const seen = new Map();
+    for (const x of deps.docs) {
+        const d = x.data();
+        const k = normAccount(d.senderAccount);
+        if (k && !seen.has(k)) seen.set(k, { accountNumber: d.senderAccount, methodType: d.methodType || "bank", methodTitle: d.methodTitle || "" });
+    }
+    const u = (await db().collection("users").doc(uid).get()).data() || {};
+    return { walletBdt: round2(u.walletBdt), accounts: [...seen.values()] };
 });
 
 /** Admin: mark paid (with the transaction ID) or reject (the amount goes back to the seller's available taka) */
@@ -471,12 +538,14 @@ exports.reviewBdtWithdrawal = onCall({ region: REGION }, async (request) => {
             });
         } else {
             tx.update(ref, { status: "rejected", rejectReason: why, reviewedAt: now(), reviewedBy: adminUser.uid, reviewedByName: adminUser.name });
-            tx.set(db().collection("users").doc(w.uid), { bdtWithdrawnTotal: admin.firestore.FieldValue.increment(-w.amountBdt) }, { merge: true });
+            tx.set(db().collection("users").doc(w.uid), w.source === "wallet"
+                ? { walletBdt: admin.firestore.FieldValue.increment(w.amountBdt) }
+                : { bdtWithdrawnTotal: admin.firestore.FieldValue.increment(-w.amountBdt) }, { merge: true });
         }
     });
     await notify(w.uid,
         decision === "paid" ? `৳${w.amountBdt} sent to your ${w.method}` : "Withdrawal not sent",
-        decision === "paid" ? `Transaction ID: ${t}` : `Reason: ${why}. The amount is available to withdraw again.`,
+        decision === "paid" ? `Transaction ID: ${t}` : `Reason: ${why}. The amount is back in your balance.`,
         decision === "paid" ? "withdrawal_paid" : "withdrawal_rejected");
     return { status: decision === "paid" ? "paid" : "rejected" };
 });
